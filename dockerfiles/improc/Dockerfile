@@ -210,12 +210,14 @@ RUN cd /tmp \
     && install -m 755 "pqrs-${PQRS_VERSION}-x86_64-unknown-linux-gnu/bin/pqrs" /usr/local/bin/pqrs \
     && rm -rf /tmp/pqrs*
 
-# TOPCAT + STILTS (extra JAR with Parquet)
-RUN curl -fsSL -o /usr/local/bin/topcat-extra.jar \
-      https://www.star.bris.ac.uk/~mbt/topcat/topcat-extra.jar \
-    && unzip -o /usr/local/bin/topcat-extra.jar -d /usr/local/bin topcat stilts \
-    && sed -i -e 's/topcat-full/topcat-extra/g' /usr/local/bin/topcat /usr/local/bin/stilts \
-    && chmod 644 /usr/local/bin/topcat-extra.jar \
+# TOPCAT + STILTS — upstream discontinued topcat-extra.jar; the full jar now
+# bundles the extra tools. Normalize wrapper scripts to whatever we install.
+RUN TARBALL=topcat-full.jar \
+    && curl -fsSL -o "/usr/local/bin/${TARBALL}" \
+      "https://www.star.bris.ac.uk/~mbt/topcat/${TARBALL}" \
+    && unzip -o "/usr/local/bin/${TARBALL}" -d /usr/local/bin topcat stilts \
+    && sed -i -e 's/topcat-[a-z]*\.jar/topcat-full.jar/g' /usr/local/bin/topcat /usr/local/bin/stilts \
+    && chmod 644 "/usr/local/bin/${TARBALL}" \
     && chmod 755 /usr/local/bin/stilts /usr/local/bin/topcat
 
 # Science Python (uv) — modern DIA via sfft / zogyp (not HOTPANTS)
