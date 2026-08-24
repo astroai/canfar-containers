@@ -40,6 +40,50 @@ try {
   fitAddon.fit();
   fitAddon.observeResize();
 
+  // ghostty-web's link click handler is async and only preventDefault()s after
+  // awaiting link lookup — too late for Ctrl/Cmd+click on a <canvas>, so the
+  // browser treats it as "Open image". Prevent that synchronously, then open
+  // via <a> (more reliable than window.open inside the CANFAR iframe).
+  const canvas = term.element && term.element.querySelector("canvas");
+  const openExternal = (url) => {
+    const a = document.createElement("a");
+    a.href = url;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  };
+  if (canvas) {
+    canvas.addEventListener(
+      "click",
+      (e) => {
+        if (e.ctrlKey || e.metaKey) e.preventDefault();
+      },
+      true,
+    );
+  }
+  // Minified build keeps linkDetector as a plain field; wrap activate so
+  // Ctrl/Cmd+click always opens (and plain-text / OSC 8 share one path).
+  const ld = term.linkDetector;
+  if (ld && typeof ld.getLinkAt === "function") {
+    const origGet = ld.getLinkAt.bind(ld);
+    ld.getLinkAt = async (col, row) => {
+      const link = await origGet(col, row);
+      if (!link || !link.text) return link;
+      return {
+        text: link.text,
+        range: link.range,
+        hover: link.hover,
+        activate: (ev) => {
+          if (!(ev.ctrlKey || ev.metaKey)) return;
+          ev.preventDefault();
+          openExternal(link.text);
+        },
+      };
+    };
+  }
+
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
   const wsUrl =
     `${proto}//${location.host}${sessionBase()}ws?cols=${term.cols}&rows=${term.rows}`;
