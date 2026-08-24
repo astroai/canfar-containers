@@ -16,7 +16,7 @@
 # Environment:
 #   REGISTRY, OWNER, CANFAR_TEST_TIMEOUT (default 900)
 
-IMAGE="${1:?image name required (webterm|ghostty-web|notebook|vscode|marimo|openresearch|openworker|ray-manager|improc-webterm|improc-notebook)}"
+IMAGE="${1:?image name required (webterm|ghostty-web|notebook|vscode|marimo|openresearch|ray-manager|improc-webterm|improc-notebook)}"
 TAG="${2:-${TAG:-latest}}"
 OWNER="${OWNER:-astroai}"
 REGISTRY="${REGISTRY:-images.canfar.net}"
@@ -248,8 +248,8 @@ case "${HTTP_CODE}" in
         ;;
 esac
 
-# openresearch / openworker: AstroAI hub at /astroai-agents/
-if [[ "${FAILURES}" -eq 0 && ( "${IMAGE}" == "openresearch" || "${IMAGE}" == "openworker" ) ]]; then
+# openresearch: AstroAI hub at /astroai-agents/
+if [[ "${FAILURES}" -eq 0 && "${IMAGE}" == "openresearch" ]]; then
     BASE="${URL%/}"
     HUB_HTML="$(mktemp)"
     HUB_JSON="$(mktemp)"

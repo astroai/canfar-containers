@@ -1,75 +1,41 @@
 # syntax=docker/dockerfile:1
 # AstroAI openresearch: OpenResearch (orx) autoresearch dashboard.
-# Builds orx from the sfabbro fork's main HEAD (unpinned — the container TAG
-# is the user-facing version). Proxies :4791 → :5000.
-# When alphaXiv ships a release with Ray, prefer switching back to their
-# musl tarball + ORX_VERSION / ORX_SHA256_* args.
+# Installs the pinned upstream alphaXiv release musl binary — the Ray Jobs
+# compute backend ships upstream since v0.1.88 (#141), so no fork build.
+# Proxies :4791 → :5000.
 
 ARG REGISTRY=images.canfar.net
 ARG OWNER=astroai
 ARG BASE_NAME=base
 ARG TAG=local
-# Fork (unpinned: tracks main HEAD) until https://github.com/alphaXiv/openresearch-cli/pull/138
-# lands in a release. The container TAG is the user-facing version, so the
-# image bakes the latest fork commit at build time.
-ARG ORX_REPO=https://github.com/sfabbro/openresearch-cli.git
-ARG NODE_VERSION=24
+# Pinned upstream release. Bump ORX_SHA256 together with ORX_VERSION
+# (sha256 of openresearch-cli-x86_64-unknown-linux-musl.tar.xz).
+ARG ORX_VERSION=v0.1.111
+ARG ORX_SHA256=a1ecc2490d05b4a18e619ca84e9ca9317614516f397d6e29983ed00f8e7e1b00
 
-# --- UI (embedded into orx via rust-embed) ---
-FROM node:${NODE_VERSION}-bookworm-slim AS ui-build
-ARG ORX_REPO
-ARG ORX_HEAD
-WORKDIR /src
-RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \
-    && rm -rf /var/lib/apt/lists/* \
-    && git init repo && cd repo \
-    && git remote add origin "${ORX_REPO}" \
-    && git fetch --depth 1 origin main \
-    && git checkout FETCH_HEAD \
-    && echo "orx ${ORX_HEAD:-$(git rev-parse HEAD)}" \
-    && cd ui \
-    && npm install -g pnpm \
-    # pnpm 10+ blocks dependency build scripts by default (ERR_PNPM_IGNORED_BUILDS
-    # for esbuild), so the first frozen install exits 1 (deps ARE installed);
-    # approve-builds --all runs the blocked postinstall non-interactively, the
-    # re-install then exits 0, and the UI builds. (Validated against pnpm 11.)
-    && (pnpm install --frozen-lockfile || true) \
-    && pnpm approve-builds --all \
-    && pnpm install --frozen-lockfile \
-    && pnpm run build
-
-# --- orx binary ---
-FROM rust:1-bookworm AS orx-build
-ARG ORX_REPO
-ARG ORX_HEAD
-WORKDIR /src
-RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \
-        pkg-config libssl-dev \
-    && rm -rf /var/lib/apt/lists/* \
-    && git init repo && cd repo \
-    && git remote add origin "${ORX_REPO}" \
-    && git fetch --depth 1 origin main \
-    && git checkout FETCH_HEAD \
-    && echo "orx ${ORX_HEAD:-$(git rev-parse HEAD)}"
-COPY --from=ui-build /src/repo/ui/dist /src/repo/ui/dist
-WORKDIR /src/repo
-RUN cargo build --release \
-    && install -m 0755 target/release/orx /orx \
-    && /orx --version
-
-# --- Runtime ---
 FROM ${REGISTRY}/${OWNER}/${BASE_NAME}:${TAG}
+
+ARG ORX_VERSION
+ARG ORX_SHA256
 
 LABEL io.canfar.skaha.session.type="contributed" \
       org.opencontainers.image.title="AstroAI OpenResearch" \
       org.opencontainers.image.description="OpenResearch (orx) autoresearch dashboard for CANFAR" \
       org.opencontainers.image.source="https://github.com/alphaXiv/openresearch-cli" \
-      org.opencontainers.image.revision="main"
+      org.opencontainers.image.version="${ORX_VERSION}"
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
-
-COPY --from=orx-build /orx /opt/astroai/bin/orx
-RUN /opt/astroai/bin/orx --version
+# Verify with the upstream filename — release .sha256 assets pin it.
+RUN TARBALL="openresearch-cli-x86_64-unknown-linux-musl.tar.xz"; \
+    curl -fsSL \
+      "https://github.com/alphaXiv/openresearch-cli/releases/download/${ORX_VERSION}/${TARBALL}" \
+      -o "/tmp/${TARBALL}" \
+    && printf '%s *%s\n' "${ORX_SHA256}" "${TARBALL}" > /tmp/orx.sha256 \
+    && cd /tmp && sha256sum -c orx.sha256 \
+    && tar -xJf "/tmp/${TARBALL}" \
+    && install -m 0755 openresearch-cli-x86_64-unknown-linux-musl/orx /opt/astroai/bin/orx \
+    && rm -rf "/tmp/${TARBALL}" /tmp/orx.sha256 /tmp/openresearch-cli-x86_64-unknown-linux-musl \
+    && /opt/astroai/bin/orx --version
 
 ENV PATH="/opt/astroai/bin:${PATH}" \
     ORX_NO_UPDATE_CHECK=1 \

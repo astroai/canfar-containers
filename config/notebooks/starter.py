@@ -1,7 +1,7 @@
 """AstroAI starter notebook for marimo sessions.
 
 Canonical copy — keep containers in sync:
-  make -C ../astroai-containers sync-marimo-starter
+  make -C ../canfar-containers sync-marimo-starter
 
 Keep code under $WORK (this folder). Put large data on $SCRATCH.
 """
@@ -284,7 +284,7 @@ astroai agent install kilo      # or goose, claude, opencode, codex, qoder
 astroai agent update
 ```
 
-Full reference: `astroai help` · [astroai docs](https://github.com/astroai/lab)
+Full reference: `astroai help` · [astroai docs](https://github.com/astroai/canfar-lab)
 """
     )
     return

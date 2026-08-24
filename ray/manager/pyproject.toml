@@ -51,7 +51,7 @@ dependencies = [
     "canfar>=1.4.1",
     # Cluster lifecycle + CANFAR ops ship in astroai-lab (`astroai_workload`).
     # Unpinned: the container TAG is the user-facing version.
-    "astroai-lab @ git+https://github.com/astroai/lab.git",
+    "astroai-lab @ git+https://github.com/astroai/canfar-lab.git",
 ]
 
 [dependency-groups]

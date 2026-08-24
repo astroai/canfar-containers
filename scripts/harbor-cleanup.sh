@@ -19,7 +19,7 @@
 # Why hardcoded repos and candidate tags: Harbor's /v2/_catalog and
 # /v2/<repo>/tags/list endpoints return 401 to the docker-config token we
 # have (lacks the `catalog:*` and `repository:...:list` scopes). We probe a
-# fixed list of likely prior-release tags instead, since sfabbro pushes only
+# fixed list of likely prior-release tags instead, since images are pushed only
 # via `make push-*` and tags follow `YY.MM` (or `local`/`sha-...`/`latest`).
 #
 # DESTRUCTIVE: every successful DELETE removes a manifest. Harbor's garbage
@@ -42,7 +42,7 @@ set -euo pipefail
 REGISTRY="${REGISTRY:-images.canfar.net}"
 OWNER="${OWNER:-astroai}"
 KEEP_TAGS="${KEEP_TAGS:-26.08 26.07 latest}"
-KNOWN_REPOS="${KNOWN_REPOS:-base webterm ghostty-web vscode notebook marimo openresearch openworker improc improc-webterm improc-notebook ray-manager ray-worker}"
+KNOWN_REPOS="${KNOWN_REPOS:-base webterm ghostty-web vscode notebook marimo openresearch improc improc-webterm improc-notebook ray-manager ray-worker}"
 CANDIDATE_TAGS_DEFAULT='26.08 26.07 latest 26.06 26.05 26.04 25.12 25.11 25.10 25.09 25.08 25.07 25.06 25.05 25.04 25.03 25.02 25.01 24.12 24.11 24.10 24.09 24.08 24.07 local sha-'
 CANDIDATE_TAGS="${CANDIDATE_TAGS:-${CANDIDATE_TAGS_DEFAULT}}"
 DRY_RUN="${DRY_RUN:-0}"

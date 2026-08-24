@@ -63,6 +63,44 @@ try {
     }
   });
   window.addEventListener("resize", () => fitAddon.fit());
+
+  // ghostty-web 0.4.0 ignores SGR mouse tracking (tmux `mouse on`): its wheel
+  // handler only scrolls its own viewport or sends arrow keys on alt-screens,
+  // so scrolling over tmux does nothing. Forward wheel events as mouse
+  // sequences ourselves whenever the running application requested tracking.
+  const sgrMouse = () => {
+    try {
+      return typeof term.getMode === "function" ? term.getMode(1006, false) : true;
+    } catch {
+      return true;
+    }
+  };
+  term.attachCustomWheelEventHandler((e) => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return true;
+    if (e.deltaY === 0 && e.deltaX !== 0) return false; // horizontal: native scroll
+    if (typeof term.hasMouseTracking === "function" && !term.hasMouseTracking()) {
+      return false; // no app wants mouse events — native viewport scroll
+    }
+    const canvas = term.element && term.element.querySelector("canvas");
+    if (!canvas) return false;
+    const rect = canvas.getBoundingClientRect();
+    const cellW = rect.width / term.cols;
+    const cellH = rect.height / term.rows;
+    if (!(cellW > 0 && cellH > 0)) return false;
+    const col = Math.min(term.cols, Math.max(1, Math.floor((e.clientX - rect.left) / cellW) + 1));
+    const row = Math.min(term.rows, Math.max(1, Math.floor((e.clientY - rect.top) / cellH) + 1));
+    let seq;
+    if (sgrMouse()) {
+      // SGR (mode 1006): button 64 = wheel up, 65 = wheel down.
+      seq = `\x1b[<${e.deltaY < 0 ? 64 : 65};${col};${row}M`;
+    } else {
+      // X10 legacy: wheel up/down are buttons 64/65, encoded +32 like coords.
+      const btn = String.fromCharCode((e.deltaY < 0 ? 64 : 65) + 32);
+      seq = `\x1b[M${btn}${String.fromCharCode(col + 32)}${String.fromCharCode(row + 32)}`;
+    }
+    ws.send(seq);
+    return true; // consumed — suppress the local viewport scroll
+  });
 } catch (err) {
   showError(err);
 }

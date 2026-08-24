@@ -21,14 +21,14 @@ In a session: `less /opt/astroai/USAGE.md`.
 
 ```bash
 gh auth login
-gh repo clone astroai/astroai-containers
+gh repo clone astroai/canfar-containers
 cd astroai-containers
 ```
 
 Fork workflow:
 
 ```bash
-gh repo fork astroai/astroai-containers --clone
+gh repo fork astroai/canfar-containers --clone
 cd astroai-containers
 git checkout -b my-change
 ```
@@ -51,7 +51,7 @@ git checkout -b my-change
 | System packages | `dockerfiles/base/Dockerfile` | Yes — `base`+ |
 | Python / uv / pixi foundation | `dockerfiles/python/Dockerfile` (untagged bake parent, not a Harbor image) | Full stack |
 | Jupyter config | `config/jupyter_server_config.py` | `notebook` |
-| Marimo starter notebook | **Edit in** [astroai-lab](https://github.com/astroai/lab) `data/notebooks/starter.py`, then `make sync-marimo-starter` | `marimo` |
+| Marimo starter notebook | **Edit in** [astroai-lab](https://github.com/astroai/canfar-lab) `data/notebooks/starter.py`, then `make sync-marimo-starter` | `marimo` |
 | Jupyter / Ray starters | **Edit in** lab `data/notebooks/`, then `make sync-notebook-starters` | `notebook` |
 | CADC client list | `config/cadc-tools.txt` | `base`+ |
 | **`astroai` CLI** | `config/astroai-lab.in` + `config/astroai-lab.lock` | `base`+ |
@@ -88,7 +88,7 @@ uv run python -c "print('ok')"
 ```bash
 cd ../astroai-lab
 uv run pytest -q
-cd ../astroai-containers
+cd ../canfar-containers
 make lock-astroai-lab
 (cd ray/manager && uv lock)
 make lock-check
@@ -97,7 +97,7 @@ make test-local BUILD_TAG=local
 make test-ray BUILD_TAG=local
 ```
 
-Same pattern for `make lock-ray` when unpinned Ray deps move. OpenResearch and OpenWorker clone upstream `main` at build time; `make build-all` passes `ORX_HEAD` / `OPENWORKER_HEAD` from `git ls-remote` so Docker cache does not stick to a stale commit.
+Same pattern for `make lock-ray` when unpinned Ray deps move. OpenResearch pins an upstream alphaXiv release (`ORX_VERSION` + `ORX_SHA256` in its Dockerfile); bump both together on new releases.
 
 ## Writable CADC venv
 
@@ -121,7 +121,7 @@ make test-canfar-ray-gpu TAG=26.08
 | `scripts/test-canfar-ray.sh` | CANFAR manager UI + cluster lifecycle |
 
 Integration tests for the CLI live in
-[astroai/lab](https://github.com/astroai/lab)
+[canfar-lab](https://github.com/astroai/canfar-lab)
 (`tests/integration/test_cold_start_save_resume.py`).
 
 ## Marimo starter sync
@@ -158,7 +158,7 @@ keys, or large binary artifacts unrelated to image build context.
 ### Checklist
 
 - [ ] `docs/USAGE.md` updated when user-visible behavior changes
-- [ ] Upstream [astroai-lab](https://github.com/astroai/lab) updated when CLI or path behavior changes
+- [ ] Upstream [astroai-lab](https://github.com/astroai/canfar-lab) updated when CLI or path behavior changes
 - [ ] `dockerfiles/base/Dockerfile` still copies `docs/USAGE.md` correctly
 - [ ] `./scripts/test-local.sh` run when scripts or Dockerfiles change
 - [ ] Post-push release gate: `make test-canfar-agents TAG=…` (lightweight agent verb-surface probe on CANFAR; required after every image push — see OPERATORS.md)
@@ -170,5 +170,5 @@ Image push and portal registration: [OPERATORS.md](OPERATORS.md).
 
 ## Questions
 
-Open a [GitHub issue](https://github.com/astroai/astroai-containers/issues) or
+Open a [GitHub issue](https://github.com/astroai/canfar-containers/issues) or
 comment on a PR with `gh pr comment`.

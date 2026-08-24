@@ -16,7 +16,7 @@ a clean slate; use a new image release for fleet-wide updates.
 Examples:
   upgrade-cadc-tools.sh list
   upgrade-cadc-tools.sh --upgrade astroai-lab
-  upgrade-cadc-tools.sh 'astroai-lab @ git+https://github.com/astroai/lab.git@main'
+  upgrade-cadc-tools.sh 'astroai-lab @ git+https://github.com/astroai/canfar-lab.git@main'
   upgrade-cadc-tools.sh --upgrade canfar cadcdata cadctap vos
 
 Build-time package list: `/opt/astroai/cadc-tools.txt` (unpinned; resolved when the image is built).

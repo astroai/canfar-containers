@@ -32,7 +32,6 @@ flowchart LR
 | `notebook` | `…/astroai/notebook:<tag>` | Notebook | 8888 | Yes |
 | `marimo` | `…/astroai/marimo:<tag>` | Contributed | 5000 | Yes |
 | `openresearch` | `…/astroai/openresearch:<tag>` | Contributed | 5000 | Yes |
-| `openworker` | `…/astroai/openworker:<tag>` | Contributed | 5000 | Yes |
 | `ray-manager` | `…/astroai/ray-manager:<tag>` | Contributed | 5000 | Yes |
 | `ray-worker` | `…/astroai/ray-worker:<tag>` | Headless | — | No — manager launches |
 | `improc` | `…/astroai/improc:<tag>` | Headless | — | Optional (batch) |
@@ -102,11 +101,11 @@ entrypoint, ask the science-platform team for a per-image override that sets
 ## Science Portal checklist
 
 1. Push `images.canfar.net/astroai/*:<tag>` (sessions + Ray + improc stack).
-2. Register Contributed: `webterm`, `ghostty-web`, `vscode`, `marimo`, `openresearch`, `openworker`, `ray-manager`, `improc-webterm` → port **5000**.
+2. Register Contributed: `webterm`, `ghostty-web`, `vscode`, `marimo`, `openresearch`, `ray-manager`, `improc-webterm` → port **5000**.
 3. Register Notebook: `notebook`, `improc-notebook` → port **8888**.
 4. Leave `base`, `ray-worker`, and `improc` (headless) off the interactive catalog (or list `improc` under headless only). `python` and `ray-base` are bake-only, never Harbor images.
 5. Document the published tag for users (`YY.MM`).
-6. Smoke: `make test-canfar-session IMAGE=webterm TAG=…`, `IMAGE=ghostty-web`, `IMAGE=openresearch`, `IMAGE=openworker`, `IMAGE=improc-webterm`, and `make test-canfar-ray TAG=…`.
+6. Smoke: `make test-canfar-session IMAGE=webterm TAG=…`, `IMAGE=ghostty-web`, `IMAGE=openresearch`, `IMAGE=improc-webterm`, and `make test-canfar-ray TAG=…`.
 7. **Agent verbs:** `make test-canfar-agents TAG=…` (lightweight in-session probe of the full agent verb surface — required after every image push; see below).
 
 ## Local smoke
@@ -138,14 +137,12 @@ make test-canfar-session IMAGE=vscode TAG=26.08
 make test-canfar-session IMAGE=marimo TAG=26.08
 make test-canfar-session IMAGE=notebook TAG=26.08
 make test-canfar-session IMAGE=openresearch TAG=26.08
-make test-canfar-session IMAGE=openworker TAG=26.08
 ```
 
-**OpenWorker notes:** Image tracks [openworker](https://github.com/andrewyng/openworker) `main` at build time (container TAG is the user-facing version). Browser UI + `openworker-server` only — no Tauri desktop shell. Desktop-only connectors may be limited on CANFAR. Agents wizard: `/astroai-agents/` (also on openresearch).
 
-**OpenResearch notes:** Image builds `orx` from the [sfabbro fork](https://github.com/sfabbro/openresearch-cli) `main` HEAD (`ORX_REPO` in `docker-bake.hcl`; includes `--backend ray`). Startup defaults compute to Ray when a manager Jobs URL is already known; the AstroAI hub **Start batch compute** button ensures an autoscaling ray-manager and wires OpenResearch. Switch back to alphaXiv release tarballs once a release includes [PR #138](https://github.com/alphaXiv/openresearch-cli/pull/138). See [USAGE.md](USAGE.md).
+**OpenResearch notes:** Image installs the pinned upstream [alphaXiv](https://github.com/alphaXiv/openresearch-cli) musl release (`ORX_VERSION` + `ORX_SHA256` in the Dockerfile; the Ray Jobs backend ships upstream since v0.1.88). Startup defaults compute to Ray when a manager Jobs URL is already known; the AstroAI hub **Start batch compute** button ensures an autoscaling ray-manager and wires OpenResearch. Bump `ORX_VERSION`/`ORX_SHA256` together on upstream releases. See [USAGE.md](USAGE.md).
 
-**Agent auto-setup:** UI kinds (`openresearch`, `openworker`, `vscode`) default `ASTROAI_LAB_AGENT_SETUP=bg` when unset. **Marimo** stays opt-in for full setup (startup still runs `agent setup marimo` only). Webterm and ghostty-web stay opt-in. Failures never block the main UI; see `~/.astroai/lab/agent-setup.log`.
+**Agent auto-setup:** UI kinds (`openresearch`, `vscode`) default `ASTROAI_LAB_AGENT_SETUP=bg` when unset. **Marimo** stays opt-in for full setup (startup still runs `agent setup marimo` only). Webterm and ghostty-web stay opt-in. Failures never block the main UI; see `~/.astroai/lab/agent-setup.log`.
 
 **Home quota readings:** Prefer CephFS xattrs over raw `df` (`astroai` `disk_usage`). `ceph.dir.rbytes` can lag after writes — expected Ceph behavior.
 

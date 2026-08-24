@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import threading
 import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -140,9 +141,56 @@ def test_compute_ensure_idempotent_and_wires() -> None:
     assert "create" not in data["steps"]
     assert "manager-exists" in data["steps"]
     assert "astroai" in ensure_cmds[0] and "cluster" in ensure_cmds[0]
-    assert "start" in ensure_cmds[0] and "--autoscaling" in ensure_cmds[0]
+    assert "start" in ensure_cmds[0] and "--json" in ensure_cmds[0]
+    assert "--autoscaling" not in ensure_cmds[0]
     assert "RAY_AUTOSCALING_ENABLED=1" in env
     assert "do not add workers" in data["user_message"]
+
+
+def test_compute_ensure_runs_in_background_and_status_polls() -> None:
+    """POST starts a thread and returns fast; GET /status reports progress."""
+    import time as _time
+
+    gate = threading.Event()
+
+    def slow_ensure() -> dict:
+        gate.wait(timeout=5)
+        return {"ok": True, "summary": "done", "user_message": "ready", "steps": ["x"]}
+
+    with (
+        patch.object(wiz, "_compute_ensure", staticmethod(slow_ensure)),
+    ):
+        wiz._ENSURE_STATE.update(running=False, steps=[], result=None)
+        started = _time.time()
+        payload = wiz._start_compute_ensure()
+        assert payload["ok"] is True and payload["running"] is True
+        assert _time.time() - started < 1.0  # returned without running the job
+
+        status = wiz._compute_status()
+        assert status["running"] is True
+
+        # Second start while running must not spawn another job.
+        again = wiz._start_compute_ensure()
+        assert again.get("running") is True and "started" not in again
+
+        gate.set()
+        for _ in range(100):
+            if not wiz._compute_status()["running"]:
+                break
+            _time.sleep(0.05)
+        final = wiz._compute_status()
+        assert final["running"] is False
+        assert final["ok"] is True
+        assert final["summary"] == "done"
+
+
+def test_back_link_prefers_saved_referrer_over_marker() -> None:
+    """Root-mounted ingress (marker at index 0) must not fall back to '/'."""
+    html = wiz.INDEX_HTML
+    assert "sessionStorage.getItem('astroai-hub-back')" in html
+    assert "document.referrer" in html
+    # The old heuristic resolved the bare domain when i == 0; now it requires i > 0.
+    assert "if (i > 0)" in html
 
 
 def test_index_html_agent_table() -> None:
@@ -226,6 +274,8 @@ if __name__ == "__main__":
     test_addons_and_catalog_use_list_config()
     test_install_by_tag_loops_plugins_install()
     test_compute_ensure_idempotent_and_wires()
+    test_compute_ensure_runs_in_background_and_status_polls()
+    test_back_link_prefers_saved_referrer_over_marker()
     test_index_html_agent_table()
     test_agent_report_returns_full_list()
     test_setup_is_scoped_to_agent_id()

@@ -8,21 +8,21 @@ This file ships inside images as `/opt/astroai/USAGE.md`.
 | You want… | Read |
 |-----------|------|
 | This page | First session, storage, Ray, troubleshooting |
-| `astroai` command detail | [astroai USAGE](https://github.com/astroai/lab/blob/main/docs/USAGE.md) · `astroai help` |
+| `astroai` command detail | [astroai USAGE](https://github.com/astroai/canfar-lab/blob/main/docs/USAGE.md) · `astroai help` |
 | Ray operators | [RAY.md](RAY.md) |
 | Platform CLI | [opencadc.github.io/canfar](https://opencadc.github.io/canfar/) |
 
 ## Scientist card
 
-1. Portal → launch **openresearch** or **openworker** as your day-to-day home base (or webterm/vscode/notebook/marimo/ray-manager as needed).
+1. Portal → launch **openresearch** as your day-to-day home base (or webterm/vscode/notebook/marimo/ray-manager as needed).
 2. Inside: `astroai` · `astroai help` · `less /opt/astroai/USAGE.md`
 3. Work under `$SRCDIR` (same as `$WORK`; `/scratch/src` on CANFAR so container OOM does not wipe it) and `/scratch` (data/caches).
 4. Persist to `/arc/home` or `/arc/projects` before the session ends (`astroai save` / `git push`).
 5. Env snapshots live in `~/.astroai/lab/saves/` on `/arc/home` — resume them in the next session with `astroai resume NAME`.
 
-### Home base: AstroAI hub (openresearch / openworker)
+### Home base: AstroAI hub (openresearch)
 
-1. Launch **`openresearch`** or **`openworker`** with tag `26.08` / `latest`.
+1. Launch **`openresearch`** with tag `26.08` / `latest`.
 2. Open the connect URL, then either:
    - click the blue **AstroAI** chip (top-right), or
    - append `/astroai-agents/` (e.g. `…/session/contrib/<id>/astroai-agents/`).
@@ -66,18 +66,18 @@ canfar data sync /scratch/out /arc/projects/mygroup/out
 
 ## Ray (first-class)
 
-**Preferred:** from openresearch/openworker, AstroAI hub → **Start batch compute**.
+**Preferred:** from openresearch, AstroAI hub → **Start batch compute**.
 That launches an autoscaling **ray-manager** and wires OpenResearch. Jobs with
 `--cpus` add workers.
 
-Manual path: `astroai cluster start --autoscaling`, or launch
+Manual path: `astroai cluster start`, or launch
 **ray-manager** from the portal and open Connect URL.
 
 ```bash
 # AstroAI hub → Start batch compute
 # or:
 canfar create --name astroai-compute --cpu 2 --memory 8 contributed images.canfar.net/astroai/ray-manager:26.08
-# or: astroai cluster start --autoscaling
+# or: astroai cluster start
 astroai run train.py --cpus 2 --memory 8GiB
 ```
 
@@ -103,7 +103,7 @@ Put env saves on `/arc` (`~/.astroai/lab/saves/` or `/arc/projects/<group>/env-s
 astroai init mylab          # or clone owner/repo
 astroai save mylab
 astroai --yes resume mylab
-astroai cluster start --autoscaling
+astroai cluster start
 astroai run train.py --cpus 2
 astroai agent setup         # once (UI sessions auto-run in background; webterm opt-in)
 astroai agent install claude
@@ -124,7 +124,6 @@ Compilers and editors are in interactive images; put CUDA/ML stacks in your pixi
 | `marimo` | Reactive `.py` notebooks; starter seeded once under `$SRCDIR/notebooks` |
 | `notebook` | JupyterLab `:8888`. Stock Skaha may run platform Jupyter CMD — AstroAI `startup-notebook.sh` only with a platform override ([OPERATORS.md](OPERATORS.md)) |
 | `openresearch` | Autoresearch UI (`orx`) on `:5000`; AstroAI hub at `/astroai-agents/` (batch compute + agent list) |
-| `openworker` | OpenWorker browser UI + local agent server (no Tauri); AstroAI hub at `/astroai-agents/` |
 | `ray-manager` | Cluster UI + Ray head; see Ray section |
 | `improc` | Headless FITS/HDF5 image-processing CLIs — see [Image processing (`improc`)](#image-processing-improc) |
 | `improc-webterm` | Same tools + browser terminal (ttyd/tmux) |
@@ -192,5 +191,5 @@ astroai status --json
 
 ## Related
 
-- [astroai/lab](https://github.com/astroai/lab) — `astroai` CLI (`cluster` / `run` / `save` / `agent`)
+- [canfar-lab](https://github.com/astroai/canfar-lab) — `astroai` CLI (`cluster` / `run` / `save` / `agent`)
 - [OPERATORS.md](OPERATORS.md) · [CONTRIBUTING.md](CONTRIBUTING.md) · [RAY.md](RAY.md)

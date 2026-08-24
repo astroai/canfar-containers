@@ -36,7 +36,7 @@ wheels = [
 [[package]]
 name = "astroai-lab"
 version = "0.4.0"
-source = { git = "https://github.com/astroai/lab.git#2aa7f919e31c7153c2a618c8b93a0dd6eb46e5a2" }
+source = { git = "https://github.com/astroai/canfar-lab.git#2aa7f919e31c7153c2a618c8b93a0dd6eb46e5a2" }
 dependencies = [
     { name = "canfar" },
     { name = "httpx" },
@@ -71,7 +71,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "astroai-lab", git = "https://github.com/astroai/lab.git" },
+    { name = "astroai-lab", git = "https://github.com/astroai/canfar-lab.git" },
     { name = "canfar", specifier = ">=1.4.1" },
     { name = "fastapi", specifier = ">=0.110" },
     { name = "httpx", specifier = ">=0.27" },

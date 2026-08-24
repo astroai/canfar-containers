@@ -6,13 +6,10 @@ REGISTRY ?= images.canfar.net
 TAG ?= $(shell date -u +%y.%m)
 BUILD_TAG ?= local
 PYTHON_VERSION ?= 3.13
-# Bust Docker cache for unpinned git clones when upstream main moves.
-export ORX_HEAD ?= $(shell git ls-remote https://github.com/sfabbro/openresearch-cli.git refs/heads/main 2>/dev/null | awk '{print $$1}')
-export OPENWORKER_HEAD ?= $(shell git ls-remote https://github.com/andrewyng/openworker.git refs/heads/main 2>/dev/null | awk '{print $$1}')
 
 export OWNER REGISTRY PYTHON_VERSION
 
-SESSION_IMAGES := base webterm ghostty-web notebook vscode marimo openresearch openworker
+SESSION_IMAGES := base webterm ghostty-web notebook vscode marimo openresearch
 RAY_IMAGES := ray-manager ray-worker
 IMAGE_PREFIX := $(REGISTRY)/$(OWNER)
 
@@ -151,7 +148,7 @@ lock-check: ## fail CI if a lockfile's package body drifts from its source. The 
 
 test-local: ## verify session images (parallel)
 	@fails=0; pids=(); \
-	for img in webterm ghostty-web notebook vscode marimo openresearch openworker base; do \
+	for img in webterm ghostty-web notebook vscode marimo openresearch base; do \
 		./scripts/test-local.sh "$$img" --verify-only & pids+=($$!); \
 	done; \
 	for pid in "$${pids[@]}"; do wait "$$pid" || fails=$$((fails + 1)); done; \

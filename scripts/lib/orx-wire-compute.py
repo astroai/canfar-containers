@@ -142,27 +142,6 @@ def read_persisted_connect_url() -> str | None:
     return candidates[0][1]
 
 
-def _ensure_cluster(workers: int = 0, timeout: int = 300) -> dict[str, Any] | None:
-    """Delegate cluster resolution/creation to astroai (single code path).
-
-    Returns the ``cluster start --json`` payload when the CLI is available and
-    succeeds, else ``None`` so callers fall back to canfar-ps discovery.
-    """
-    cli = shutil.which("astroai")
-    if not cli:
-        return None
-    cmd = [cli, "cluster", "start", "--json", "--timeout", str(timeout)]
-    if workers:
-        cmd += ["--workers", str(workers)]
-    else:
-        cmd += ["--autoscaling"]
-    rc, out, _err = _run(cmd, timeout=timeout)
-    if rc != 0:
-        return None
-    payload = _parse_json_blob(out)
-    return payload if isinstance(payload, dict) else None
-
-
 def wire_orx(*, jobs_address: str, make_default: bool = True) -> dict[str, Any]:
     """Write OpenResearch Ray settings + optional default compute target."""
     cfg = _orx_config_dir()
@@ -196,12 +175,9 @@ def main() -> int:
     try:
         jobs = (os.environ.get("ASTROAI_RAY_JOBS_ADDRESS") or "").strip().rstrip("/")
         if not jobs:
-            # Single code path: let astroai resolve/ensure the cluster
-            # (env → persisted connect URL → canfar ps discovery + ready wait).
-            ensured = _ensure_cluster(workers=0, timeout=1200)
-            if ensured and ensured.get("jobs_address"):
-                jobs = str(ensured["jobs_address"]).rstrip("/")
-        if not jobs:
+            # Boot is discovery-only (persisted connect URL → canfar ps):
+            # never create a manager as a side effect of starting a session.
+            # The AstroAI hub **Start batch compute** button creates one.
             connect = read_persisted_connect_url()
             if not connect:
                 managers = find_manager_sessions()

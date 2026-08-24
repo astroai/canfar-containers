@@ -19,6 +19,8 @@ import os
 import shutil
 import subprocess
 import sys
+import threading
+import time
 import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -42,7 +44,6 @@ HOME = Path.home()
 SESSION_KIND = (os.environ.get("ASTROAI_SESSION_KIND") or "").strip().lower()
 BACK_UI_LABEL = {
     "openresearch": "OpenResearch",
-    "openworker": "OpenWorker",
 }.get(SESSION_KIND, "main UI")
 WIRE_OPENRESEARCH = SESSION_KIND == "openresearch"
 
@@ -295,11 +296,11 @@ def _create_manager_if_needed(wire: ModuleType) -> tuple[bool, str, list[str]]:
     )
     text = f"{err or ''}\n{out or ''}".lower()
     if rc == 0:
-        steps.append("create")
+        _step("create")
         return True, "ray-manager session created", steps
     # Name collision / already exists → treat as ok and continue ensure.
     if any(tok in text for tok in ("already", "conflict", "exists", "duplicate")):
-        steps.append("create-exists")
+        _step("create-exists")
         return True, "ray-manager name already exists — continuing", steps
     return False, (err or out or "canfar create failed")[:800], steps
 
@@ -321,6 +322,83 @@ def _write_autoscaling_env() -> str:
     return str(path)
 
 
+# ---------------------------------------------------------------------------
+# Background compute-ensure job (the hub button must never block a fetch)
+# ---------------------------------------------------------------------------
+
+_ENSURE_LOCK = threading.Lock()
+_ENSURE_STATE: dict[str, Any] = {
+    "running": False,
+    "steps": [],
+    "result": None,
+    "started": 0.0,
+    "finished": 0.0,
+}
+
+
+def _ensure_note(step: str) -> None:
+    """Record one completed ensure milestone for /api/compute/status."""
+    with _ENSURE_LOCK:
+        _ENSURE_STATE["steps"] = list(dict.fromkeys([*_ENSURE_STATE["steps"], step]))
+
+
+def _start_compute_ensure() -> dict[str, Any]:
+    """Run ``_compute_ensure`` in a daemon thread; return immediately.
+
+    A synchronous run holds the HTTP request for many minutes while Harbor
+    pulls the manager image, which made the hub button look hung. The page
+    polls ``/api/compute/status`` instead.
+    """
+    with _ENSURE_LOCK:
+        if _ENSURE_STATE["running"]:
+            return {"ok": True, "running": True, "summary": "already starting"}
+        _ENSURE_STATE.update(
+            running=True, steps=[], result=None, started=time.time(), finished=0.0
+        )
+
+    def _worker() -> None:
+        try:
+            result = _compute_ensure()
+        except Exception as exc:  # noqa: BLE001 — surface to the poller
+            result = {
+                "ok": False,
+                "summary": f"ensure crashed: {exc}",
+                "user_message": str(exc)[:300],
+                "error": str(exc)[:500],
+                "steps": [],
+            }
+        with _ENSURE_LOCK:
+            _ENSURE_STATE["running"] = False
+            _ENSURE_STATE["result"] = result
+            _ENSURE_STATE["finished"] = time.time()
+
+    threading.Thread(target=_worker, daemon=True, name="compute-ensure").start()
+    return {"ok": True, "started": True, "running": True, "summary": "batch compute starting"}
+
+
+def _compute_status() -> dict[str, Any]:
+    """Snapshot of the ensure job for the polling UI."""
+    with _ENSURE_LOCK:
+        running = _ENSURE_STATE["running"]
+        steps = list(_ENSURE_STATE["steps"])
+        started = _ENSURE_STATE["started"]
+        result = _ENSURE_STATE["result"]
+    if running:
+        return {
+            "ok": True,
+            "running": True,
+            "steps": steps,
+            "elapsed": round(max(0.0, time.time() - started)) if started else 0,
+            "summary": "Starting batch compute…",
+            "user_message": f"Starting batch compute… ({', '.join(steps) or 'preparing'})",
+        }
+    if isinstance(result, dict):
+        out = dict(result)
+        out["running"] = False
+        return out
+    return {"ok": True, "running": False, "steps": [], "summary": "idle"}
+
+
 def _compute_ensure() -> dict[str, Any]:
     """Ensure an autoscaling ray-manager, then wire OpenResearch when applicable."""
     try:
@@ -328,10 +406,17 @@ def _compute_ensure() -> dict[str, Any]:
     except Exception as exc:  # noqa: BLE001
         return {"ok": False, "summary": f"wire helpers unavailable: {exc}", "steps": []}
 
-    steps: list[str] = ["autoscaling-env"]
+    def _step(name: str) -> None:
+        steps.append(name)
+        _ensure_note(name)
+
+    steps: list[str] = []
     _write_autoscaling_env()
+    _step("autoscaling-env")
     ok, detail, created = _create_manager_if_needed(wire)
-    steps.extend(created)
+    for name in created:
+        if name not in steps:
+            _step(name)
     if not ok:
         return {
             "ok": False,
@@ -350,14 +435,13 @@ def _compute_ensure() -> dict[str, Any]:
                 "astroai",
                 "cluster",
                 "start",
-                "--autoscaling",
                 "--json",
                 "--timeout",
                 str(COMPUTE_ENSURE_TIMEOUT),
             ],
             timeout=COMPUTE_ENSURE_TIMEOUT,
         )
-        steps.append("cluster-start")
+        _step("cluster-start")
         payload = _parse_json_stdout(ensure_out) if ensure_rc == 0 else None
         if isinstance(payload, dict):
             jobs = str(payload.get("jobs_address") or "").rstrip("/")
@@ -388,13 +472,13 @@ def _compute_ensure() -> dict[str, Any]:
         if running:
             connect = wire._session_connect_url(running[0])
             jobs = wire.jobs_url_from_connect(connect).rstrip("/")
-            steps.append("discover-jobs")
+            _step("discover-jobs")
 
     wired = None
     if WIRE_OPENRESEARCH and jobs:
         try:
             wired = wire.wire_orx(jobs_address=jobs, make_default=True)
-            steps.append("wire-orx")
+            _step("wire-orx")
         except Exception as exc:  # noqa: BLE001
             return {
                 "ok": False,
@@ -675,17 +759,42 @@ INDEX_HTML = """<!DOCTYPE html>
 const BACK_LABEL = __BACK_LABEL_JSON__;
 const base = (location.pathname.replace(/\\/?$/, '/') );
 function mainUiHref() {
+  // 1. The path we actually came from (set when the chip click lands here,
+  //    and by document.referrer on first paint) — robust to any ingress
+  //    shape, including root-mounted sessions where the marker heuristic
+  //    wrongly resolves to the bare domain.
+  try {
+    const saved = sessionStorage.getItem('astroai-hub-back');
+    if (saved) return saved;
+  } catch (e) { /* storage unavailable — fall through */ }
+  if (document.referrer && referrerOrigin() === location.origin
+      && !document.referrer.includes('/astroai-' + 'agents')) {
+    return document.referrer;
+  }
+  // 2. Marker heuristic for direct loads with a session prefix.
   const p = location.pathname;
   const marker = '/astroai-' + 'agents';
   const i = p.lastIndexOf(marker);
-  if (i >= 0) return (p.slice(0, i) || '') + '/';
+  if (i > 0) return p.slice(0, i) + '/';
   return '../';
 }
 (function initBack() {
+  try {
+    if (!sessionStorage.getItem('astroai-hub-back') && document.referrer
+        && referrerOrigin() === location.origin) {
+      const r = new URL(document.referrer);
+      if (!r.pathname.includes('/astroai-' + 'agents')) {
+        sessionStorage.setItem('astroai-hub-back', r.pathname + r.search);
+      }
+    }
+  } catch (e) { /* ignore */ }
   const a = document.getElementById('back-link');
   a.href = mainUiHref();
   a.textContent = '← Back to ' + BACK_LABEL;
 })();
+function referrerOrigin() {
+  try { return new URL(document.referrer).origin; } catch (e) { return ''; }
+}
 async function api(path, opts) {
   const r = await fetch(base.replace(/\\/?$/, '/') + path.replace(/^\\//,''), opts || {});
   const text = await r.text();
@@ -823,8 +932,47 @@ async function runAction(label, path, opts) {
     setBusy(false);
   }
 }
-document.getElementById('btn-compute').onclick = () =>
-  runAction('Starting batch compute', 'api/compute/ensure', { method: 'POST' });
+// Start batch compute: fire the background job, then poll /api/compute/status
+// so the button shows live progress instead of blocking for many minutes.
+const computeBtn = document.getElementById('btn-compute');
+let ensurePoll = null;
+async function pollEnsure() {
+  const { data } = await api('api/compute/status');
+  if (!data) return;
+  if (data.running) {
+    const steps = (data.steps || []).join(' › ');
+    setMsg((steps ? steps + ' — ' : '') + 'waiting… (' + (data.elapsed || 0) + 's)', '');
+    return; // keep polling until the worker finishes
+  }
+  clearInterval(ensurePoll);
+  ensurePoll = null;
+  computeBtn.disabled = false;
+  const ok = !!(data && data.ok);
+  setMsg(data.user_message || data.summary || (ok ? 'Batch compute ready.' : 'failed'),
+         ok ? 'ok' : (data && data.partial ? 'warn' : 'bad'));
+  await refresh();
+}
+computeBtn.onclick = async () => {
+  computeBtn.disabled = true;
+  setMsg('Starting batch compute…', '');
+  try {
+    await api('api/compute/ensure', { method: 'POST' });
+    if (!ensurePoll) {
+      pollEnsure().catch(() => {});
+      ensurePoll = setInterval(() => { pollEnsure().catch(() => {}); }, 2000);
+    }
+  } catch (e) {
+    computeBtn.disabled = false;
+    setMsg(String(e), 'bad');
+  }
+};
+// A reload mid-ensure must resume polling instead of showing an idle button.
+(async function resumeEnsure() {
+  try {
+    const { data } = await api('api/compute/status');
+    if (data && data.running) computeBtn.onclick();
+  } catch (e) { /* hub sidecar not ready yet — the button still works */ }
+})();
 document.getElementById('agent-table').addEventListener('click', (ev) => {
   const node = ev.target && ev.target.nodeType === 1 ? ev.target : (ev.target && ev.target.parentElement);
   const btn = node && node.closest ? node.closest('button[data-act]') : null;
@@ -911,6 +1059,12 @@ class WizardHandler(BaseHTTPRequestHandler):
         if path == "/healthz":
             self._json(200, {"ok": True})
             return
+        if path == "/api/compute/status":
+            try:
+                self._json(200, _compute_status())
+            except Exception as exc:  # noqa: BLE001
+                self._json(500, {"ok": False, "error": str(exc)})
+            return
         self._send(404, b"not found\n", "text/plain; charset=utf-8")
 
     def do_POST(self) -> None:
@@ -955,7 +1109,8 @@ class WizardHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "/api/compute/ensure":
-                self._json(200, _compute_ensure())
+                # Background job + polling: never hold the POST open.
+                self._json(200, _start_compute_ensure())
                 return
 
             # Kept for scripts; not exposed in lean UI.

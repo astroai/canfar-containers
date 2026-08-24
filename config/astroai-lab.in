@@ -8,4 +8,4 @@
 # NOTE: because this is unpinned, `make lock-check` re-resolves `main` HEAD,
 # so lock drift is now automatic on every upstream push — CI fails with
 # "lockfile drift" until `make lock-astroai-lab` + commit (expected workflow).
-astroai-lab @ git+https://github.com/astroai/lab.git
+astroai-lab @ git+https://github.com/astroai/canfar-lab.git

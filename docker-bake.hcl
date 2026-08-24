@@ -16,18 +16,8 @@ variable "PYTHON_VERSION" {
   default = "3.13"
 }
 
-# Git SHAs for unpinned upstream clones. Makefile exports current origin/main
-# so Docker cache invalidates when those repos move.
-variable "ORX_HEAD" {
-  default = ""
-}
-
-variable "OPENWORKER_HEAD" {
-  default = ""
-}
-
 group "default" {
-  targets = ["base", "webterm", "ghostty-web", "notebook", "vscode", "marimo", "openresearch", "openworker"]
+  targets = ["base", "webterm", "ghostty-web", "notebook", "vscode", "marimo", "openresearch"]
 }
 
 group "improc" {
@@ -102,21 +92,6 @@ target "openresearch" {
   inherits   = ["_interface"]
   dockerfile = "dockerfiles/openresearch/Dockerfile"
   tags       = ["${REGISTRY}/${OWNER}/openresearch:${TAG}"]
-  args = {
-    # Unpinned fork main until alphaXiv ships a release with
-    # https://github.com/alphaXiv/openresearch-cli/pull/138
-    ORX_REPO = "https://github.com/sfabbro/openresearch-cli.git"
-    ORX_HEAD = "${ORX_HEAD}"
-  }
-}
-
-target "openworker" {
-  inherits   = ["_interface"]
-  dockerfile = "dockerfiles/openworker/Dockerfile"
-  tags       = ["${REGISTRY}/${OWNER}/openworker:${TAG}"]
-  args = {
-    OPENWORKER_HEAD = "${OPENWORKER_HEAD}"
-  }
 }
 
 # Ray cluster images

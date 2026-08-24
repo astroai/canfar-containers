@@ -43,7 +43,6 @@ flowchart TB
 | `notebook` | JupyterLab | Notebook |
 | `marimo` | Reactive notebooks | Contributed |
 | `openresearch` | OpenResearch (`orx`) autoresearch dashboard | Contributed |
-| `openworker` | OpenWorker browser UI + local agent server (no Tauri) | Contributed |
 | `base` | Headless parent (CI / batch) | — |
 | `improc` | Astronomy FITS/HDF5 image-processing CLIs | Headless |
 | `improc-webterm` | Same tools + browser terminal (ttyd/tmux) | Contributed |
@@ -56,7 +55,7 @@ flowchart TB
 | Doc | Audience |
 |-----|----------|
 | [docs/USAGE.md](docs/USAGE.md) | Session users — first session, storage, tools |
-| [astroai USAGE](https://github.com/astroai/lab/blob/main/docs/USAGE.md) | `astroai` CLI detail |
+| [astroai USAGE](https://github.com/astroai/canfar-lab/blob/main/docs/USAGE.md) | `astroai` CLI detail |
 | [docs/RAY.md](docs/RAY.md) | Ray clusters — manager + workers |
 | [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) | Developers — clone, build, test, PRs |
 | [docs/OPERATORS.md](docs/OPERATORS.md) | Maintainers — push, register, smoke tests |
@@ -116,7 +115,7 @@ Heavy site software: [CVMFS on CANFAR](https://github.com/opencadc/canfar/blob/m
 
 | Repo | Role |
 |------|------|
-| [astroai-lab](https://github.com/astroai/lab) | In-session CLI (`astroai`) |
+| [astroai-lab](https://github.com/astroai/canfar-lab) | In-session CLI (`astroai`) |
 | [opencadc/canfar](https://github.com/opencadc/canfar) | Platform client |
 | [opencadc/science-platform](https://github.com/opencadc/science-platform) | Skaha / Helm (platform team) |
 

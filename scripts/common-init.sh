@@ -73,7 +73,7 @@ if [[ ! -f "${_state}/welcomed" ]]; then
 
   Welcome to AstroAI on CANFAR!
   ─────────────────────────────
-  astroai init <name>     New project       astroai cluster start --autoscaling
+  astroai init <name>     New project       astroai cluster start
   astroai clone <repo>    Clone from GitHub  astroai run train.py --cpus 2
   astroai help            Command list       less /opt/astroai/USAGE.md
 
@@ -108,7 +108,7 @@ if command -v astroai >/dev/null 2>&1; then
   if [[ -z "${_agent_setup}" ]]; then
     case "${ASTROAI_SESSION_KIND:-}" in
       # marimo runs its own `agent setup marimo` in startup — avoid lock race.
-      openresearch|openworker|vscode) _agent_setup=bg ;;
+      openresearch|vscode) _agent_setup=bg ;;
       *) _agent_setup=0 ;;
     esac
   fi

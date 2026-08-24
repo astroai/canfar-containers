@@ -22,8 +22,7 @@ flowchart TB
 | Path | Why |
 |------|-----|
 | AstroAI hub → **Start batch compute** | Autoscaling manager + OpenResearch wire |
-| **`astroai cluster start --autoscaling`** | Same from a terminal |
-| **`astroai cluster start --workers N`** | Fixed pool. Do not mix with autoscaling |
+| **`astroai cluster start`** | Same from a terminal (always autoscaling) |
 | **`astroai run train.py`** | Runs a program on that cluster and waits |
 | Ray Dashboard at `connectURL/dashboard/` | Watch jobs, nodes, logs. Not the submit command. |
 | Manager control panel at `/` | Auth, network check, fallback create/stop |
@@ -128,7 +127,7 @@ AstroAI’s `openresearch` image defaults compute to CANFAR batch (Ray Jobs unde
 the hood). Preferred path:
 
 ```bash
-# From openresearch / openworker (or any AstroAI session with canfar auth):
+# From openresearch (or any AstroAI session with canfar auth):
 # AstroAI hub → Start batch compute
 # Then in OpenResearch: run experiments (no --backend needed)
 ```
@@ -153,17 +152,16 @@ Usual path: autoscaling. One click or one command, then a job with `--cpus`.
 ```bash
 # AstroAI hub → Start batch compute
 # or:
-astroai cluster start --autoscaling
+astroai cluster start
 export ASTROAI_RAY_JOBS_ADDRESS=…    # printed by start
 astroai run train.py --cpus 2
 ```
 
-`--autoscaling` writes `~/.config/canfar/lab/ray-manager.env` and creates the
+`cluster start` writes `~/.config/canfar/lab/ray-manager.env` and creates the
 manager if needed. Ray adds `ray-as-*` workers when the job needs CPUs.
-
-`--workers N` starts a fixed pool instead. Do not mix that with autoscaling
-on the same manager. If a manager was already running when you turned
-autoscaling on, stop it and start a new one so it sources the env file.
+Size the ceiling with `--min-workers` / `--max-workers` / `--cores` / `--ram`
+/ `--gpus`. If a manager was already running when you changed sizing, stop it
+and start a new one so it sources the env file.
 
 The manager UI still exists for auth, the network check, and fallback
 create/stop. Sequence when using the UI:
@@ -209,7 +207,7 @@ CPUs. The manager head starts with
 Turn it on with the hub button or:
 
 ```bash
-astroai cluster start --autoscaling
+astroai cluster start
 ```
 
 That writes `~/.config/canfar/lab/ray-manager.env` (Skaha rejects `-e` on
@@ -252,5 +250,5 @@ examples/ray/                Container smokes
 
 - [USAGE.md](USAGE.md) — general sessions
 - [OPERATORS.md](OPERATORS.md) — publish and platform notes
-- [astroai-lab](https://github.com/astroai/lab) — `astroai cluster start` + `run` (not `ray job submit`)
+- [astroai-lab](https://github.com/astroai/canfar-lab) — `astroai cluster start` + `run` (not `ray job submit`)
 - Starter notebook in-image: `/opt/astroai/notebooks/ray_train.ipynb`
