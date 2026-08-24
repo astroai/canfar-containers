@@ -108,6 +108,37 @@ RUN curl -fsSL -o /tmp/node.tar.xz \
     && npm --version \
     && npx --version
 
+# Markdown TUIs — pinned GitHub releases (not in Debian apt). Bump VERSION +
+# SHA256 together. x86_64-only (bake is single-arch amd64).
+ARG GLOW_VERSION=3.0.0
+ARG GLOW_SHA256=13e05e4b2acc18d2aee44291aefe6325b077ec321b631a0cfa780e8e3bc33f78
+ARG MDCAT_VERSION=2.7.1
+ARG MDCAT_SHA256=a5610f76a8f3ca1da84326ee42f4e7b00c7daa349ad831168e71c3fbb054dae2
+ARG OV_VERSION=0.54.0
+ARG OV_SHA256=f26ef7b180dbc6bb07677f31d0a73629528b30624cb6203919f23dc6d54f9797
+RUN curl -fsSL -o /tmp/glow.tar.gz \
+      "https://github.com/charmbracelet/glow/releases/download/v${GLOW_VERSION}/glow_${GLOW_VERSION}_Linux_x86_64.tar.gz" \
+    && echo "${GLOW_SHA256}  /tmp/glow.tar.gz" | sha256sum -c - \
+    && tar -xzf /tmp/glow.tar.gz -C /tmp \
+    && install -m 755 "/tmp/glow_${GLOW_VERSION}_Linux_x86_64/glow" /usr/local/bin/glow \
+    && rm -rf /tmp/glow.tar.gz "/tmp/glow_${GLOW_VERSION}_Linux_x86_64" \
+    && curl -fsSL -o /tmp/mdcat.tar.gz \
+      "https://github.com/swsnr/mdcat/releases/download/mdcat-${MDCAT_VERSION}/mdcat-${MDCAT_VERSION}-x86_64-unknown-linux-gnu.tar.gz" \
+    && echo "${MDCAT_SHA256}  /tmp/mdcat.tar.gz" | sha256sum -c - \
+    && tar -xzf /tmp/mdcat.tar.gz -C /tmp \
+    && install -m 755 "/tmp/mdcat-${MDCAT_VERSION}-x86_64-unknown-linux-gnu/mdcat" /usr/local/bin/mdcat \
+    && ln -sf mdcat /usr/local/bin/mdless \
+    && rm -rf /tmp/mdcat.tar.gz "/tmp/mdcat-${MDCAT_VERSION}-x86_64-unknown-linux-gnu" \
+    && curl -fsSL -o /tmp/ov.zip \
+      "https://github.com/noborus/ov/releases/download/v${OV_VERSION}/ov_${OV_VERSION}_linux_amd64.zip" \
+    && echo "${OV_SHA256}  /tmp/ov.zip" | sha256sum -c - \
+    && unzip -q /tmp/ov.zip -d /tmp \
+    && install -m 755 /tmp/ov /usr/local/bin/ov \
+    && rm -f /tmp/ov.zip /tmp/ov /tmp/ov.yaml /tmp/ov-less.yaml /tmp/LICENSE /tmp/README.md \
+    && glow --version \
+    && mdcat --version \
+    && ov --version
+
 ENV LANG=en_US.UTF-8 \
     LC_ALL=en_US.UTF-8 \
     TERM=xterm-256color \

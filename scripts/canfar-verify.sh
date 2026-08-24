@@ -79,7 +79,7 @@ for t in canfar cadcget cadcput cadc-tap vcp cadc-get-cert astroai peek; do
 done
 
 # Tool ecosystem
-for t in gh rg fd bat fzf hyperfine uv pixi micromamba mamba patch make file xxd hexdump lsof ss host ncdu shellcheck ctags \
+for t in gh rg fd bat fzf hyperfine glow mdcat ov uv pixi micromamba mamba patch make file xxd hexdump lsof ss host ncdu shellcheck ctags \
          gcc g++ gfortran ld ar rustc cargo cmake ninja autoconf automake libtoolize flex bison; do
     command -v "$t" >/dev/null 2>&1 && echo "PASS:login shell: ${t}" || echo "FAIL:login shell: ${t}"
 done
