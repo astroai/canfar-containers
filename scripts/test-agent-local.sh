@@ -123,9 +123,9 @@ assert isinstance(d.get("agents"), list) and d["agents"], d
 astroai --json agent verify >/dev/null 2>&1 || true
 
 # 4. plugin install/remove round-trip (scoped to the installed agent).
-if astroai agent plugins list 2>/dev/null | grep -q canfar-ray; then
-    astroai agent plugins install canfar-ray --agent kilo >/dev/null 2>&1 || true
-    astroai agent plugins remove canfar-ray --agent kilo >/dev/null 2>&1 || true
+if astroai agent plugins list 2>/dev/null | grep -q astroai-ray; then
+    astroai agent plugins install astroai-ray --agent kilo >/dev/null 2>&1 || true
+    astroai agent plugins remove astroai-ray --agent kilo >/dev/null 2>&1 || true
 fi
 
 # 5. remove leaves no trace and never creates ~/.local.
@@ -160,7 +160,7 @@ astroai agent config hermes --unset model >/dev/null \
     || fail "agent config hermes --unset model"
 
 # Fake hermes binary → `agent update hermes` skips the network install and
-# force re-applies the hermes plugins (canfar-ray skill + ray-manager-mcp).
+# force re-applies the hermes plugins (astroai-ray skill + ray-manager-mcp).
 printf '#!/bin/sh\necho hermes fake 0.0.0\n' > "${BIN_DIR}/hermes"
 chmod +x "${BIN_DIR}/hermes"
 # Precondition: update must see the fake binary via the SESSION bin dir (the
@@ -173,8 +173,8 @@ hermes = next(r for r in d["agents"] if r["id"] == "hermes")
 assert hermes["binary_ok"], "fake hermes not detected in session bin dir"
 ' || fail "update hermes: fake binary not on session bin dir"
 astroai agent update hermes >/dev/null || fail "agent update hermes"
-[[ -f "${HOME_DIR}/.hermes/skills/canfar-ray/SKILL.md" ]] \
-    || fail "update hermes: canfar-ray skill not re-applied"
+[[ -f "${HOME_DIR}/.hermes/skills/astroai-ray/SKILL.md" ]] \
+    || fail "update hermes: astroai-ray skill not re-applied"
 [[ -f "${HOME_DIR}/.hermes/config.yaml" ]] \
     || fail "update hermes: config.yaml missing after update"
 
