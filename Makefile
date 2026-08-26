@@ -162,7 +162,7 @@ test-local: ## verify session images (parallel)
 # ./scripts/test-agent-local.sh openresearch (no build-all dependency).
 test-agent-local: build-all ## agent command matrix on all session images (local, mounted fresh home)
 	@chmod +x scripts/test-agent-local.sh
-	@./scripts/test-agent-local.sh $(if $(IMAGE),$(IMAGE),$(SESSION_IMAGES))
+	@TAG=$(BUILD_TAG) ./scripts/test-agent-local.sh $(if $(IMAGE),$(IMAGE),$(SESSION_IMAGES))
 	@echo "agent-local E2E passed for $(if $(IMAGE),$(IMAGE),all session images)"
 
 test-ray: build-ray build/base ## Ray image checks + local cluster join + UI
