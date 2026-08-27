@@ -115,7 +115,7 @@ Heavy site software: [CVMFS on CANFAR](https://github.com/opencadc/canfar/blob/m
 
 | Repo | Role |
 |------|------|
-| [astroai-lab](https://github.com/astroai/canfar-lab) | In-session CLI (`astroai`) |
+| [astroai/canfar-lab](https://github.com/astroai/canfar-lab) | In-session CLI (`astroai`) |
 | [opencadc/canfar](https://github.com/opencadc/canfar) | Platform client |
 | [opencadc/science-platform](https://github.com/opencadc/science-platform) | Skaha / Helm (platform team) |
 
