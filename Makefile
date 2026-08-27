@@ -47,10 +47,11 @@ help:
 	@echo ""
 	@echo "  OWNER=$(OWNER)  REGISTRY=$(REGISTRY)  BUILD_TAG=$(BUILD_TAG)  TAG=$(TAG)"
 
-# Canonical starters live in astroai-lab; containers copies are build artifacts.
-ASTROAI_LAB_STARTER ?= ../astroai-lab/src/astroai_lab/data/notebooks/starter.py
-ASTROAI_LAB_IPYNB ?= ../astroai-lab/src/astroai_lab/data/notebooks/starter.ipynb
-ASTROAI_LAB_RAY_NB ?= ../astroai-lab/src/astroai_lab/data/notebooks/ray_train.ipynb
+# Canonical starters live in canfar-lab / astroai-lab; containers copies are build artifacts.
+ASTROAI_LAB_DIR ?= $(shell test -d ../canfar-lab && echo ../canfar-lab || echo ../astroai-lab)
+ASTROAI_LAB_STARTER ?= $(ASTROAI_LAB_DIR)/src/astroai_lab/data/notebooks/starter.py
+ASTROAI_LAB_IPYNB ?= $(ASTROAI_LAB_DIR)/src/astroai_lab/data/notebooks/starter.ipynb
+ASTROAI_LAB_RAY_NB ?= $(ASTROAI_LAB_DIR)/src/astroai_lab/data/notebooks/ray_train.ipynb
 
 sync-marimo-starter: ## copy marimo starter.py from sibling astroai-lab checkout
 	@test -f "$(ASTROAI_LAB_STARTER)" || { echo "missing $(ASTROAI_LAB_STARTER)"; exit 1; }
@@ -83,7 +84,7 @@ push-ray: $(addprefix push/,$(RAY_IMAGES))
 push-improc: push/improc push/improc-webterm push/improc-notebook ## push improc stack
 
 # Production Ray push: bake TAG into manager env (RAY_IMAGE_TAG) — use BUILD_TAG=$(TAG).
-#   make build-ray BUILD_TAG=26.06 TAG=26.06 && make push-ray TAG=26.06 BUILD_TAG=26.06
+#   make build-ray BUILD_TAG=26.08 TAG=26.08 && make push-ray TAG=26.08 BUILD_TAG=26.08
 
 push/python:
 	@echo "ERROR: python image is build-only (internal bake parent); never push to Harbor." >&2

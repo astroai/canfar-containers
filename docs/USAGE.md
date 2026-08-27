@@ -102,7 +102,7 @@ Put env saves on `/arc` (`~/.astroai/lab/saves/` or `/arc/projects/<group>/env-s
 ```bash
 astroai init mylab          # or clone owner/repo
 astroai save mylab
-astroai --yes resume mylab
+astroai resume mylab --yes
 astroai cluster start
 astroai run train.py --cpus 2
 astroai agent setup         # once (UI sessions auto-run in background; webterm opt-in)

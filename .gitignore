@@ -10,4 +10,4 @@ __pycache__/
 .idea/
 *.swp
 config/agent/
-
+.cursor/

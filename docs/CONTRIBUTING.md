@@ -132,7 +132,7 @@ Canonical `starter.py` lives in **astroai-lab**
 identical:
 
 ```bash
-# from canfar-containers (sibling checkout of astroai-lab / canfar-lab)
+# from canfar-containers (sibling checkout of canfar-lab / astroai-lab)
 make sync-marimo-starter
 ```
 

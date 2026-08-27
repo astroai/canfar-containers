@@ -22,7 +22,7 @@
 #   RAY_AUTOSCALING_MIN/MAX_WORKERS, CORES, RAM_GB, GPUS, IDLE_TIMEOUT_MINUTES
 #     (defaults: min 0, max 3, 2 CPU / 4 GiB / 0 GPU, idle 1m for fast proof)
 
-TAG="${1:-${TAG:-26.06}}"
+TAG="${1:-${TAG:-$(date -u +%y.%m)}}"
 OWNER="${OWNER:-astroai}"
 REGISTRY="${REGISTRY:-images.canfar.net}"
 TIMEOUT="${CANFAR_TEST_TIMEOUT:-1800}"

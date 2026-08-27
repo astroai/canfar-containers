@@ -92,6 +92,11 @@ from astroai_workload.workers import (  # noqa: E402
 # ---------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------
+@pytest.fixture(autouse=True)
+def _default_test_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("RAY_NODE_IP_ADDRESS", "127.0.0.1")
+
+
 @pytest.fixture()
 def store(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> StateStore:
     home = tmp_path / "home"
@@ -188,8 +193,8 @@ class TestParseProbeLogs:
 class TestAuthStatus:
     def test_authenticated(self, monkeypatch: pytest.MonkeyPatch) -> None:
         ops = CanfarOps()
-        with patch.object(ops, "_session") as mock_sess:
-            mock_sess.fetch.return_value = [{"id": "s1"}]
+        with patch.object(ops, "_fresh_session") as mock_fresh:
+            mock_fresh.return_value.fetch.return_value = [{"id": "s1"}]
             with patch("astroai_workload.canfar_ops.Configuration") as MockConfig:
                 cfg = MagicMock()
                 cfg.active.authentication = "cadc"
@@ -234,8 +239,8 @@ class TestAuthStatus:
             cfg.active.server = "https://example.com"
             cfg.get_credential.return_value = "ok"
             MockConfig.return_value = cfg
-            with patch.object(ops, "_session") as mock_sess:
-                mock_sess.fetch.side_effect = RuntimeError("connection refused")
+            with patch.object(ops, "_fresh_session") as mock_fresh:
+                mock_fresh.return_value.fetch.side_effect = RuntimeError("connection refused")
                 result = ops.auth_status()
                 assert result.authenticated is False
                 assert "connection refused" in result.message
@@ -363,14 +368,14 @@ class TestCanfarOpsSessionHelpers:
         ops = CanfarOps()
         mock_sess = MagicMock()
         mock_sess.logs.return_value = {"sid-1": "line1\nline2\n"}
-        ops._session = mock_sess
+        ops._fresh_session = MagicMock(return_value=mock_sess)
         assert ops.session_logs("sid-1") == "line1\nline2\n"
 
     def test_session_logs_empty(self, monkeypatch: pytest.MonkeyPatch) -> None:
         ops = CanfarOps()
         mock_sess = MagicMock()
         mock_sess.logs.return_value = {}
-        ops._session = mock_sess
+        ops._fresh_session = MagicMock(return_value=mock_sess)
         assert ops.session_logs("sid-1") == ""
 
 
