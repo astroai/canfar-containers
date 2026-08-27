@@ -51,7 +51,10 @@ gh_authed() {
 }
 
 needs_gh_auth() {
-    case "$1" in codex) return 0 ;; *) return 1 ;; esac
+    # Public releases (codex package) install via curl — no gh login.
+    case "$1" in
+        *) return 1 ;;
+    esac
 }
 
 install_cmd_for() {

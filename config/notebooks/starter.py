@@ -27,6 +27,12 @@ def _(mo):
 
 Welcome. Marimo notebooks are plain **`.py` files** — easy to git and review.
 
+### Terminal (right here)
+
+Built-in shell: press **Ctrl-`** (backtick), or open the footer **Developer**
+panel (**Ctrl/Cmd-J**) → **Terminal**. Use it for `astroai clone`, `pixi install`,
+`canfar login`, `git`, … A separate **webterm** session also works if you prefer.
+
 ### Coming from Jupyter?
 
 - **No Run button** — marimo is always running. Edit a cell and dependents update.
@@ -34,8 +40,6 @@ Welcome. Marimo notebooks are plain **`.py` files** — easy to git and review.
 - **Reactive** — change a variable and every cell that reads it re-runs.
 - **Files** — use **Session Files** below, or **File → Open** (Cmd/Ctrl+O).
   Symlinks `📁_scratch`, `📁_work`, `📁_arc` sit next to this notebook.
-- **Terminal** — open a **webterm** tab for `git`, `canfar login`, `vcp`, and
-  mutating `astroai` commands (`init`, `save`, `agent install`).
 
 ### Quick rules
 
@@ -46,10 +50,11 @@ Welcome. Marimo notebooks are plain **`.py` files** — easy to git and review.
 
 ### Open an existing project
 
-1. In a **webterm**: `astroai init mylab` or `astroai clone owner/repo`
+1. In the **terminal** (Ctrl-`): `astroai init mylab` or `astroai clone owner/repo`
    (projects land under `$WORK`).
-2. Here: **File → Open** and browse into that folder, or follow the paths listed
-   in **Session status** below.
+2. Activate that project's env with **Project environment** below (or
+   `from canfar_marimo import use_project; use_project("…")`).
+3. **File → Open** to edit notebooks inside the project folder.
 """
     )
     return
@@ -90,6 +95,8 @@ def _(mo):
         f"({'writable' if scratch.is_dir() and os.access(scratch, os.W_OK) else 'not writable'})",
         f"- **home** (keep tiny): `{pathlib.Path.home()}`",
         f"- **XDG_CACHE_HOME**: `{os.environ.get('XDG_CACHE_HOME', '(unset)')}`",
+        f"- **OpenRouter key**: "
+        f"{'set (`OPENROUTER_API_KEY` / `~/.astroai/lab/.env`)' if os.environ.get('OPENROUTER_API_KEY') or (pathlib.Path.home() / '.astroai' / 'lab' / '.env').is_file() else 'missing — once: `export OPENROUTER_API_KEY=…` then `astroai agent setup marimo`'}",
     ]
 
     # Banner JSON shows session paths and save count.
@@ -120,13 +127,13 @@ def _(mo):
             if any((child / m).exists() for m in markers):
                 found.append(child)
     if found:
-        lines.append("- **projects** (File → Open):")
+        lines.append("- **projects** (activate below / File → Open):")
         for p in found:
             lines.append(f"  - `{p}`")
     else:
         lines.append(
             "- **projects**: none detected under work yet — "
-            "`astroai init mylab` or `astroai clone owner/repo` in a webterm"
+            "`astroai init mylab` or `astroai clone owner/repo` in the terminal (Ctrl-`)"
         )
 
     if notes:
@@ -134,6 +141,82 @@ def _(mo):
 
     mo.md("\n".join(lines))
     return (os, pathlib, scratch, subprocess, work)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(
+        r"""
+### Project environment
+
+Marimo has no Jupyter kernels — activate a cloned project's `.pixi` / `.venv`
+here so notebook imports use that stack.
+
+**Packages sidebar:** after Activate, installs go via **pixi** / **uv** into
+that project. Bare `pip` into the image Python fails (no root on CANFAR).
+"""
+    )
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    try:
+        from canfar_marimo import project_env_controls  # type: ignore
+
+        pe = project_env_controls()
+        pe_picker = pe.picker
+        pe_btn = pe.btn
+        pe.panel
+    except ImportError:
+        pe = None
+        pe_picker = None
+        pe_btn = None
+        mo.md(
+            "`canfar_marimo` missing (expected in the Docker image). "
+            "In the terminal: `cd $WORK/<project> && pixi shell` then restart marimo, "
+            "or `from canfar_marimo import use_project` once the image is current."
+        )
+    return (pe, pe_picker, pe_btn)
+
+
+@app.cell(hide_code=True)
+def _(mo, pe, pe_btn, pe_picker):
+    if pe is None or pe_btn is None or pe_picker is None:
+        out = mo.md("")
+    else:
+        _ = (pe_picker.value, pe_btn.value)
+        out = pe.result_md()
+    out
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    try:
+        from canfar_marimo import package_install_controls  # type: ignore
+
+        pi = package_install_controls()
+        pi_pkg = pi.pkg
+        pi_btn = pi.btn
+        pi.panel
+    except ImportError:
+        pi = None
+        pi_pkg = None
+        pi_btn = None
+        mo.md("")
+    return (pi, pi_pkg, pi_btn)
+
+
+@app.cell(hide_code=True)
+def _(mo, pi, pi_btn, pi_pkg):
+    if pi is None or pi_btn is None or pi_pkg is None:
+        out = mo.md("")
+    else:
+        _ = (pi_pkg.value, pi_btn.value)
+        out = pi.result_md()
+    out
+    return
 
 
 @app.cell(hide_code=True)
@@ -196,11 +279,11 @@ def _(mo):
         r"""
 ### CANFAR Vault (VOSpace)
 
-**Interim:** use the controls below (or `vls` / `vcp` in a webterm).
-Authenticate first: `canfar login` in a webterm.
+Authenticate first: `canfar login` in the terminal (**Ctrl-`**), then list or
+download below. Shell alternatives: `vls` / `vcp`.
 
-Native marimo **Remote Storage** for Vault will land once the `vos` client
-ships fsspec support — until then this is the in-notebook path.
+(Marimo **Remote Storage** for Vault waits on a PyPI `canfar` release with
+`vosfs` / fsspec.)
 """
     )
     return
@@ -227,7 +310,7 @@ def _(mo):
         mo.md(
             """
 `canfar_marimo` is not available (expected inside the Docker image).
-Use `vls` / `vcp` in a **webterm** for VOSpace access.
+Use `vls` / `vcp` in the terminal for VOSpace access.
 """
         )
     return (vc, vos_uri, vos_dest, vos_list_btn, vos_fetch_btn)
@@ -255,10 +338,10 @@ def _(mo, vc, vos_dest, vos_fetch_btn, vos_list_btn, vos_uri):
 def _(mo):
     mo.md(
         r"""
-### astroai (webterm)
+### astroai (terminal)
 
-Read-only checks run in **Session status** above. Mutating work stays in a
-**webterm** tab:
+Read-only checks run in **Session status** above. Mutating work stays in the
+**built-in terminal** (Ctrl-`):
 
 **First session / new project**
 
@@ -276,10 +359,12 @@ astroai save
 # copy results to /arc/projects or vos: with canfar data / vcp
 ```
 
-**AI agents** (config on `/arc/home`)
+**AI agents** (one OpenRouter key on `/arc/home`)
 
 ```bash
-astroai agent setup             # once per user (also seeds marimo AI)
+# once per user — stores key in ~/.astroai/lab/.env for marimo + agents
+export OPENROUTER_API_KEY=sk-or-v1-…
+astroai agent setup             # seeds marimo AI + agent configs
 astroai agent install kilo      # or goose, claude, opencode, codex, qoder
 astroai agent update
 ```
@@ -297,9 +382,10 @@ def _(mo):
 ### Marimo AI Assistant
 
 Toolbar **AI** (or Cmd/Ctrl+Shift+E to refactor the current cell). Uses
-**OpenRouter**, same as `astroai` agents.
+**OpenRouter**, same key as `astroai` agents (`~/.astroai/lab/.env` →
+`OPENROUTER_API_KEY`). You should not need to paste the key again into marimo.
 
-1. Once: `astroai agent setup` in a webterm (stores the key on `/arc/home`).
+1. Once: `export OPENROUTER_API_KEY=…` then `astroai agent setup` (or `… marimo`).
 2. Open the AI sidebar; chat, agent mode, or generate cells from a prompt.
 3. Pass in-memory values with `@variable_name`. Models: `~/.marimo.toml`.
 """
@@ -314,6 +400,7 @@ def _(mo):
 ## Next steps
 
 - Install packages into a **project** (`astroai init mylab`), not `$HOME`.
+- Activate that env with **Project environment** above.
 - Or use a short-lived venv under `/scratch` if you must.
 """
     )
