@@ -1,4 +1,4 @@
-name: astroai-containers CI
+name: canfar-containers CI
 
 # Docker-free gate for the ray-manager module. Image build/test pipelines
 # remain operator-side via the Makefile (`make build-all`, `make test-local`,

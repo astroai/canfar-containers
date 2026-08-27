@@ -22,14 +22,14 @@ In a session: `less /opt/astroai/USAGE.md`.
 ```bash
 gh auth login
 gh repo clone astroai/canfar-containers
-cd astroai-containers
+cd canfar-containers
 ```
 
 Fork workflow:
 
 ```bash
 gh repo fork astroai/canfar-containers --clone
-cd astroai-containers
+cd canfar-containers
 git checkout -b my-change
 ```
 
@@ -132,14 +132,17 @@ Canonical `starter.py` lives in **astroai-lab**
 identical:
 
 ```bash
-# from astroai-containers (sibling checkout of astroai-lab)
+# from canfar-containers (sibling checkout of astroai-lab / canfar-lab)
 make sync-marimo-starter
 ```
 
 Startup (`scripts/startup-marimo.sh`) seeds that file once into
-`WORK/notebooks`, runs `astroai agent setup marimo` (OpenRouter,
+`WORK/notebooks`, sources `~/.astroai/lab/.env` / `agent-env.sh`, runs
+`astroai agent setup marimo` (OpenRouter into shared `.env` + `~/.marimo.toml`,
 does not overwrite user settings), and opens `starter.py`. Keep
-`canfar_marimo.VOSpaceUI` until vos fsspec lands.
+`canfar_marimo.VOSpaceUI` until vos fsspec lands. Project env activation for
+cloned repos is `canfar_marimo.use_project` / `project_env_controls` in the
+starter.
 
 ---
 

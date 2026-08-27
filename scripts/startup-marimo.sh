@@ -6,6 +6,18 @@
 export ASTROAI_SESSION_KIND="${ASTROAI_SESSION_KIND:-marimo}"
 source /cadc/common-init.sh
 
+# Shared OpenRouter key (and gh token hook) before marimo starts — same store
+# agents use via ~/.astroai/lab/.env + agent-env.sh.
+if [[ -f "${HOME}/.astroai/lab/agent-env.sh" ]]; then
+    # shellcheck disable=SC1091
+    source "${HOME}/.astroai/lab/agent-env.sh"
+elif [[ -f "${HOME}/.astroai/lab/.env" ]]; then
+    set -a
+    # shellcheck disable=SC1091
+    source "${HOME}/.astroai/lab/.env"
+    set +a
+fi
+
 # common-init cds to the session work root (WORK).
 NOTEBOOKS_DIR="$(pwd)/notebooks"
 mkdir -p "${NOTEBOOKS_DIR}"
@@ -27,6 +39,7 @@ cd "${NOTEBOOKS_DIR}"
 
 # Ensure marimo AI config exists with OpenRouter API key (astroai agent setup marimo).
 # Non-destructive: only creates/seeds ~/.marimo.toml on first launch; never overwrites.
+# Also persists any discovered key into ~/.astroai/lab/.env for agent CLIs.
 if command -v astroai >/dev/null 2>&1; then
     astroai --yes agent setup marimo 2>/dev/null || true
 fi
