@@ -50,11 +50,12 @@ panel (**Ctrl/Cmd-J**) → **Terminal**. Use it for `astroai clone`, `pixi insta
 
 ### Open an existing project
 
-1. In the **terminal** (Ctrl-`): `astroai init mylab` or `astroai clone owner/repo`
-   (projects land under `$WORK`).
-2. Activate that project's env with **Project environment** below (or
-   `from canfar_marimo import use_project; use_project("…")`).
-3. **File → Open** to edit notebooks inside the project folder.
+1. In the **terminal** (Ctrl-`): `astroai clone owner/repo` or `astroai init mylab`
+   (projects land under `$WORK`, and `pixi install` prepares their environment).
+2. **File → Open** to open any notebook or `.py` file inside the project folder — 
+   its `.pixi` / `.venv` environment and package imports are **auto-discovered automatically**!
+3. Or activate an environment explicitly using **Project environment** below
+   (or in Python: `from canfar_marimo import use_project; use_project("owner/repo")`).
 """
     )
     return
@@ -149,10 +150,13 @@ def _(mo):
         r"""
 ### Project environment
 
-Marimo has no Jupyter kernels — activate a cloned project's `.pixi` / `.venv`
-here so notebook imports use that stack.
+Marimo notebooks opened from inside a project directory auto-discover that project's
+`.pixi` / `.venv` environment and imports automatically.
 
-**Packages sidebar:** after Activate, installs go via **pixi** / **uv** into
+You can also activate a cloned project's environment manually below or switch between
+projects.
+
+**Packages sidebar:** after activation, installs go via **pixi** / **uv** into
 that project. Bare `pip` into the image Python fails (no root on CANFAR).
 """
     )

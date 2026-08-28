@@ -16,7 +16,7 @@ RUN uv pip install --system marimo vos
 
 COPY config/notebooks/starter.py /opt/astroai/notebooks/starter.py
 COPY config/marimo.toml /opt/astroai/config/marimo.toml
-COPY scripts/lib/canfar_marimo.py /opt/astroai/lib/canfar_marimo.py
+COPY scripts/lib/canfar_marimo.py scripts/lib/sitecustomize.py /opt/astroai/lib/
 COPY scripts/common-init.sh scripts/startup-marimo.sh /cadc/
 COPY scripts/skaha-startup-marimo.sh /skaha/startup.sh
 RUN chmod a+rx /cadc/*.sh /skaha/startup.sh
