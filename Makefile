@@ -227,6 +227,7 @@ test-host: ## docker-free checks (selfchecks + agent-wizard unit tests)
 	python3 scripts/lib/test_agent_wizard_verbs.py
 	python3 scripts/lib/test_orx_canfar_proxy.py
 	python3 scripts/lib/test_session_title.py
+	python3 scripts/lib/test_canfar_marimo_env.py
 	@! grep -F '[AstroAI]' config/starship.toml
 	@! grep -E 'format = "in ' config/starship.toml
 	@grep -q 'disabled = true' config/starship.toml

@@ -23,6 +23,8 @@ VOSpace list/download: ``vospace_controls()`` (needs ``canfar login``).
 
 from __future__ import annotations
 
+import importlib.abc
+import importlib.machinery
 import os
 import pathlib
 import subprocess
@@ -33,6 +35,8 @@ _PROJECT_MARKERS = ("pixi.toml", "pyproject.toml", "environment.yml", ".git")
 # Paths we last injected into sys.path / PATH (cleared on next use_project).
 _ACTIVE_PATH_PREFIXES: list[str] = []
 _ACTIVE_BIN: str | None = None
+_ACTIVE_PROJECT: pathlib.Path | None = None
+_HOOK_INSTALLED = False
 
 
 def _mo():
@@ -90,19 +94,65 @@ def list_projects(root: pathlib.Path | None = None) -> list[pathlib.Path]:
     return found
 
 
+def find_project_root(start_path: str | pathlib.Path | None = None) -> pathlib.Path | None:
+    """Find the enclosing project root containing pixi.toml, pyproject.toml, .pixi, or .venv."""
+    start = pathlib.Path(start_path).expanduser().resolve() if start_path else pathlib.Path.cwd().resolve()
+    cur = start if start.is_dir() else start.parent
+    root_boundary = pathlib.Path(cur.root)
+    while cur != root_boundary and cur != cur.parent:
+        if (cur / "pyvenv.cfg").is_file() and (cur / "bin" / "python").is_file():
+            return cur.parent
+        if any((cur / m).exists() for m in _PROJECT_MARKERS):
+            return cur
+        cur = cur.parent
+    return None
+
+
+def find_env_site_packages(env_root: pathlib.Path) -> list[pathlib.Path]:
+    """Discover site-packages / dist-packages directories directly from an env root."""
+    env_root = pathlib.Path(env_root).resolve()
+    found: list[pathlib.Path] = []
+
+    # Standard Unix layout: lib/pythonX.Y/site-packages
+    for sp in sorted(env_root.glob("lib/python*/site-packages")):
+        if sp.is_dir() and sp not in found:
+            found.append(sp)
+    for dp in sorted(env_root.glob("lib/python*/dist-packages")):
+        if dp.is_dir() and dp not in found:
+            found.append(dp)
+    # Windows layout: Lib/site-packages
+    win_sp = env_root / "Lib" / "site-packages"
+    if win_sp.is_dir() and win_sp not in found:
+        found.append(win_sp)
+    return found
+
+
+def project_env_root(project: pathlib.Path) -> pathlib.Path | None:
+    """Return the .pixi or .venv root directory for a project."""
+    project = pathlib.Path(project).expanduser().resolve()
+    if (project / "pyvenv.cfg").is_file() and (project / "bin" / "python").is_file():
+        return project
+    pixi = project / ".pixi" / "envs" / "default"
+    if pixi.is_dir():
+        return pixi
+    venv = project / ".venv"
+    if venv.is_dir():
+        return venv
+    return None
+
+
 def project_env_python(project: pathlib.Path) -> pathlib.Path | None:
     """Return the project's pixi/uv Python, or None if the env is not installed."""
-    project = pathlib.Path(project)
-    # Allow passing the venv root itself (…/project/.venv).
-    direct = project / "bin" / "python"
-    if direct.is_file() and (project / "pyvenv.cfg").is_file():
-        return direct
-    pixi = project / ".pixi" / "envs" / "default" / "bin" / "python"
-    if pixi.is_file():
-        return pixi
-    venv = project / ".venv" / "bin" / "python"
-    if venv.is_file():
-        return venv
+    root = project_env_root(project)
+    if root is None:
+        return None
+    py = root / "bin" / "python"
+    if py.is_file():
+        return py
+    # Windows binary layout
+    py_win = root / "Scripts" / "python.exe"
+    if py_win.is_file():
+        return py_win
     return None
 
 
@@ -168,7 +218,7 @@ def _set_marimo_package_manager(manager: str) -> None:
 
 def _clear_previous_activation() -> None:
     """Drop site-packages / bin from the last use_project call."""
-    global _ACTIVE_PATH_PREFIXES, _ACTIVE_BIN
+    global _ACTIVE_PATH_PREFIXES, _ACTIVE_BIN, _ACTIVE_PROJECT
     for p in _ACTIVE_PATH_PREFIXES:
         while p in sys.path:
             sys.path.remove(p)
@@ -177,9 +227,10 @@ def _clear_previous_activation() -> None:
         parts = os.environ.get("PATH", "").split(":")
         os.environ["PATH"] = ":".join(p for p in parts if p != _ACTIVE_BIN)
         _ACTIVE_BIN = None
+    _ACTIVE_PROJECT = None
 
 
-def use_project(project: str | pathlib.Path) -> str:
+def use_project(project: str | pathlib.Path | None = None, quiet: bool = False) -> str:
     """Activate a cloned project's pixi/uv env into this marimo process.
 
     Marimo has no Jupyter-style kernels — it uses the Python it was started
@@ -188,45 +239,74 @@ def use_project(project: str | pathlib.Path) -> str:
     env vars so the Packages sidebar runs ``pixi add`` / ``uv add`` there
     (CANFAR has no root — system ``pip install`` cannot work).
     """
-    global _ACTIVE_PATH_PREFIXES, _ACTIVE_BIN
+    global _ACTIVE_PATH_PREFIXES, _ACTIVE_BIN, _ACTIVE_PROJECT
 
-    raw = pathlib.Path(project).expanduser().resolve()
+    if project is None or str(project).strip() in ("", "(auto-detect)"):
+        # Attempt auto-detection from cwd or caller
+        detected = find_project_root()
+        if detected is None:
+            projects = list_projects()
+            if len(projects) == 1:
+                detected = projects[0]
+        if detected is None:
+            raise FileNotFoundError(
+                "No project directory specified and could not auto-detect one under current path or $WORK. "
+                "Specify project directory or clone one first via `astroai clone <repo>`."
+            )
+        project = detected
+
+    raw = pathlib.Path(project).expanduser()
+    if not raw.is_absolute():
+        # Check relative to work_dir() then cwd
+        cand_work = work_dir() / raw
+        if cand_work.exists():
+            raw = cand_work
+        else:
+            raw = raw.resolve()
+    else:
+        raw = raw.resolve()
+
     project = _normalize_project(raw)
     if not project.is_dir():
         raise FileNotFoundError(f"Not a project directory: {project}")
-    py = project_env_python(raw if raw != project else project)
-    if py is None:
-        py = project_env_python(project)
-    if py is None:
+
+    env_root = project_env_root(raw if raw != project else project)
+    if env_root is None:
+        env_root = project_env_root(project)
+    if env_root is None:
         raise FileNotFoundError(
             f"No .pixi or .venv under {project} — run `pixi install` or `uv sync` first "
             "(built-in terminal: Ctrl-`)."
         )
 
-    ver = subprocess.check_output(
-        [str(py), "-c", "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"],
-        text=True,
-    ).strip()
-    cur = f"{sys.version_info.major}.{sys.version_info.minor}"
-    warn = ""
-    if ver != cur:
-        warn = (
-            f" Warning: project Python {ver} ≠ marimo Python {cur}; "
-            "pure-Python packages usually work, native wheels may not."
-        )
+    # Check if already active
+    if _ACTIVE_PROJECT == project and str(project) in sys.path:
+        return f"Using `{project.name}` → `{env_root}` (already active)"
 
-    libs = subprocess.check_output(
-        [
-            str(py),
-            "-c",
-            "import sysconfig; "
-            "print(sysconfig.get_path('purelib')); "
-            "print(sysconfig.get_path('platlib'))",
-        ],
-        text=True,
-    ).splitlines()
+    # Fast filesystem-based site-packages discovery
+    site_packages = find_env_site_packages(env_root)
+    libs = [str(p) for p in site_packages]
+
+    # Fallback to subprocess if filesystem scan yielded nothing
+    py = project_env_python(project)
+    if not libs and py and py.is_file():
+        try:
+            out = subprocess.check_output(
+                [
+                    str(py),
+                    "-c",
+                    "import sysconfig; "
+                    "print(sysconfig.get_path('purelib')); "
+                    "print(sysconfig.get_path('platlib'))",
+                ],
+                text=True,
+                timeout=5,
+            ).splitlines()
+            libs = [p for p in out if p and pathlib.Path(p).is_dir()]
+        except Exception:
+            pass
+
     prepend = [p for p in libs if p and pathlib.Path(p).is_dir()]
-    # De-dupe while preserving order
     seen: set[str] = set()
     uniq: list[str] = []
     for p in prepend:
@@ -234,43 +314,158 @@ def use_project(project: str | pathlib.Path) -> str:
             seen.add(p)
             uniq.append(p)
     prepend = uniq
+
     src = project / "src"
-    if src.is_dir():
+    if src.is_dir() and str(src) not in prepend:
         prepend.append(str(src))
-    prepend.append(str(project))
+    if str(project) not in prepend:
+        prepend.append(str(project))
 
     _clear_previous_activation()
     sys.path[:0] = prepend
     _ACTIVE_PATH_PREFIXES = list(prepend)
+    _ACTIVE_PROJECT = project
 
-    env_root = py.parent.parent
-    bin_dir = str(py.parent)
+    bin_dir = str(env_root / "bin")
     kind = project_kind(project)
     os.environ["VIRTUAL_ENV"] = str(env_root)
     os.environ["ASTROAI_MARIMO_PROJECT"] = str(project)
     os.environ["ASTROAI_MARIMO_PM"] = kind
-    # So marimo Packages → uv add targets this project (not system Python).
     os.environ["UV_PROJECT"] = str(project)
     os.environ["UV_PROJECT_ENVIRONMENT"] = str(env_root)
     path = os.environ.get("PATH", "")
     os.environ["PATH"] = f"{bin_dir}:{path}" if path else bin_dir
     _ACTIVE_BIN = bin_dir
 
-    # pixi/uv discover the manifest from cwd — Packages UI runs in this process.
-    try:
-        os.chdir(project)
-    except OSError as exc:
-        warn += f" (chdir failed: {exc})"
+    warn = ""
+    # Optional version check
+    if py and py.is_file():
+        try:
+            ver = subprocess.check_output(
+                [str(py), "-c", "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"],
+                text=True,
+                timeout=3,
+            ).strip()
+            cur = f"{sys.version_info.major}.{sys.version_info.minor}"
+            if ver and ver != cur:
+                warn = (
+                    f" Warning: project Python {ver} ≠ marimo Python {cur}; "
+                    "pure-Python packages usually work, native wheels may not."
+                )
+        except Exception:
+            pass
 
     try:
         _set_marimo_package_manager(kind)
     except OSError:
         pass
 
-    return (
+    msg = (
         f"Using `{project.name}` → `{env_root}` [{kind}]. "
         f"Packages sidebar / `install_package()` write here (not the image).{warn}"
     )
+    if not quiet:
+        # Inform interactive user
+        pass
+    return msg
+
+
+def auto_project(quiet: bool = False) -> str:
+    """Convenience helper to auto-detect and activate the enclosing project environment."""
+    return use_project(None, quiet=quiet)
+
+
+class AstroAIProjectFinder(importlib.abc.MetaPathFinder):
+    """Import hook that auto-discovers and sources project virtual environments upon import.
+
+    If a notebook runs `import zensus` or `import specific_pkg` and it is not found
+    in system Python, this finder locates any candidate project in cwd or $WORK,
+    activates its environment, and allows the import to succeed with zero boilerplate.
+    """
+
+    _in_find_spec: bool = False
+
+    def find_spec(
+        self,
+        fullname: str,
+        path: object | None = None,
+        target: object | None = None,
+    ) -> importlib.machinery.ModuleSpec | None:
+        if self._in_find_spec:
+            return None
+
+        # Quick ignore for private, dunder, or standard built-in modules
+        if fullname.startswith("_"):
+            return None
+
+        self._in_find_spec = True
+        try:
+            # Candidates: enclosing project of cwd, then any project under $WORK
+            candidates: list[pathlib.Path] = []
+            local_proj = find_project_root()
+            if local_proj:
+                candidates.append(local_proj)
+            for p in list_projects():
+                if p not in candidates:
+                    candidates.append(p)
+
+            base_mod = fullname.split(".")[0]
+            for cand in candidates:
+                if _ACTIVE_PROJECT == cand:
+                    continue  # Already active
+                env = project_env_root(cand)
+                if env is None:
+                    continue
+
+                # Check if base_mod is present in project src/ or site-packages
+                matched = False
+                src = cand / "src"
+                if src.is_dir():
+                    if (src / f"{base_mod}.py").is_file() or (src / base_mod).is_dir():
+                        matched = True
+                if not matched:
+                    if (cand / f"{base_mod}.py").is_file() or (cand / base_mod).is_dir():
+                        matched = True
+                if not matched:
+                    for sp in find_env_site_packages(env):
+                        if (sp / f"{base_mod}.py").is_file() or (sp / base_mod).is_dir():
+                            matched = True
+                            break
+                        # Check dist-info or egg-info metadata
+                        if any(sp.glob(f"{base_mod}-*.dist-info")) or any(sp.glob(f"{base_mod.replace('_', '-')}-*.dist-info")):
+                            matched = True
+                            break
+
+                if matched:
+                    # Auto-activate this project
+                    try:
+                        use_project(cand, quiet=True)
+                        print(f"[astroai] Auto-discovered project environment for '{base_mod}': {cand}")
+                        # Now resolve using standard PathFinder
+                        spec = importlib.machinery.PathFinder.find_spec(fullname, path, target)
+                        if spec is not None:
+                            return spec
+                    except Exception:
+                        pass
+            return None
+        finally:
+            self._in_find_spec = False
+
+
+def enable_auto_environment() -> None:
+    """Enable automatic project environment discovery on import."""
+    global _HOOK_INSTALLED
+    if not _HOOK_INSTALLED:
+        sys.meta_path.append(AstroAIProjectFinder())
+        _HOOK_INSTALLED = True
+
+    # If already running inside a project directory, activate it immediately
+    proj = find_project_root()
+    if proj and project_env_root(proj) is not None and _ACTIVE_PROJECT != proj:
+        try:
+            use_project(proj, quiet=True)
+        except Exception:
+            pass
 
 
 def install_package(
@@ -339,37 +534,37 @@ def project_env_controls() -> SimpleNamespace:
     """
     mo = _mo()
     projects = list_projects()
-    options = {p.name: str(p) for p in projects}
+    options = {"(auto-detect)": ""}
+    for p in projects:
+        options[p.name] = str(p)
+
     picker = mo.ui.dropdown(
-        options=options or {"(none yet)": ""},
+        options=options,
         label="Project under $WORK",
-        value=next(iter(options), "(none yet)"),
+        value=next(iter(options)),
     )
-    btn = mo.ui.button(label="Activate env", disabled=not options)
+    btn = mo.ui.button(label="Activate env")
     header = mo.md(
         "Pick a project from `astroai clone` / `astroai init`, then activate "
-        "its `.pixi` / `.venv`. That also aims the **Packages** sidebar at "
-        "`pixi add` / `uv add` in the project (image `pip` has no write access). "
+        "its `.pixi` / `.venv`. Note: notebooks opened inside a project directory "
+        "auto-discover their environment automatically! "
         "Shell: **Ctrl-`**."
-        if options
-        else "No projects under `$WORK` yet — open the **terminal** (Ctrl-`) and run "
-        "`astroai clone owner/repo` or `astroai init mylab`, then `pixi install`."
     )
     panel = mo.vstack([header, picker, btn])
 
     def result_md() -> object:
-        if not options:
-            return mo.md("_Clone or init a project first._")
+        # Re-check projects dynamically on interaction
+        current_projects = list_projects()
+        target = picker.value
+        active = os.environ.get("ASTROAI_MARIMO_PROJECT", "")
+
         if not btn.value:
-            active = os.environ.get("ASTROAI_MARIMO_PROJECT", "")
             if active:
                 return mo.md(f"Active: `{active}`")
-            return mo.md("_Select a project and click **Activate env**._")
-        target = picker.value
-        if not target:
-            return mo.md("**Pick a project first.**")
+            return mo.md("_Select a project (or Auto-detect) and click **Activate env**._")
+
         try:
-            msg = use_project(target)
+            msg = use_project(target if target else None)
             return mo.md(f"**{msg}**")
         except Exception as exc:  # noqa: BLE001
             return mo.md(f"**Error:** {exc}")
@@ -511,14 +706,20 @@ class VOSpaceUI:
 
 
 __all__ = [
+    "AstroAIProjectFinder",
     "VOSpaceUI",
+    "auto_project",
+    "enable_auto_environment",
     "file_browser",
     "file_browser_tips",
+    "find_env_site_packages",
+    "find_project_root",
     "install_package",
     "list_projects",
     "package_install_controls",
     "project_env_controls",
     "project_env_python",
+    "project_env_root",
     "project_kind",
     "use_project",
     "vospace_controls",
