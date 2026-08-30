@@ -275,7 +275,7 @@ def use_project(project: str | pathlib.Path | None = None, quiet: bool = False) 
         env_root = project_env_root(project)
     if env_root is None:
         raise FileNotFoundError(
-            f"No .pixi or .venv under {project} — run `pixi install` or `uv sync` first "
+            f"No .pixi or .venv under {project} — run `pixi install` first "
             "(built-in terminal: Ctrl-`)."
         )
 
@@ -495,7 +495,7 @@ def install_package(
     root = _normalize_project(root)
     if project_env_python(root) is None:
         raise FileNotFoundError(
-            f"No env under {root} — run `pixi install` or `uv sync` first."
+            f"No env under {root} — run `pixi install` first."
         )
     kind = project_kind(root)
     if kind == "pixi":

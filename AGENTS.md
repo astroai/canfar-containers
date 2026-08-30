@@ -9,7 +9,7 @@ Operating guidance for coding agents and maintainers working in `astroai/canfar-
 ## Stack and Architecture
 
 - **Bake Graph (`docker-bake.hcl`):**
-  - Untagged `python` stage (Python 3.13 + uv/pixi foundation).
+  - Untagged `python` stage (Python 3.13 + pixi foundation; uv remains the image-layer pip installer).
   - Fat `base` (compilers + session tools) → interactive sessions (`webterm`, `ghostty-web`, `vscode`, `notebook`, `marimo`, `openresearch`) and `improc` stack (`improc`, `improc-webterm`, `improc-notebook`).
   - Slim `ray-base` → `ray-worker`; fat `base` → `ray-manager`.
 - **Ray Stack (`ray/`):**
@@ -35,7 +35,7 @@ This runs:
 
 Ray manager unit tests:
 ```bash
-(cd ray/manager && uv run ruff check . && uv run pytest tests/ -q)
+(cd ray/manager && pixi run lint && pixi run test)
 ```
 
 ### 2. Lockfile Maintenance
@@ -45,7 +45,7 @@ When upstream `astroai-lab` or Ray dependencies are updated:
 ```bash
 make lock-astroai-lab     # regenerate config/astroai-lab.lock
 make lock-ray             # regenerate config/ray-deps.lock
-(cd ray/manager && uv lock)
+(cd ray/manager && pixi lock)
 make lock-check           # confirm lockfile integrity
 ```
 

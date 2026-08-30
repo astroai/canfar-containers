@@ -2,9 +2,8 @@ name: canfar-containers CI
 
 # Docker-free gate for the ray-manager module. Image build/test pipelines
 # remain operator-side via the Makefile (`make build-all`, `make test-local`,
-# `make test-canfar`, …). Lower-bound-only deps in ray/manager/pyproject.toml
-# resolve through the existing uv.lock-equivalent discipline governed by
-# `config/ray-deps.lock` and `config/astroai-lab.lock`.
+# `make test-canfar`, …). Image requirement locks stay pip-compile format
+# (`config/ray-deps.lock`, `config/astroai-lab.lock`); ray/manager uses pixi.
 on:
   push:
     branches: [main]
@@ -17,24 +16,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: prefix-dev/setup-pixi@v0.8.3
+        with:
+          manifest-path: ray/manager/pyproject.toml
+          cache: true
+
+      - name: Ruff
+        working-directory: ray/manager
+        run: pixi run lint
+
+      - name: Pytest (ray-manager unit tests)
+        working-directory: ray/manager
+        run: pixi run test
+
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
           python-version: "3.12"
-          # Pin so lock-check resolution matches committed lockfiles.
           version: "0.11.32"
-
-      - name: Sync manager project (runtime + dev deps)
-        working-directory: ray/manager
-        run: uv sync --group dev --quiet
-
-      - name: Ruff
-        working-directory: ray/manager
-        run: uv run ruff check .
-
-      - name: Pytest (ray-manager unit tests)
-        working-directory: ray/manager
-        run: uv run pytest tests/ -q
 
       # Hard-fail on lockfile drift: this is the safety net for the maintainer's
       # lower-bound-only source constraints (no `==` / `<=` pins anywhere). Do

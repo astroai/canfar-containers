@@ -61,7 +61,7 @@ use-project() {
         export PATH="${proj_dir}/.venv/bin:${PATH}"
         echo "Activated venv: $(basename "${proj_dir}") (${VIRTUAL_ENV})"
     else
-        echo "No .pixi or .venv found under ${proj_dir} — run 'pixi install' or 'uv sync' first." >&2
+        echo "No .pixi or .venv found under ${proj_dir} — run 'pixi install' first." >&2
         return 1
     fi
     export ASTROAI_PROJECT="${proj_dir}"

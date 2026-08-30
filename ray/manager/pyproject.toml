@@ -26,21 +26,15 @@ extend-ignore = ["SIM112"]
 "tests/*.py" = ["E402", "E501", "SIM117", "SIM105", "F841"]
 
 # Private project — installed into a runtime venv at image build time AND
-# into a CI venv for the unit tests below. Never published to a package
+# into a CI env for the unit tests below. Never published to a package
 # index. Lower-bound-only pins: the resolver captures resolved versions
-# in the lockfile; bump deliberately via `make lock-ray` /
-# `make lock-astroai-lab` and rerun the test lane, never by adding upper
-# bounds here.
-#
-# Note: `make lock-ray` regenerates config/ray-deps.lock only — it does NOT
-# touch this directory's uv.lock. After astroai-lab main moves, run `uv lock`
-# here and `make lock-astroai-lab`.
+# in pixi.lock; bump via `pixi lock` here after astroai-lab main moves,
+# plus `make lock-astroai-lab` / `make lock-ray` for image requirement locks.
 [project]
 name = "astroai-ray-manager"
 version = "0.1.0"
 description = "Ray cluster manager for CANFAR (in-tree; not published)."
 requires-python = ">=3.12"
-private = true
 dependencies = [
     "fastapi>=0.110",
     "uvicorn[standard]>=0.27",
@@ -54,9 +48,27 @@ dependencies = [
     "astroai-lab @ git+https://github.com/astroai/canfar-lab.git",
 ]
 
-[dependency-groups]
-dev = [
-    "pytest>=8",
-    "pytest-asyncio>=0.23",
-    "ruff>=0.8",
-]
+[tool.pixi.workspace]
+channels = ["conda-forge"]
+platforms = ["linux-64", "osx-arm64"]
+
+[tool.pixi.dependencies]
+python = "3.12.*"
+ruff = ">=0.8"
+pytest = ">=8"
+pytest-asyncio = ">=0.23"
+
+[tool.pixi.pypi-dependencies]
+fastapi = ">=0.110"
+uvicorn = { version = ">=0.27", extras = ["standard"] }
+pydantic = ">=2.9"
+python-multipart = ">=0.0.9"
+httpx = ">=0.27"
+websockets = ">=12"
+canfar = ">=1.4.1"
+astroai-lab = { git = "https://github.com/astroai/canfar-lab.git" }
+
+[tool.pixi.tasks]
+lint = "ruff check ."
+test = "pytest tests/ -q"
+ci = "pixi run lint && pixi run test"

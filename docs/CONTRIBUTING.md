@@ -78,7 +78,7 @@ After profile or base changes:
 # inside container:
 source /etc/profile.d/astroai.sh
 astroai status
-uv run python -c "print('ok')"
+pixi run python -c "print('ok')"
 ```
 
 ## Refresh the `astroai-lab` lock
@@ -87,10 +87,10 @@ uv run python -c "print('ok')"
 
 ```bash
 cd ../astroai-lab
-uv run pytest -q
+pixi run pytest -q
 cd ../canfar-containers
 make lock-astroai-lab
-(cd ray/manager && uv lock)
+(cd ray/manager && pixi lock)
 make lock-check
 make build-all BUILD_TAG=local
 make test-local BUILD_TAG=local
