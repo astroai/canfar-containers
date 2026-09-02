@@ -31,7 +31,7 @@ from urllib.parse import parse_qs, urlparse
 _LIB = Path(__file__).resolve().parent
 if str(_LIB) not in sys.path:
     sys.path.insert(0, str(_LIB))
-from session_title import session_tab_title  # noqa: E402
+from session_title import stick_html_title  # noqa: E402
 
 PORT = int(os.environ.get("ASTROAI_AGENT_WIZARD_PORT", "4792"))
 CLI_TIMEOUT = int(os.environ.get("ASTROAI_AGENT_WIZARD_CLI_TIMEOUT", "600"))
@@ -246,7 +246,7 @@ def _safe_agent_id(raw: str | None) -> str | None:
 
 
 def _setup_payload(agent: str) -> dict[str, Any]:
-    """`astroai agent setup <id>` — config/skills/default plugins, not the CLI."""
+    """`astroai agent setup <id>` — config, skills dirs, default plugins (not the CLI)."""
     rc, out, err = _run_lab(["--yes", "--json", "agent", "setup", agent])
     data = _parse_json_stdout(out) or {}
     if not isinstance(data, dict):
@@ -748,7 +748,7 @@ INDEX_HTML = """<!DOCTYPE html>
     <div id="msg"></div>
 
     <h2>Agents</h2>
-    <p class="lede-sm">Same columns as <code>astroai agent list</code>. Install puts the CLI on PATH; Setup writes that agent's config, skills, and default plugins.</p>
+    <p class="lede-sm">Same columns as <code>astroai agent list</code>. Install puts the CLI on PATH; Setup writes that agent's config, skills dirs, and default MCP/rules/tools. Skills packs: <code>npx skills add astroai/canfar-skills</code>.</p>
     <div id="agent-table">Loading…</div>
     <p class="foot">
       Need <code>canfar login</code>? Open <strong>webterm</strong> (same home), then come back.<br/>
@@ -1025,8 +1025,7 @@ class WizardHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         path, qs = self._path()
         if path in ("/", "/index.html"):
-            title = session_tab_title("AstroAI")
-            html = INDEX_HTML.replace("<title>AstroAI</title>", f"<title>{title}</title>", 1)
+            html = stick_html_title(INDEX_HTML, "AstroAI")
             self._send(200, html.encode("utf-8"), "text/html; charset=utf-8")
             return
         if path == "/api/platform":

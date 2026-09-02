@@ -35,7 +35,7 @@ def test_addons_and_catalog_use_list_config() -> None:
         if "plugins" in args and args[-1] == "list":
             return (
                 0,
-                '[{"id":"ponytail","kind":"skill","tags":["lean"],'
+                '[{"id":"ponytail-rule","kind":"rule","tags":["lean"],'
                 '"any_installed":false,"summary":"x"}]',
                 "",
             )
@@ -55,7 +55,7 @@ def test_addons_and_catalog_use_list_config() -> None:
         rc2, items, _ = wiz._catalog_items()
         assert rc2 == 0
         kinds = {i["kind"] for i in items}
-        assert "agent" in kinds and "skill" in kinds
+        assert "agent" in kinds and "rule" in kinds
     _assert_lean(calls)
 
 
@@ -67,8 +67,8 @@ def test_install_by_tag_loops_plugins_install() -> None:
         if "plugins" in args and args[-1] == "list":
             return (
                 0,
-                '[{"id":"ponytail","kind":"skill","tags":["lean"],"any_installed":false},'
-                '{"id":"other","kind":"skill","tags":["science"],"any_installed":false}]',
+                '[{"id":"ponytail-rule","kind":"rule","tags":["lean"],"any_installed":false},'
+                '{"id":"other","kind":"mcp","tags":["science"],"any_installed":false}]',
                 "",
             )
         if "plugins" in args and "install" in args:
@@ -85,7 +85,7 @@ def test_install_by_tag_loops_plugins_install() -> None:
         rc, data = wiz._install_plugins_by_tag("lean")
     assert rc == 0
     assert data["ok"]
-    assert any(c[-2:] == ["install", "ponytail"] for c in calls)
+    assert any(c[-2:] == ["install", "ponytail-rule"] for c in calls)
     assert not any("other" == c[-1] for c in calls if "install" in c)
     _assert_lean(calls)
 
@@ -213,6 +213,8 @@ def test_index_html_agent_table() -> None:
     assert "api/catalog" not in html
     assert "/astroai-' + 'agents" in html
     assert "id=\"back-link\"" in html
+    assert "npx skills add astroai/canfar-skills" in html
+    assert "skills, and default plugins" not in html
 
 
 def test_agent_report_returns_full_list() -> None:

@@ -122,10 +122,10 @@ assert isinstance(d.get("agents"), list) and d["agents"], d
 ' || fail "--json agent list"
 astroai --json agent verify >/dev/null 2>&1 || true
 
-# 4. plugin install/remove round-trip (scoped to the installed agent).
-if astroai agent plugins list 2>/dev/null | grep -q astroai-ray; then
-    astroai agent plugins install astroai-ray --agent kilo >/dev/null 2>&1 || true
-    astroai agent plugins remove astroai-ray --agent kilo >/dev/null 2>&1 || true
+# 4. plugin install/remove round-trip (MCP plugin scoped to an mcp-host).
+if astroai agent plugins list 2>/dev/null | grep -q ray-manager-mcp; then
+    astroai agent plugins install ray-manager-mcp --agent cursor >/dev/null 2>&1 || true
+    astroai agent plugins remove ray-manager-mcp --agent cursor >/dev/null 2>&1 || true
 fi
 
 # 5. remove leaves no trace and never creates ~/.local.
@@ -135,8 +135,7 @@ astroai agent remove kilo >/dev/null || fail "agent remove kilo"
 
 # 7. Phase 2 verbs (registry-driven): setup / config / update for hermes.
 #    setup + config are fully offline; update takes the up-to-date path via
-#    a fake binary so the plugin re-apply (bundled skill copy + MCP merge)
-#    is exercised with zero network.
+#    a fake binary so MCP/plugin re-apply is exercised with zero network.
 mkdir -p "${BIN_DIR}"
 astroai agent setup hermes >/dev/null || fail "agent setup hermes"
 [[ -f "${HOME_DIR}/.hermes/config.yaml" ]] || fail "setup hermes: config.yaml not scaffolded"
@@ -160,7 +159,7 @@ astroai agent config hermes --unset model >/dev/null \
     || fail "agent config hermes --unset model"
 
 # Fake hermes binary → `agent update hermes` skips the network install and
-# force re-applies the hermes plugins (astroai-ray skill + ray-manager-mcp).
+# force re-applies hermes plugins (MCP / rules / tools in the matrix).
 printf '#!/bin/sh\necho hermes fake 0.0.0\n' > "${BIN_DIR}/hermes"
 chmod +x "${BIN_DIR}/hermes"
 # Precondition: update must see the fake binary via the SESSION bin dir (the
@@ -173,8 +172,6 @@ hermes = next(r for r in d["agents"] if r["id"] == "hermes")
 assert hermes["binary_ok"], "fake hermes not detected in session bin dir"
 ' || fail "update hermes: fake binary not on session bin dir"
 astroai agent update hermes >/dev/null || fail "agent update hermes"
-[[ -f "${HOME_DIR}/.hermes/skills/astroai-ray/SKILL.md" ]] \
-    || fail "update hermes: astroai-ray skill not re-applied"
 [[ -f "${HOME_DIR}/.hermes/config.yaml" ]] \
     || fail "update hermes: config.yaml missing after update"
 

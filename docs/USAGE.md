@@ -28,7 +28,7 @@ This file ships inside images as `/opt/astroai/USAGE.md`.
    - append `/astroai-agents/` (e.g. `…/session/contrib/<id>/astroai-agents/`).
 3. In the hub (one screen):
    - **Start batch compute** — autoscaling ray-manager, wires OpenResearch (when on openresearch)
-   - Agent table — same columns as `astroai agent list` (Agent, Bin, Cfg, Where, Ver). **Install** puts the CLI on PATH; **Setup** writes that agent's config, skills, and default plugins on `/arc/home`
+   - Agent table — same columns as `astroai agent list` (Agent, Bin, Cfg, Where, Ver). **Install** puts the CLI on PATH; **Setup** writes that agent's config, skills dirs, and default MCP/rules/tools on `/arc/home`. Skill packs: `npx skills add astroai/canfar-skills`
    - Status shows CANFAR auth, manager Running/Pending, wire state, Jobs URL
    - **← Back** returns to the main UI
 4. Run experiments in OpenResearch — default compute is already CANFAR batch. Put shared I/O on `/arc` (`/scratch` is per-pod only).

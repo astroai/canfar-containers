@@ -89,8 +89,27 @@ Session UIs listen at `/` on port **5000**.
 | `webterm` | Listen `/` — no ttyd `--base-path` |
 | `ghostty-web` | Listen `/` — relative `./client.mjs`, `./dist/*`, WebSocket under session path |
 | `vscode` | `--server-base-path /session/contrib/<id>` for URL generation |
-| `marimo` | Listen `/` — **no** `--base-url` (stripped ingress; a base-url would 404) |
-| `notebook` | Ingress keeps path; Jupyter `base_url=session/notebook/<id>` |
+| `marimo` | Listen `/` — **no** `--base-url`; HTML proxy on :5000 sticks session name in tab |
+| `notebook` | Ingress keeps path; Jupyter `base_url=session/notebook/<id>`; `appName` = session name |
+| `openresearch` | Path-rewrite proxy on :5000 + HTML title stick |
+| `ray-manager` | Server-rendered HTML `<title>` = session name |
+
+**Browser tab title:** Skaha sets the pod `hostname` to the session name (lowercase).
+AstroAI images read it via `socket.gethostname()` (`scripts/lib/session_title.py`).
+
+| Mechanism | Images |
+|-----------|--------|
+| ttyd `titleFixed` | `webterm`, `improc-webterm` |
+| `ASTROAI_TAB_TITLE` + stick script | `ghostty-web` |
+| VS Code `window.title` | `vscode` |
+| JupyterLab `page_config.json` `appName` | `notebook`, `improc-notebook` |
+| `astroai-html-proxy.py` | `marimo` |
+| `orx-canfar-proxy.py` / agent wizard | `openresearch` |
+| FastAPI HTML template | `ray-manager` |
+
+Platform stock sessions (**CARTA**, **Firefly**, **desktop**) use third-party
+images; tab titles are app-defined unless those images honor pod hostname.
+Contributed AstroAI images above cover the interactive catalog operators register.
 
 ### Notebook override (platform request)
 
@@ -214,6 +233,8 @@ While headless is unhealthy:
 ## Agents and quota (operator view)
 
 - Agents install on demand via `astroai agent install` into scratch/`ASTROAI_LAB_BIN_DIR` — prefer that over baking agent binaries into images.
+- **Plugins vs skills:** images bake `astroai-lab` from `config/astroai-lab.lock`. That package's plugins are **MCP / tools / rules only**. Skill packs (`SKILL.md`) install via `npx skills add astroai/canfar-skills` (skills.sh), not `astroai agent plugins`.
+- **Release order:** merge/push `astroai-lab` first → `make lock-astroai-lab` here → rebuild/push images. Skipping the lock leaves Harbor on an older lab that still managed skills as plugins.
 - Quota warnings fire at session start and via `astroai status` (≈80 / 90 / 95%).
 - User data lifecycle (`astroai save`, `canfar data`) is documented for users in [USAGE.md](USAGE.md).
 

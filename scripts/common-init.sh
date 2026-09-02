@@ -79,7 +79,8 @@ if [[ ! -f "${_state}/welcomed" ]]; then
 
   Storage: $SRCDIR (code)  $SCRATCH (data/caches)  /arc (shared across sessions)
   Persist: astroai save / git push  (session disks die with the session; $SRCDIR survives container OOM)
-  Agents:  astroai agent setup              # configs + CANFAR skills (first time)
+  Agents:  astroai agent setup              # configs + MCP/rules (first time)
+           npx skills add astroai/canfar-skills   # skill packs (skills.sh)
            astroai agent install codex      # public release — no GitHub login
 WELCOME
         if [[ "${ASTROAI_SESSION_KIND:-}" == "webterm" || "${ASTROAI_SESSION_KIND:-}" == "ghostty-web" ]]; then
@@ -100,7 +101,8 @@ if command -v astroai >/dev/null 2>&1; then
     # Scratch-safe default kernel — notebook sessions only (slow pip install).
     astroai kernel ensure --name astroai >/dev/null 2>&1 || true
   fi
-  # Agent configs (MCP, rules, skills). UI sessions default to background setup;
+  # Agent configs (MCP, rules, tools). Skills via npx skills — not AstroAI.
+  # UI sessions default to background setup;
   # webterm stays opt-in so terminal users are not surprised.
   #   ASTROAI_LAB_AGENT_SETUP=0     skip (explicit)
   #   ASTROAI_LAB_AGENT_SETUP=1     run in foreground before UI
