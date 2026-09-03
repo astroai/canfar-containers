@@ -226,9 +226,17 @@ While headless is unhealthy:
 
 ## Diagnostics users can share
 
-| Command | Use |
-|---------|-----|
+| Command / path | Use |
+|----------------|-----|
+| `canfar logs <session-id>` | Container stdout/stderr — look for `[astroai-boot]` breadcrumbs |
+| `~/.astroai/lab/boot.log` | Same trail on `/arc/home` (still readable after the pod is gone) |
+| `~/.astroai/lab/agent-setup.log` | Background `astroai agent setup` detail |
 | `astroai status --json` | Quotas, projects, `canfar ps` |
+
+Failed / crashed sessions: `canfar logs` keeps Skaha’s copy of stderr until the
+session record ages out. Prefer grepping `[astroai-boot]` for `common-init:ERR`,
+`session:exit rc=`, and `agent setup failed`. If the session was deleted,
+`boot.log` on home is the durable copy.
 
 ## Agents and quota (operator view)
 

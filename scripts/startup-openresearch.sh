@@ -60,6 +60,8 @@ orx --no-telemetry up --port "${ORX_PORT}" --no-browser &
 ORX_PID=$!
 
 cleanup() {
+    local rc=$?
+    astroai_boot_log "session:exit rc=${rc}"
     kill "${PROXY_PID:-}" "${WIZARD_PID:-}" "${ORX_PID}" 2>/dev/null || true
     wait "${PROXY_PID:-}" "${WIZARD_PID:-}" "${ORX_PID}" 2>/dev/null || true
 }
@@ -73,13 +75,13 @@ for _ in $(seq 1 90); do
         break
     fi
     if ! kill -0 "${ORX_PID}" 2>/dev/null; then
-        echo "orx up exited early" >&2
+        astroai_boot_log "orx up exited early (before ready)"
         exit 1
     fi
     sleep 0.5
 done
 if [[ "${_orx_ready}" != "1" ]]; then
-    echo "orx did not become ready on :${ORX_PORT}" >&2
+    astroai_boot_log "orx not ready on :${ORX_PORT} within 90s"
     exit 1
 fi
 
