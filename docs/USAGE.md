@@ -186,6 +186,7 @@ astroai status --json
 | Lost files after session end | Persist to `/arc` next time (`astroai save` / `git push` / `canfar data`) |
 | Home quota full | `astroai status` (quota %) — prune caches under `/scratch` manually |
 | Session stuck **Pending** | `canfar ps` / events; contributed quota ≈3; headless Pending is often a Skaha flake ([OPERATORS](OPERATORS.md#platform-notes-headless-pending)) |
+| Session **Failed** / UI never opens | `canfar logs <id>` — grep `[astroai-boot]`; also `~/.astroai/lab/boot.log` on home |
 
 ---
 

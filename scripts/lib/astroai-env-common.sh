@@ -12,6 +12,20 @@ elif [[ -f "${BASH_SOURCE[0]%/*}/astroai-ui.sh" ]]; then
     source "${BASH_SOURCE[0]%/*}/astroai-ui.sh"
 fi
 
+# Stderr → `canfar logs`; also ~/.astroai/lab/boot.log on shared home (survives
+# pod death). Keep lines short — Skaha truncates very large session logs.
+astroai_boot_log() {
+    local ts sid kind line dir
+    ts="$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || printf '?')"
+    sid="${skaha_sessionid:-${SKAHA_SESSIONID:-?}}"
+    kind="${ASTROAI_SESSION_KIND:-?}"
+    line="${ts} sid=${sid} pid=$$ kind=${kind} $*"
+    echo "[astroai-boot] ${line}" >&2 || true
+    dir="${ASTROAI_LAB_CONFIG_DIR:-${HOME}/.astroai/lab}"
+    mkdir -p "${dir}" 2>/dev/null || return 0
+    echo "${line}" >> "${dir}/boot.log" 2>/dev/null || true
+}
+
 # Browser tab: Skaha sets the pod hostname to the session name (lowercase).
 # Docker-id / localhost hostnames keep the per-app fallback.
 astroai_session_title() {

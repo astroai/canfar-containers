@@ -70,6 +70,8 @@ export ASTROAI_BACKEND_PORT="${MARIMO_INTERNAL_PORT}"
 export ASTROAI_TAB_FALLBACK="AstroAI Marimo"
 
 cleanup() {
+    local rc=$?
+    astroai_boot_log "session:exit rc=${rc}"
     kill "${PROXY_PID:-}" "${MARIMO_PID:-}" 2>/dev/null || true
     wait "${PROXY_PID:-}" "${MARIMO_PID:-}" 2>/dev/null || true
 }
@@ -98,19 +100,20 @@ for _ in $(seq 1 90); do
         break
     fi
     if ! kill -0 "${MARIMO_PID}" 2>/dev/null; then
-        echo "marimo exited early" >&2
+        astroai_boot_log "marimo exited early (before ready)"
         exit 1
     fi
     sleep 0.5
 done
 if [[ "${_marimo_ready}" != "1" ]]; then
-    echo "marimo did not become ready on :${MARIMO_INTERNAL_PORT}" >&2
+    astroai_boot_log "marimo not ready on :${MARIMO_INTERNAL_PORT} within 90s"
     exit 1
 fi
 if ! kill -0 "${PROXY_PID}" 2>/dev/null; then
-    echo "html-proxy exited early" >&2
+    astroai_boot_log "html-proxy exited early"
     exit 1
 fi
 
+astroai_boot_log "marimo ready, waiting"
 wait -n "${MARIMO_PID}" "${PROXY_PID}"
 exit $?

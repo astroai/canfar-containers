@@ -6,8 +6,12 @@ if [[ -f /opt/astroai/lib/astroai-env-common.sh ]]; then
     source /opt/astroai/lib/astroai-env-common.sh
 fi
 if ! declare -F astroai_boot_log >/dev/null 2>&1; then
+    # Last resort when env-common is missing from the image.
     astroai_boot_log() { echo "[astroai-boot] $*" >&2 || true; }
 fi
+
+# With bash -e, surface the failing command in canfar logs / boot.log.
+trap 'astroai_boot_log "common-init:ERR line=${LINENO} rc=$? cmd=${BASH_COMMAND}"' ERR
 
 astroai_boot_log "common-init:start"
 
@@ -124,29 +128,37 @@ if command -v astroai >/dev/null 2>&1; then
   _run_agent_setup() {
     mkdir -p "${_agent_state}"
     touch "${_agent_state}/agent-setup-pending"
+    local _rc=0
     {
       echo "---- $(date -u +%Y-%m-%dT%H:%M:%SZ) agent setup start kind=${ASTROAI_SESSION_KIND:-} ----"
       astroai --yes agent setup
       _rc=$?
       echo "---- $(date -u +%Y-%m-%dT%H:%M:%SZ) agent setup end exit=${_rc} ----"
-      rm -f "${_agent_state}/agent-setup-pending"
-      return "${_rc}"
-    } >>"${_agent_log}" 2>&1 || true
+    } >>"${_agent_log}" 2>&1 || _rc=$?
     rm -f "${_agent_state}/agent-setup-pending"
+    # One line in canfar logs even though detail stays in agent-setup.log.
+    if [[ "${_rc}" -ne 0 ]]; then
+      astroai_boot_log "agent setup failed rc=${_rc} — see ${_agent_log}"
+      return "${_rc}"
+    fi
+    return 0
   }
   case "${_agent_setup}" in
     1|true|yes)
       if [[ "${_agent_needs_run}" == "1" ]]; then
+        astroai_boot_log "common-init:agent setup fg → ${_agent_log}"
         _run_agent_setup || true
       fi
       ;;
     bg|background)
       if [[ "${_agent_needs_run}" == "1" ]]; then
         (_run_agent_setup || true) &
+        astroai_boot_log "common-init:agent setup bg pid=$! → ${_agent_log}"
       fi
       ;;
   esac
 fi
 
 unset ASTROAI_LAB_PROFILE_LOADED
+trap - ERR
 astroai_boot_log "common-init:done"

@@ -3,6 +3,19 @@
 
 set -o pipefail
 
+export ASTROAI_SESSION_KIND="${ASTROAI_SESSION_KIND:-ray-manager}"
+
+if [[ -f /opt/astroai/lib/astroai-env-common.sh ]]; then
+    # shellcheck disable=SC1091
+    source /opt/astroai/lib/astroai-env-common.sh
+fi
+if ! declare -F astroai_boot_log >/dev/null 2>&1; then
+    astroai_boot_log() { echo "[astroai-boot] $*" >&2 || true; }
+fi
+trap 'astroai_boot_log "ray-manager:ERR line=${LINENO} rc=$? cmd=${BASH_COMMAND}"' ERR
+
+astroai_boot_log "ray-manager:start"
+
 if [[ -f /etc/profile.d/astroai.sh ]]; then
     # shellcheck disable=SC1091
     source /etc/profile.d/astroai.sh
@@ -81,5 +94,8 @@ touch "${RAY_MANAGER_HEARTBEAT_PATH}"
 
 (while true; do touch "${RAY_MANAGER_HEARTBEAT_PATH}"; sleep 5; done) &
 
+astroai_boot_log "ray-manager:cluster=${RAY_CLUSTER_ID} jobs=${ASTROAI_RAY_JOBS_ADDRESS}"
 echo "CANFAR Ray Manager starting (cluster ${RAY_CLUSTER_ID})"
+trap - ERR
+astroai_boot_log "exec uvicorn :5000"
 exec python -m uvicorn app:app --host 0.0.0.0 --port 5000 --app-dir /opt/astroai/ray-manager
