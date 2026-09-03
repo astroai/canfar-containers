@@ -64,10 +64,10 @@ Build and publish:
 
 ```bash
 # BUILD_TAG must match TAG so ray-manager bakes RAY_IMAGE_TAG for workers
-make build-all BUILD_TAG=26.08
-make push-all TAG=26.08 BUILD_TAG=26.08
-make build-ray BUILD_TAG=26.08 TAG=26.08
-make push-ray TAG=26.08 BUILD_TAG=26.08
+make build-all BUILD_TAG=26.09
+make push-all TAG=26.09 BUILD_TAG=26.09
+make build-ray BUILD_TAG=26.09 TAG=26.09
+make push-ray TAG=26.09 BUILD_TAG=26.09
 ```
 
 Each `push/<image>` publishes `TAG` and **`latest`**. `make push-all` includes
@@ -150,12 +150,12 @@ flowchart TD
 **Interactive HTTP smoke** (works when headless scheduling is unhealthy):
 
 ```bash
-make test-canfar-session IMAGE=webterm TAG=26.08
-make test-canfar-session IMAGE=ghostty-web TAG=26.08
-make test-canfar-session IMAGE=vscode TAG=26.08
-make test-canfar-session IMAGE=marimo TAG=26.08
-make test-canfar-session IMAGE=notebook TAG=26.08
-make test-canfar-session IMAGE=openresearch TAG=26.08
+make test-canfar-session IMAGE=webterm TAG=26.09
+make test-canfar-session IMAGE=ghostty-web TAG=26.09
+make test-canfar-session IMAGE=vscode TAG=26.09
+make test-canfar-session IMAGE=marimo TAG=26.09
+make test-canfar-session IMAGE=notebook TAG=26.09
+make test-canfar-session IMAGE=openresearch TAG=26.09
 ```
 
 
@@ -168,7 +168,7 @@ make test-canfar-session IMAGE=openresearch TAG=26.08
 **Headless in-image verify** (`canfar-verify.sh`):
 
 ```bash
-CANFAR_TEST_QUICK=1 make test-canfar IMAGE=base TAG=26.08
+CANFAR_TEST_QUICK=1 make test-canfar IMAGE=base TAG=26.09
 ```
 
 `test-canfar.sh` waits for completion and expects `All checks passed.` in logs.
@@ -176,7 +176,7 @@ CANFAR_TEST_QUICK=1 make test-canfar IMAGE=base TAG=26.08
 **Agent verb-surface probe (run after EVERY image push):**
 
 ```bash
-make test-canfar-agents TAG=26.08
+make test-canfar-agents TAG=26.09
 ```
 
 Runs `canfar-verify.sh --agents` in a headless `base` session, which invokes
@@ -200,8 +200,8 @@ headless kinds. (See [Platform notes](#platform-notes-headless-pending).)
 **Ray:**
 
 ```bash
-make test-canfar-ray TAG=26.08
-make test-canfar-ray-gpu TAG=26.08
+make test-canfar-ray TAG=26.09
+make test-canfar-ray-gpu TAG=26.09
 ```
 
 Create ray-manager with **≥8 GiB** when exercising Ray Jobs / Dashboard (smaller

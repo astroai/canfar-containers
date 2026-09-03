@@ -110,8 +110,8 @@ Project deps use pixi/uv under `WORK`; caches prefer scratch via
 
 ```bash
 make test-ray BUILD_TAG=local
-make test-canfar-ray TAG=26.08
-make test-canfar-ray-gpu TAG=26.08
+make test-canfar-ray TAG=26.09
+make test-canfar-ray-gpu TAG=26.09
 ```
 
 | Script | Checks |

@@ -84,7 +84,7 @@ push-ray: $(addprefix push/,$(RAY_IMAGES))
 push-improc: push/improc push/improc-webterm push/improc-notebook ## push improc stack
 
 # Production Ray push: bake TAG into manager env (RAY_IMAGE_TAG) — use BUILD_TAG=$(TAG).
-#   make build-ray BUILD_TAG=26.08 TAG=26.08 && make push-ray TAG=26.08 BUILD_TAG=26.08
+#   make build-ray BUILD_TAG=26.09 TAG=26.09 && make push-ray TAG=26.09 BUILD_TAG=26.09
 
 push/python:
 	@echo "ERROR: python image is build-only (internal bake parent); never push to Harbor." >&2
@@ -95,7 +95,7 @@ push/ray-base:
 	@exit 1
 
 # push/% sources from $(BUILD_TAG) — the same tag the image was BUILT with. A
-# release build (e.g. BUILD_TAG=26.08) MUST be pushed with the same BUILD_TAG,
+# release build (e.g. BUILD_TAG=26.09) MUST be pushed with the same BUILD_TAG,
 # otherwise the stale default :local image is silently re-tagged and pushed over
 # the release tag. The guard fails loudly when the source image is missing, and
 # refuses to push when the source is OLDER than the local :$(TAG) image (a

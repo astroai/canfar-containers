@@ -22,7 +22,7 @@ This file ships inside images as `/opt/astroai/USAGE.md`.
 
 ### Home base: AstroAI hub (openresearch)
 
-1. Launch **`openresearch`** with tag `26.08` / `latest`.
+1. Launch **`openresearch`** with tag `26.09` / `latest`.
 2. Open the connect URL, then either:
    - click the blue **AstroAI** chip (top-right), or
    - append `/astroai-agents/` (e.g. `…/session/contrib/<id>/astroai-agents/`).
@@ -36,7 +36,7 @@ This file ships inside images as `/opt/astroai/USAGE.md`.
 
 ```bash
 canfar login   # once, from webterm — persists under /arc/home
-canfar create --name orx contributed images.canfar.net/astroai/openresearch:26.08
+canfar create --name orx contributed images.canfar.net/astroai/openresearch:26.09
 canfar open <session-id>
 # Hub: …/astroai-agents/ → Start batch compute
 ```
@@ -76,7 +76,7 @@ Manual path: `astroai cluster start`, or launch
 ```bash
 # AstroAI hub → Start batch compute
 # or:
-canfar create --name astroai-compute --cpu 2 --memory 8 contributed images.canfar.net/astroai/ray-manager:26.08
+canfar create --name astroai-compute --cpu 2 --memory 8 contributed images.canfar.net/astroai/ray-manager:26.09
 # or: astroai cluster start
 astroai run train.py --cpus 2 --memory 8GiB
 ```

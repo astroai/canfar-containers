@@ -10,8 +10,8 @@ ARG BASE_NAME=base
 ARG TAG=local
 # Pinned upstream release. Bump ORX_SHA256 together with ORX_VERSION
 # (sha256 of openresearch-cli-x86_64-unknown-linux-musl.tar.xz).
-ARG ORX_VERSION=v0.1.111
-ARG ORX_SHA256=a1ecc2490d05b4a18e619ca84e9ca9317614516f397d6e29983ed00f8e7e1b00
+ARG ORX_VERSION=v0.1.119
+ARG ORX_SHA256=19d96344435d444ac170f550c6a4e07aeed85c63459635027f368b51e7d6c2fd
 
 FROM ${REGISTRY}/${OWNER}/${BASE_NAME}:${TAG}
 
