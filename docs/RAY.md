@@ -132,7 +132,7 @@ the hood). Preferred path:
 # Then in OpenResearch: run experiments (no --backend needed)
 ```
 
-Manual:
+Manual (override discovery):
 
 ```bash
 export ASTROAI_RAY_JOBS_ADDRESS=http://127.0.0.1:8265   # on the manager
@@ -153,8 +153,7 @@ Usual path: autoscaling. One click or one command, then a job with `--cpus`.
 # AstroAI hub → Start batch compute
 # or:
 astroai cluster start
-export ASTROAI_RAY_JOBS_ADDRESS=…    # printed by start
-astroai run train.py --cpus 2
+astroai run train.py --cpus 2   # discovers the Running manager automatically
 ```
 
 `cluster start` writes `~/.config/canfar/lab/ray-manager.env` and creates the
