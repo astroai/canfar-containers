@@ -75,6 +75,12 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
+# Bind :5000 immediately so Skaha/healthcheck do not race the marimo wait loop.
+# Kernel traffic (WebSocket /ws) is spliced by the proxy.
+astroai_boot_log "html-proxy :5000 → 127.0.0.1:${MARIMO_INTERNAL_PORT}"
+python3 /opt/astroai/lib/astroai-html-proxy.py &
+PROXY_PID=$!
+
 astroai_boot_log "exec marimo (internal :${MARIMO_INTERNAL_PORT}, public :5000)"
 marimo --log-level warn edit \
     --no-token \
@@ -101,9 +107,10 @@ if [[ "${_marimo_ready}" != "1" ]]; then
     echo "marimo did not become ready on :${MARIMO_INTERNAL_PORT}" >&2
     exit 1
 fi
-
-python3 /opt/astroai/lib/astroai-html-proxy.py &
-PROXY_PID=$!
+if ! kill -0 "${PROXY_PID}" 2>/dev/null; then
+    echo "html-proxy exited early" >&2
+    exit 1
+fi
 
 wait -n "${MARIMO_PID}" "${PROXY_PID}"
 exit $?

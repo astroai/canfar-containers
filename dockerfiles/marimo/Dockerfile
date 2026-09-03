@@ -27,7 +27,7 @@ ENV PYTHONPATH="/opt/astroai/lib${PYTHONPATH:+:${PYTHONPATH}}"
 
 EXPOSE 5000
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=3 \
     CMD curl -fsS http://127.0.0.1:5000/ >/dev/null
 
 WORKDIR /tmp

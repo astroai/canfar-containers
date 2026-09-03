@@ -226,6 +226,7 @@ test-host: ## docker-free checks (selfchecks + agent-wizard unit tests)
 	./scripts/osc52_copy_selfcheck.sh
 	python3 scripts/lib/test_agent_wizard_verbs.py
 	python3 scripts/lib/test_orx_canfar_proxy.py
+	python3 scripts/lib/test_astroai_html_proxy.py
 	python3 scripts/lib/test_session_title.py
 	python3 scripts/lib/test_canfar_marimo_env.py
 	@! grep -F '[AstroAI]' config/starship.toml
