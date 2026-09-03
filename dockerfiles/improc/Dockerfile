@@ -178,14 +178,21 @@ COPY --from=fits2idia-build /usr/local/ /usr/local/
 COPY --from=stuff-build /usr/local/ /usr/local/
 RUN ldconfig
 
-# GALFIT binary (+ legacy ncurses5 for the Carnegie build)
-RUN apt-get update && apt-get install -y --no-install-recommends wget ca-certificates \
+# GALFIT binary (+ legacy ncurses5 for the Carnegie build).
+# Vendored under dockerfiles/improc/vendor/ — Carnegie HTTPS is too flaky/slow
+# for CI and local builds (wget hung 50+ min; curl timed out mid-transfer).
+# Upstream: https://users.obs.carnegiescience.edu/peng/work/galfit/galfit3-debian64.tar.gz
+COPY dockerfiles/improc/vendor/galfit3-debian64.tar.gz /tmp/
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates \
     && cd /tmp \
-    && wget -q http://deb.debian.org/debian/pool/main/n/ncurses/libtinfo5_6.4-4_amd64.deb \
-    && wget -q http://deb.debian.org/debian/pool/main/n/ncurses/libncurses5_6.4-4_amd64.deb \
+    && curl -fsSL --connect-timeout 30 --max-time 120 \
+         -o libtinfo5_6.4-4_amd64.deb \
+         http://deb.debian.org/debian/pool/main/n/ncurses/libtinfo5_6.4-4_amd64.deb \
+    && curl -fsSL --connect-timeout 30 --max-time 120 \
+         -o libncurses5_6.4-4_amd64.deb \
+         http://deb.debian.org/debian/pool/main/n/ncurses/libncurses5_6.4-4_amd64.deb \
     && apt-get install -y --no-install-recommends \
          ./libtinfo5_6.4-4_amd64.deb ./libncurses5_6.4-4_amd64.deb \
-    && wget -q https://users.obs.carnegiescience.edu/peng/work/galfit/galfit3-debian64.tar.gz \
     && tar xzf galfit3-debian64.tar.gz \
     && install -m 755 galfit /usr/local/bin/galfit \
     && rm -rf /tmp/galfit* /tmp/libtinfo5*.deb /tmp/libncurses5*.deb \

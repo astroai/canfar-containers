@@ -17,6 +17,10 @@ const HOST = process.env.HOST || "0.0.0.0";
 const TITLE = process.env.ASTROAI_TAB_TITLE || "AstroAI ghostty-web";
 const CWD = process.env.PWD || process.cwd();
 
+function stickTitleScript(title) {
+  return `<script data-astroai-tab="1">(function(){var t=${JSON.stringify(title)};function s(){if(document.title!==t)document.title=t}s();addEventListener('load',s);var el=document.querySelector('title');if(el)new MutationObserver(s).observe(el,{childList:true,characterData:true,subtree:true});})();</script>`;
+}
+
 const ghosttyMain = require.resolve("ghostty-web");
 const pkgRoot = ghosttyMain.replace(/[/\\]dist[/\\].*$/, "");
 const distPath = path.join(pkgRoot, "dist");
@@ -38,6 +42,7 @@ const HTML = `<!doctype html>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>${TITLE.replace(/[<>]/g, "")}</title>
+${stickTitleScript(TITLE)}
 <script>if(!location.pathname.endsWith("/"))location.replace(location.pathname+"/"+location.search+location.hash);</script>
 <style>
 html,body{margin:0;height:100%;background:#1e1e2e;overflow:hidden}

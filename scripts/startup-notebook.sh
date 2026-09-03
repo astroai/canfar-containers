@@ -39,6 +39,17 @@ if [[ -n "${SESSION_ID}" ]]; then
     export JUPYTER_TOKEN="${SESSION_ID}"
 fi
 
+# Browser tab: Skaha pod hostname is the session name (see astroai_session_title).
+if command -v python3 >/dev/null; then
+    python3 -c "
+import sys
+from pathlib import Path
+sys.path.insert(0, '/opt/astroai/lib')
+from session_title import write_jupyter_lab_page_config
+write_jupyter_lab_page_config(Path('${JUPYTER_DATA_DIR}'), 'AstroAI Notebook')
+" 2>/dev/null || true
+fi
+
 BASE_URL_ARGS=()
 if [[ -n "${SESSION_ID}" ]]; then
     # Match platform start-jupyterlab.sh (no leading slash)

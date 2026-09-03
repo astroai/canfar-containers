@@ -63,11 +63,47 @@ fi
 # (same as webterm). Do not pass --base-url here — marimo would only serve under
 # that prefix and the proxied request for / would 404.
 
-astroai_boot_log "exec marimo"
-exec marimo --log-level warn edit \
+MARIMO_INTERNAL_PORT="${ASTROAI_MARIMO_INTERNAL_PORT:-2718}"
+export ASTROAI_PUBLIC_PORT=5000
+export ASTROAI_BACKEND_HOST=127.0.0.1
+export ASTROAI_BACKEND_PORT="${MARIMO_INTERNAL_PORT}"
+export ASTROAI_TAB_FALLBACK="AstroAI Marimo"
+
+cleanup() {
+    kill "${PROXY_PID:-}" "${MARIMO_PID:-}" 2>/dev/null || true
+    wait "${PROXY_PID:-}" "${MARIMO_PID:-}" 2>/dev/null || true
+}
+trap cleanup EXIT INT TERM
+
+astroai_boot_log "exec marimo (internal :${MARIMO_INTERNAL_PORT}, public :5000)"
+marimo --log-level warn edit \
     --no-token \
-    --port 5000 \
-    --host 0.0.0.0 \
+    --port "${MARIMO_INTERNAL_PORT}" \
+    --host 127.0.0.1 \
     --skip-update-check \
     --headless \
-    "${MARIMO_TARGET}"
+    "${MARIMO_TARGET}" &
+MARIMO_PID=$!
+
+_marimo_ready=0
+for _ in $(seq 1 90); do
+    if curl -fsS "http://127.0.0.1:${MARIMO_INTERNAL_PORT}/" >/dev/null 2>&1; then
+        _marimo_ready=1
+        break
+    fi
+    if ! kill -0 "${MARIMO_PID}" 2>/dev/null; then
+        echo "marimo exited early" >&2
+        exit 1
+    fi
+    sleep 0.5
+done
+if [[ "${_marimo_ready}" != "1" ]]; then
+    echo "marimo did not become ready on :${MARIMO_INTERNAL_PORT}" >&2
+    exit 1
+fi
+
+python3 /opt/astroai/lib/astroai-html-proxy.py &
+PROXY_PID=$!
+
+wait -n "${MARIMO_PID}" "${PROXY_PID}"
+exit $?

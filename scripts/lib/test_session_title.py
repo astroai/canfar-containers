@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import json
 from unittest.mock import patch
 
-from session_title import session_tab_title, stick_html_title
+from session_title import session_tab_title, stick_html_title, write_jupyter_lab_page_config
 
 
 def test_session_name_from_hostname() -> None:
@@ -30,9 +31,24 @@ def test_stick_html_title_replaces_and_is_idempotent() -> None:
         assert twice == once
 
 
+def test_write_jupyter_lab_page_config(tmp_path) -> None:
+    with patch("session_title.socket.gethostname", return_value="my-notebook"):
+        title = write_jupyter_lab_page_config(tmp_path, "AstroAI Notebook")
+        assert title == "my-notebook"
+        cfg = tmp_path / "lab" / "settings" / "page_config.json"
+        assert cfg.is_file()
+        data = json.loads(cfg.read_text(encoding="utf-8"))
+        assert data["appName"] == "my-notebook"
+
+
 if __name__ == "__main__":
+    from pathlib import Path
+    import tempfile
+
     test_session_name_from_hostname()
     test_fallback_for_docker_id()
     test_fallback_localhost()
     test_stick_html_title_replaces_and_is_idempotent()
+    with tempfile.TemporaryDirectory() as tmp:
+        test_write_jupyter_lab_page_config(Path(tmp))
     print("ok")
