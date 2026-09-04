@@ -206,7 +206,7 @@ if [[ -d "${SCRATCH}" && -w "${SCRATCH}" ]]; then
         [[ "${!var}" == "${root}" || "${!var}" == "${root}/"* ]] && echo "PASS:${var} under session cache root" || echo "FAIL:${var} under session cache root"
         [[ "${!var}" != "${HOME}" && "${!var}" != "${HOME}/"* ]] && echo "PASS:${var} off home" || echo "FAIL:${var} off home"
     done
-    [[ "${ASTROAI_LAB_BIN_DIR}" == "${SCRATCH}/"* ]] && echo "PASS:ASTROAI_LAB_BIN_DIR on scratch" || echo "FAIL:ASTROAI_LAB_BIN_DIR on scratch"
+    [[ "${ASTROAI_LAB_BIN_DIR}" == "${HOME}/.local/bin" ]] && echo "PASS:ASTROAI_LAB_BIN_DIR on home" || echo "FAIL:ASTROAI_LAB_BIN_DIR on home"
     [[ "${ASTROAI_LAB_RUNTIME_ROOT}" == "${SCRATCH}/"* ]] && echo "PASS:ASTROAI_LAB_RUNTIME_ROOT on scratch" || echo "FAIL:ASTROAI_LAB_RUNTIME_ROOT on scratch"
     [[ "${UV_PYTHON_INSTALL_DIR}" != "${HOME}/"* ]] && echo "PASS:UV_PYTHON_INSTALL_DIR off home" || echo "FAIL:UV_PYTHON_INSTALL_DIR off home"
     [[ "${PIXI_HOME}" != "${HOME}/.pixi" ]] && echo "PASS:PIXI_HOME off home when scratch mounted" || echo "FAIL:PIXI_HOME off home when scratch mounted"
