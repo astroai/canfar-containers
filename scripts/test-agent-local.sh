@@ -7,13 +7,10 @@
 #      (list, install, verify, plugins list/install/remove,
 #       and the registry-driven verbs
 #       setup <agent> / config <agent> / verify --fix <agent> / update <agent>);
-#   2. agent CLI installs NEVER land in the user home (~/.local) — the
-#      session bin dir is scratch-backed when SCRATCH is mounted, else the
-#      work-dir runtime root (work/.runtime-$USER/bin).
+#   2. agent CLI installs land in ~/.local/bin (upstream-compatible home).
 #
 # Runs TWO scenarios per image: with scratch (CANFAR-like) and without
-# (plain local machine) — the no-scratch path exercises the runtime-root
-# fallback that replaced the old ~/.local default.
+# (plain local machine) — caches/runtimes still prefer scratch when mounted.
 #
 # Usage:
 #   ./scripts/test-agent-local.sh                 # ALL session images
@@ -76,39 +73,23 @@ export SCRATCH="${SCRATCH:-}"
 fail() { echo "  FAIL: $*" >&2; exit 1; }
 ok()   { echo "  ok: $*"; }
 
-# 0. bin dir resolution must never be under the user home (config files in
-#    home are fine; CLI binaries are not). With scratch the session bin dir is
-#    legitimately scratch/.local/bin — only a path under $HOME is a violation.
-#    The expected pattern keys off astroai's RESOLVED SCRATCH (present in
-#    the env export only when a scratch dir was actually found), not the raw
-#    env placeholder the harness passes in.
+# 0. bin dir resolution is upstream-default ~/.local/bin (home-canonical).
+#    Caches/runtimes still use scratch when mounted.
 ENV_JSON="$(astroai env export --json)"
 BIN_DIR="$(printf '%s' "${ENV_JSON}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["ASTROAI_LAB_BIN_DIR"])')"
-RESOLVED_SCRATCH="$(printf '%s' "${ENV_JSON}" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("SCRATCH",""))')"
 case "${BIN_DIR}" in
-    "${HOME_DIR}"/*) fail "bin dir under home: ${BIN_DIR}";;
+    "${HOME_DIR}/.local/bin") ok "bin dir home-canonical: ${BIN_DIR}";;
+    *) fail "expected ${HOME_DIR}/.local/bin, got ${BIN_DIR}";;
 esac
-if [[ -n "${RESOLVED_SCRATCH}" ]]; then
-    case "${BIN_DIR}" in
-        "${RESOLVED_SCRATCH}"/*) ok "bin dir scratch-backed: ${BIN_DIR}";;
-        *) fail "expected scratch-backed bin dir, got ${BIN_DIR} (scratch=${RESOLVED_SCRATCH})";;
-    esac
-else
-    case "${BIN_DIR}" in
-        */.runtime-*/bin) ok "bin dir runtime-root fallback: ${BIN_DIR}";;
-        *) fail "expected runtime-root bin dir, got ${BIN_DIR}";;
-    esac
-fi
 
 # 1. read commands work out of the box.
 # Rich Console writes tables to stderr; drop both streams so a pass stays quiet.
 astroai agent list          >/dev/null 2>&1 || fail "agent list"
 astroai agent plugins list  >/dev/null 2>&1 || fail "agent plugins list"
 
-# 2. install a curl-installer agent (honors XDG_BIN_DIR → session bin dir).
+# 2. install a curl-installer agent into ~/.local/bin (upstream land site).
 astroai agent install kilo  >/dev/null || fail "agent install kilo"
-[[ -x "${BIN_DIR}/kilo" ]] || fail "kilo not in session bin dir ${BIN_DIR}"
-[[ ! -e "${HOME_DIR}/.local/bin/kilo" ]] || fail "kilo leaked into ~/.local/bin"
+[[ -x "${BIN_DIR}/kilo" || -L "${BIN_DIR}/kilo" ]] || fail "kilo not in ${BIN_DIR}"
 
 # 3. verify: binary checks pass on a fresh home (config checks may fire —
 #    that's by design on a fresh home; the command must not crash). --json is
@@ -128,10 +109,9 @@ if astroai agent plugins list 2>/dev/null | grep -q ray-manager-mcp; then
     astroai agent plugins remove ray-manager-mcp --agent cursor >/dev/null 2>&1 || true
 fi
 
-# 5. remove leaves no trace and never creates ~/.local.
+# 5. remove leaves no kilo binary.
 astroai agent remove kilo >/dev/null || fail "agent remove kilo"
 [[ ! -e "${BIN_DIR}/kilo" ]] || fail "kilo still in ${BIN_DIR} after remove"
-[[ ! -d "${HOME_DIR}/.local/bin" ]] || fail "~/.local/bin was created"
 
 # 7. Phase 2 verbs (registry-driven): setup / config / update for hermes.
 #    setup + config are fully offline; update takes the up-to-date path via
@@ -218,7 +198,7 @@ import json, sys
 assert json.load(sys.stdin)["value"] == "keep-me"
 ' || fail "verify --fix hermes: healthy config clobbered"
 
-ok "no ~/.local pollution; all agent commands OK (bin dir ${BIN_DIR})"
+ok "home-canonical installs; all agent commands OK (bin dir ${BIN_DIR})"
 PROBE_EOF
 chmod +x "${PROBE}"
 
@@ -281,4 +261,4 @@ if [[ "${FAILURES}" -gt 0 ]]; then
     exit 1
 fi
 echo ""
-echo "ALL PASS: ${#IMAGES[@]} image(s) — agent command matrix + no ~/.local pollution"
+echo "ALL PASS: ${#IMAGES[@]} image(s) — agent command matrix + home-canonical installs"

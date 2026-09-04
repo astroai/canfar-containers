@@ -240,7 +240,9 @@ session record ages out. Prefer grepping `[astroai-boot]` for `common-init:ERR`,
 
 ## Agents and quota (operator view)
 
-- Agents install on demand via `astroai agent install` into scratch/`ASTROAI_LAB_BIN_DIR` — prefer that over baking agent binaries into images.
+- Agents install on demand via `astroai agent install` into `$HOME`
+  (`~/.local/bin`, upstream-compatible) — prefer that over baking agent
+  binaries into images. Skills: `npx skills add astroai/canfar-skills`.
 - **Plugins vs skills:** images bake `astroai-lab` from `config/astroai-lab.lock`. That package's plugins are **MCP / tools / rules only**. Skill packs (`SKILL.md`) install via `npx skills add astroai/canfar-skills` (skills.sh), not `astroai agent plugins`.
 - **Release order:** merge/push `astroai-lab` first → `make lock-astroai-lab` here → rebuild/push images. Skipping the lock leaves Harbor on an older lab that still managed skills as plugins.
 - Quota warnings fire at session start and via `astroai status` (≈80 / 90 / 95%).
