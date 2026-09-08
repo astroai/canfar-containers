@@ -1,4 +1,6 @@
-# AstroAI improc PATH — science venv + sourcextractor++ prefix.
+# AstroAI improc PATH — science venv only.
+# Conda CLIs (sourcextractor++, sky) are linked into /usr/local/bin; do not put
+# /opt/astroai/conda/bin on PATH (its python would shadow GalSim/torch/TF).
 # Bash-only (/etc/profile sources profile.d for all login shells, including sh).
 if [ -z "${BASH_VERSION:-}" ]; then
     return 0 2>/dev/null || exit 0
@@ -14,7 +16,4 @@ _improc_prepend() {
 }
 
 _improc_prepend /opt/astroai/venv/improc/bin
-_improc_prepend /opt/astroai/conda/sxpp/bin
-# ngmix has no CLI; its python is reachable as /opt/astroai/conda/ngmix/bin/python
-_improc_prepend /opt/astroai/conda/ngmix/bin
 unset -f _improc_prepend

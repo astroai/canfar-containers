@@ -145,13 +145,13 @@ PATH includes `/opt/astroai/venv/improc/bin` and sourcextractor++.
 
 | Area | Tools |
 |------|--------|
-| Detection / catalog | `source-extractor` (`sextractor`), sourcextractor++, `scamp` (2.15 from sid), `tractor`, IRAF |
+| Detection / catalog | `source-extractor` (`sextractor`), sourcextractor++, `scamp`, `tractor`, IRAF |
 | Deblending / scene modeling | `scarlet`, `scarlet2` (JAX) |
 | Simulation | `skymaker`, `stuff` |
 | Cosmic rays / clean | `astroscrappy`, `lacosmic`, `ccdproc` helpers |
-| Contaminant masks | `maximask`, `maxitrack` (own TF venv — not mixed with science Python) |
+| Contaminant masks | `maximask`, `maxitrack` (same science venv; pulls TensorFlow) |
 | DIA (difference imaging) | **`sfft`**, `zogyp` (modern; not HOTPANTS) |
-| Mask / weight | `weightwatcher`, `missfits`, gnuastro `astnoisechisel` / `astsegment` |
+| Mask / weight | `weightmask`, `weightwatcher`, `missfits`, gnuastro `astnoisechisel` / `astsegment` |
 | Astrometry / WCS | `twirl`, `astrometry.net`, `tweakwcs` |
 | PSF | `psfex`, `piff`, gnuastro `astscript-psf-*`, `galfit`, `imfit` |
 | Morphology / galaxy fitting | `statmorph`, `petrofit`, `galight` (+ `lenstronomy`) |
@@ -159,14 +159,12 @@ PATH includes `/opt/astroai/venv/improc/bin` and sourcextractor++.
 | Spherical / HEALPix | `healpy`, `healsparse`, `astropy-healpix`, `mocpy`, `hpgeom` |
 | General imaging / archives | `scikit-image`, `opencv` (`cv2`), `astroquery`, `montage-wrapper` |
 | Pretty pictures | `stiff`, `fitspng`, `fitscut`, `astconvertt`, ImageMagick |
-| FITS / HDF5 / tables | cfitsio utils, `fitsverify`, `topcat`/`stilts`, `pqrs`, `h5dump`, `torchfits` 1.0 (FITS↔tensor; CUDA 12.9 torch for GPU reads) |
+| FITS / HDF5 / tables | cfitsio utils, `fitsverify`, `topcat`/`stilts`, `pqrs`, `h5dump`, `torchfits` (FITS↔tensor; CUDA torch for GPU reads) |
 
-Science Python lives in `/opt/astroai/venv/improc` (on PATH). MaxiMask uses a
-**separate** `/opt/astroai/venv/maximask` so TensorFlow cannot conflict with
-GalSim/numba; only the `maximask` / `maxitrack` wrappers are on PATH. `ngmix`
-(Sheldon's Gaussian-mixture image/shape tools) has no PyPI release, so it lives
-in its own conda env at `/opt/astroai/conda/ngmix` — use
-`/opt/astroai/conda/ngmix/bin/python` to import it.
+Science Python (including MaxiMask/TensorFlow) lives in `/opt/astroai/venv/improc`
+(on PATH). Conda-only tools install under `/opt/astroai/conda`; their CLIs are
+linked into `/usr/local/bin`. Import ngmix with `/opt/astroai/conda/bin/python`
+(that env’s `python` is intentionally not on PATH).
 
 A complete Stuff → SkyMaker → SExtractor simulation workflow (generate a
 synthetic galaxy field, render it, extract sources) is in

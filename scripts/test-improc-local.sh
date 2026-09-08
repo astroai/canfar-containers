@@ -23,7 +23,7 @@ check_image() {
       source-extractor sextractor swarp psfex scamp stiff missfits \\
       fitscut fitspng fitsverify weightwatcher montage \\
       galfit imfit pqrs topcat stilts fits2idia imcore \\
-      astconvertt astnoisechisel h5dump maximask maxitrack sky skymaker stuff torchfits; do
+      astconvertt astnoisechisel h5dump maximask maxitrack sky skymaker stuff torchfits weightmask; do
       if ! command -v \"\$c\" >/dev/null; then
         echo \"FAIL: missing \$c\"
         missing=\$((missing + 1))
@@ -37,17 +37,8 @@ check_image() {
     else
       echo \"PASS: sourcextractor++\"
     fi
-    scamp_v=\$(scamp -v 2>&1 | head -1 || true)
-    echo \"\$scamp_v\" | grep -q '2\\.15' && echo \"PASS: \$scamp_v\" || { echo \"FAIL: SCAMP not 2.15 (\$scamp_v)\"; missing=\$((missing + 1)); }
-    /opt/astroai/venv/improc/bin/python -c \"import ccdproc, photutils, galsim, piff, astroscrappy, lacosmic, sfft, zogyp, healpy, healsparse, mocpy, hpgeom, scarlet, scarlet2, twirl, skimage, astroquery, cv2, petrofit, montage_wrapper, galight, lenstronomy, tractor, torch, torchfits; assert '+cu' in torch.__version__, torch.__version__; print('PASS: improc python imports')\"
-    /opt/astroai/conda/ngmix/bin/python -c \"import ngmix; print('PASS: ngmix')\"
-    /opt/astroai/venv/maximask/bin/python -c \"import tensorflow; import maximask_and_maxitrack; print('PASS: maximask venv')\"
-    if /opt/astroai/venv/improc/bin/python -c \"import tensorflow\" 2>/dev/null; then
-      echo \"FAIL: tensorflow leaked into improc venv\"
-      missing=\$((missing + 1))
-    else
-      echo \"PASS: tensorflow isolated from improc venv\"
-    fi
+    /opt/astroai/venv/improc/bin/python -c \"import ccdproc, photutils, galsim, piff, astroscrappy, lacosmic, sfft, zogyp, healpy, healsparse, mocpy, hpgeom, scarlet, scarlet2, twirl, skimage, astroquery, cv2, petrofit, montage_wrapper, galight, lenstronomy, tractor, torch, torchfits, tensorflow, maximask_and_maxitrack, weightmask; assert '+cu' in torch.__version__, torch.__version__; print('PASS: improc python imports')\"
+    /opt/astroai/conda/bin/python -c \"import ngmix; print('PASS: ngmix')\"
     ${extra}
     exit \"\$missing\"
     "

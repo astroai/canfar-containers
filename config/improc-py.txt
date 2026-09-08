@@ -1,61 +1,55 @@
-# Science Python for /opt/astroai/venv/improc (uv).
+# Science Python for /opt/astroai/venv/improc (uv). Unpinned — resolve at image build.
 # Not installed into the CADC venv.
-#
-# MaxiMask lives in a separate venv (/opt/astroai/venv/maximask) so
-# TensorFlow cannot conflict with this stack.
+# MaxiMask/TF share this venv (tensorflow>=2.11).
+# torch + torchfits (CUDA 12.9 index) installed in the Dockerfile.
 
 # Core image processing
-astropy>=7.0
-ccdproc>=2.5.1
-photutils>=3.0.0
-galsim>=2.8
-piff>=1.6
-fitsio>=1.2
-sep>=1.4
-reproject>=0.14
-drizzle>=2.0
-regions>=0.9
-statmorph>=0.5
+astropy
+ccdproc
+photutils
+galsim
+piff
+fitsio
+sep
+reproject
+drizzle
+regions
+statmorph
 
-# Cosmic rays / cleaning
-astroscrappy>=1.3.0
-lacosmic>=1.4.0
-astroimtools>=0.4
-astroalign>=2.0
-tweakwcs>=0.8
+# Cosmic rays / cleaning / weights
+astroscrappy
+lacosmic
+astroimtools
+astroalign
+tweakwcs
+weightmask
 
-# Modern difference-image analysis (DIA) — prefer these over HOTPANTS
-sfft>=1.7.3
-zogyp>=1.6.3
-# properimage depends on broken tinynpydb (fails on Py3.13); ois is unmaintained.
-# pyzogy/zogy needs tensorflow-cpu (breaks the improc/maximask TF isolation); prose caps at Python<3.12.
+# Modern difference-image analysis (DIA)
+sfft
+zogyp
 
 # Deblending / forward modeling / astrometry
-# scarlet: the PyPI sdist ships a py2-era version.py and undeclared build deps
-# (pybind11+peigen), so it is built from git in the Dockerfile like tractor.
-scarlet2>=0.5
-# scarlet2 pulls the JAX stack (jax, numpyro, optax, equinox) — acceptable; jaxlib has cp313 wheels.
-# tractor is built separately in the Dockerfile (git pin; needs swig+numpy+cython at build).
-# torchfits==1.0.0 (+ torch 2.13 CUDA 12.9) is installed in the Dockerfile
-# from the PyTorch cu129 index so GPU tensor reads work on CANFAR GPU nodes.
-# CPU sessions still run torch on CPU; the wheel is larger than +cpu.
-twirl>=0.5
+# scarlet + tractor: built from git in the Dockerfile (no usable PyPI wheels).
+scarlet2
+twirl
 
 # Galaxy profile / morphology fitting
-petrofit>=0.6
-# galight declares no deps on PyPI, so lenstronomy must be present for it to run.
-galight>=0.2
-lenstronomy>=1.14
+petrofit
+galight
+lenstronomy
+
+# Contaminant masks (pulls TensorFlow)
+MaxiMask
 
 # General-purpose imaging + archive access
-scikit-image>=0.26
-opencv-python-headless>=4.10
-astroquery>=0.4
-montage-wrapper>=0.9
+scikit-image
+opencv-python-headless
+astroquery
+montage-wrapper
 
 # Spherical / HEALPix analysis
-healpy>=1.17
-healsparse>=1.9
-astropy-healpix>=1.0
-mocpy>=0.17
-hpgeom>=1.4
+healpy
+healsparse
+astropy-healpix
+mocpy
+hpgeom
