@@ -235,16 +235,20 @@ RUN uv venv /opt/astroai/venv/improc \
            && ln -sf "/opt/astroai/venv/improc/bin/${c}" "/usr/local/bin/${c}"; \
        done
 
-# One micromamba env for conda-only packages (float at solve time).
-# Package name is sourcextractor; binary is sourcextractor++.
-RUN micromamba create -y -p /opt/astroai/conda \
-      -c astrorama -c conda-forge \
-      sourcextractor astromatic-skymaker ngmix \
+# Conda-only packages in separate prefixes (unpinned solve). Sharing one env
+# broke ngmix: astrorama/sxpp pins a numpy that cannot import with ngmix's
+# GalSim/astropy stack (numpy.in1d AttributeError).
+RUN micromamba create -y -p /opt/astroai/conda/sxpp \
+      -c astrorama -c conda-forge sourcextractor \
+    && micromamba create -y -p /opt/astroai/conda/skymaker \
+      -c conda-forge astromatic-skymaker \
+    && micromamba create -y -p /opt/astroai/conda/ngmix \
+      -c conda-forge ngmix \
     && micromamba clean -a -y \
-    && ln -sf /opt/astroai/conda/bin/sourcextractor++ /usr/local/bin/sourcextractor++ \
-    && ln -sf /opt/astroai/conda/bin/sourcextractor++ /usr/local/bin/sourcextractor \
-    && ln -sf /opt/astroai/conda/bin/sky /usr/local/bin/skymaker \
-    && ln -sf /opt/astroai/conda/bin/sky /usr/local/bin/sky \
+    && ln -sf /opt/astroai/conda/sxpp/bin/sourcextractor++ /usr/local/bin/sourcextractor++ \
+    && ln -sf /opt/astroai/conda/sxpp/bin/sourcextractor++ /usr/local/bin/sourcextractor \
+    && ln -sf /opt/astroai/conda/skymaker/bin/sky /usr/local/bin/skymaker \
+    && ln -sf /opt/astroai/conda/skymaker/bin/sky /usr/local/bin/sky \
     && chmod -R a+rX /opt/astroai/conda
 
 COPY scripts/improc-profile.sh /etc/profile.d/improc.sh
@@ -272,5 +276,5 @@ RUN set -euo pipefail; \
       || command -v sourcextractor >/dev/null \
       || { echo "MISSING: sourcextractor++" >&2; exit 1; }; \
     /opt/astroai/venv/improc/bin/python -c "import ccdproc, photutils, galsim, piff, astroscrappy, lacosmic, sfft, zogyp, healpy, healsparse, astropy_healpix, mocpy, hpgeom, scarlet, scarlet2, twirl, skimage, astroquery, cv2, petrofit, montage_wrapper, galight, lenstronomy, tractor, torch, torchfits, tensorflow, maximask_and_maxitrack, weightmask; assert '+cu' in torch.__version__, torch.__version__"; \
-    /opt/astroai/conda/bin/python -c "import ngmix; print('PASS: ngmix')"; \
+    /opt/astroai/conda/ngmix/bin/python -c "import ngmix; print('PASS: ngmix')"; \
     echo "improc smoke OK"

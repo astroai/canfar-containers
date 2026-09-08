@@ -38,7 +38,7 @@ check_image() {
       echo \"PASS: sourcextractor++\"
     fi
     /opt/astroai/venv/improc/bin/python -c \"import ccdproc, photutils, galsim, piff, astroscrappy, lacosmic, sfft, zogyp, healpy, healsparse, mocpy, hpgeom, scarlet, scarlet2, twirl, skimage, astroquery, cv2, petrofit, montage_wrapper, galight, lenstronomy, tractor, torch, torchfits, tensorflow, maximask_and_maxitrack, weightmask; assert '+cu' in torch.__version__, torch.__version__; print('PASS: improc python imports')\"
-    /opt/astroai/conda/bin/python -c \"import ngmix; print('PASS: ngmix')\"
+    /opt/astroai/conda/ngmix/bin/python -c \"import ngmix; print('PASS: ngmix')\"
     ${extra}
     exit \"\$missing\"
     "

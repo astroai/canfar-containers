@@ -162,9 +162,9 @@ PATH includes `/opt/astroai/venv/improc/bin` and sourcextractor++.
 | FITS / HDF5 / tables | cfitsio utils, `fitsverify`, `topcat`/`stilts`, `pqrs`, `h5dump`, `torchfits` (FITS↔tensor; CUDA torch for GPU reads) |
 
 Science Python (including MaxiMask/TensorFlow) lives in `/opt/astroai/venv/improc`
-(on PATH). Conda-only tools install under `/opt/astroai/conda`; their CLIs are
-linked into `/usr/local/bin`. Import ngmix with `/opt/astroai/conda/bin/python`
-(that env’s `python` is intentionally not on PATH).
+(on PATH). Conda-only tools use separate prefixes under `/opt/astroai/conda/`
+(sxpp, skymaker, ngmix); their CLIs are linked into `/usr/local/bin`. Import
+ngmix with `/opt/astroai/conda/ngmix/bin/python`.
 
 A complete Stuff → SkyMaker → SExtractor simulation workflow (generate a
 synthetic galaxy field, render it, extract sources) is in
