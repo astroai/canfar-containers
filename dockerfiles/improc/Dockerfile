@@ -173,6 +173,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certifi
 
 # Imfit — prefer newest listed linux-64 binary; fall back to 1.9.0 if the
 # directory index is empty/unavailable (MPE often returns no listing).
+# Tarball is named imfit-X.Y.Z-linux-64.tar.gz but unpacks to imfit-X.Y.Z/.
 RUN cd /opt \
     && NAME=$(curl -fsSL -A Mozilla \
          https://www.mpe.mpg.de/~erwin/resources/imfit/binaries/ 2>/dev/null \
@@ -181,7 +182,8 @@ RUN cd /opt \
     && wget -q "https://www.mpe.mpg.de/~erwin/resources/imfit/binaries/${NAME}" \
     && tar xzf "${NAME}" \
     && rm "${NAME}" \
-    && DIR="${NAME%.tar.gz}" \
+    && DIR=$(echo imfit-[0-9]* | awk '{print $1}') \
+    && test -x "/opt/${DIR}/imfit" \
     && ln -sfn "${DIR}" /opt/imfit \
     && for f in imfit imfit-mcmc makeimage; do \
          ln -sf "/opt/imfit/${f}" "/usr/local/bin/${f}"; \
