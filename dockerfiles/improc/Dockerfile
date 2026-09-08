@@ -171,11 +171,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certifi
     && rm -rf /tmp/galfit* /tmp/libtinfo5*.deb /tmp/libncurses5*.deb \
     && rm -rf /var/lib/apt/lists/*
 
-# Imfit — latest linux-64 binary listed on the MPE binaries page (fallback 1.9.0).
+# Imfit — prefer newest listed linux-64 binary; fall back to 1.9.0 if the
+# directory index is empty/unavailable (MPE often returns no listing).
 RUN cd /opt \
     && NAME=$(curl -fsSL -A Mozilla \
-         https://www.mpe.mpg.de/~erwin/resources/imfit/binaries/ \
-         | grep -oE 'imfit-[0-9.]+-linux-64\.tar\.gz' | sort -V | tail -1) \
+         https://www.mpe.mpg.de/~erwin/resources/imfit/binaries/ 2>/dev/null \
+         | grep -oE 'imfit-[0-9.]+-linux-64\.tar\.gz' | sort -V | tail -1 || true) \
     && NAME=${NAME:-imfit-1.9.0-linux-64.tar.gz} \
     && wget -q "https://www.mpe.mpg.de/~erwin/resources/imfit/binaries/${NAME}" \
     && tar xzf "${NAME}" \
