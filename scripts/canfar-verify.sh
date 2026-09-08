@@ -74,7 +74,7 @@ process_batch < <(batch_login <<'CHECK_BATCH'
 [[ ":${PATH}:" == *":/opt/astroai/venv/cadc/bin:"* ]] && echo "PASS:astroai-profile on PATH" || echo "FAIL:astroai-profile on PATH"
 
 # CADC + bundled CLIs
-for t in canfar cadcget cadcput cadc-tap vcp cadc-get-cert astroai peek; do
+for t in canfar cadcget cadcput cadc-tap vcp vls cadc-get-cert astroai peek; do
     command -v "$t" >/dev/null 2>&1 && echo "PASS:login shell: ${t}" || echo "FAIL:login shell: ${t}"
 done
 

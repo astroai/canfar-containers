@@ -122,6 +122,7 @@ run "npm --version" npm --version
 run "npx --version" npx --version
 run "uv --version" uv --version
 run "uvx --version" uvx --version
+run "pip --version" pip --version
 run "pixi --version" pixi --version
 run "micromamba --version" micromamba --version
 run "mamba --version" mamba --version
@@ -136,6 +137,7 @@ run "cadcget --help" cadcget --help
 run "cadcput --help" cadcput --help
 run "cadc-tap --help" cadc-tap --help
 run "vcp --help" vcp --help
+run "vls --help" vls --help
 run "cadc-get-cert --help" cadc-get-cert --help
 run "peek -h" peek -h
 run "peek reads file" bash -c "printf hi > \"$tmpdir/x.txt\" && peek \"$tmpdir/x.txt\" | grep -q hi"
