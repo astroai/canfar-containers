@@ -1,4 +1,4 @@
-.PHONY: help build-all build/% build-ray build-improc push-all push/% push-ray push-improc test-local test-agent-local test-ray test-improc-local test-host test-canfar test-canfar-agents test-canfar-session test-canfar-ray test-canfar-ray-gpu test-canfar-ray-autoscale clean clean-all lock-ray lock-astroai-lab lock-check lint lint-doc-quota sync-marimo-starter sync-notebook-starters
+.PHONY: help build-all build/% build-ray build-improc push-all push/% push-ray push-improc test-local test-agent-local test-ray test-improc-local test-base-local test-host test-canfar test-canfar-agents test-canfar-session test-canfar-ray test-canfar-ray-gpu test-canfar-ray-autoscale clean clean-all lock-ray lock-astroai-lab lock-check lint lint-doc-quota sync-marimo-starter sync-notebook-starters
 
 SHELL := bash
 OWNER ?= astroai
@@ -25,6 +25,7 @@ help:
 	@echo "  make push-improc        push improc stack to Harbor"
 	@echo "  make test-local         verify session images locally"
 	@echo "  make test-improc-local  verify improc family locally (improc/webterm/notebook)"
+	@echo "  make test-base-local    run every base-image CLI (not just command -v)"
 	@echo "  make test-agent-local   agent command matrix + no ~/.local pollution (all session images)"
 	@echo "  make test-ray           Ray container + local cluster + UI tests"
 	@echo "  make test-ray SMOKE=1   fast smoke: skip cluster formation"
@@ -178,6 +179,11 @@ test-ray: build-ray build/base ## Ray image checks + local cluster join + UI
 test-improc-local: ## verify improc CLIs (build first: make build-improc)
 	chmod +x scripts/test-improc-local.sh
 	./scripts/test-improc-local.sh $(BUILD_TAG)
+
+test-base-local: ## run every base CLI for real (not just command -v)
+	chmod +x scripts/test-base-local.sh
+	./scripts/test-base-local.sh $(BUILD_TAG)
+
 test-canfar:
 	./scripts/test-canfar.sh $(or $(IMAGE),base) $(TAG)
 
