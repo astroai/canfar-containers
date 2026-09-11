@@ -67,3 +67,10 @@ make test-ray SMOKE=1     # fast Ray container & UI smoke
 3. **No Secrets / Local Tags:** Never commit API keys, `.env` files, or production Harbor credentials.
 4. **Minimal Diffs:** Batch mechanical refactors and avoid noisy whitespace or formatting-only changes across unrelated files.
 5. **Follow `~/src/AGENTS.md`:** Ship changes via GitHub pull requests against `astroai/canfar-containers`.
+
+## Env hygiene
+
+- Prefer `pixi run` / `pixi run python` over bare `python3` when Pixi exists.
+- Never `pip install --user` or install into `~/.local` / `$HOME/.local` (esp. CANFAR `/arc/home`).
+- Headless/batch: `export PYTHONNOUSERSITE=1` and `unset PYTHONPATH`.
+- On CANFAR: read skill `canfar-lab-workflow` (mounts, quotas, resources, headless, ports).
