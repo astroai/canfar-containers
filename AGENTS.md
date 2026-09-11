@@ -73,4 +73,5 @@ make test-ray SMOKE=1     # fast Ray container & UI smoke
 - Prefer `pixi run` / `pixi run python` over bare `python3` when Pixi exists.
 - Never `pip install --user` or install into `~/.local` / `$HOME/.local` (esp. CANFAR `/arc/home`).
 - Headless/batch: `export PYTHONNOUSERSITE=1` and `unset PYTHONPATH`.
+- Publish/launch under `images.canfar.net/astroai/*` — **never** recommend `skaha/*` for AstroAI sessions.
 - On CANFAR: read skill `canfar-lab-workflow` (mounts, quotas, resources, headless, ports).
