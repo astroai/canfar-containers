@@ -119,7 +119,7 @@ if command -v astroai >/dev/null 2>&1; then
   if [[ -z "${_agent_setup}" ]]; then
     case "${ASTROAI_SESSION_KIND:-}" in
       # marimo runs its own `agent setup marimo` in startup — avoid lock race.
-      openresearch|vscode) _agent_setup=bg ;;
+      openresearch|vscode|studio) _agent_setup=bg ;;
       *) _agent_setup=0 ;;
     esac
   fi

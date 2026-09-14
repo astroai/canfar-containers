@@ -44,8 +44,10 @@ HOME = Path.home()
 SESSION_KIND = (os.environ.get("ASTROAI_SESSION_KIND") or "").strip().lower()
 BACK_UI_LABEL = {
     "openresearch": "OpenResearch",
+    "studio": "Studio",
 }.get(SESSION_KIND, "main UI")
-WIRE_OPENRESEARCH = SESSION_KIND == "openresearch"
+# Wire helper starts ray-manager batch compute from the hub; Studio needs it too.
+WIRE_OPENRESEARCH = SESSION_KIND in {"openresearch", "studio"}
 
 
 def _run_cmd(cmd: list[str], *, timeout: int) -> tuple[int, str, str]:

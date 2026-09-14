@@ -17,7 +17,7 @@ variable "PYTHON_VERSION" {
 }
 
 group "default" {
-  targets = ["base", "webterm", "ghostty-web", "notebook", "vscode", "marimo", "openresearch"]
+  targets = ["base", "webterm", "ghostty-web", "notebook", "vscode", "marimo", "openresearch", "studio"]
 }
 
 group "improc" {
@@ -92,6 +92,12 @@ target "openresearch" {
   inherits   = ["_interface"]
   dockerfile = "dockerfiles/openresearch/Dockerfile"
   tags       = ["${REGISTRY}/${OWNER}/openresearch:${TAG}"]
+}
+
+target "studio" {
+  inherits   = ["_interface"]
+  dockerfile = "dockerfiles/studio/Dockerfile"
+  tags       = ["${REGISTRY}/${OWNER}/studio:${TAG}"]
 }
 
 # Ray cluster images

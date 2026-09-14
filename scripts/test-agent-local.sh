@@ -29,7 +29,7 @@
 if [[ "$#" -gt 0 ]]; then
     IMAGES=("$@")
 else
-    IMAGES=(base webterm ghostty-web notebook vscode marimo openresearch)
+    IMAGES=(base webterm ghostty-web notebook vscode marimo openresearch studio)
 fi
 OWNER="${OWNER:-astroai}"
 REGISTRY="${REGISTRY:-images.canfar.net}"

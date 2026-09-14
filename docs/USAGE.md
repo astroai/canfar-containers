@@ -14,13 +14,25 @@ This file ships inside images as `/opt/astroai/USAGE.md`.
 
 ## Scientist card
 
-1. Portal → launch **openresearch** as your day-to-day home base (or webterm/vscode/notebook/marimo/ray-manager as needed).
+1. Portal → launch **studio** (coding portal) or **openresearch** (autoresearch) as home base (or webterm/vscode/notebook/marimo/ray-manager as needed).
 2. Inside: `astroai` · `astroai help` · `less /opt/astroai/USAGE.md`
 3. Work under `$SRCDIR` (same as `$WORK`; `/scratch/src` on CANFAR so container OOM does not wipe it) and `/scratch` (data/caches).
 4. Persist to `/arc/home` or `/arc/projects` before the session ends (`astroai save` / `git push`).
 5. Env snapshots live in `~/.astroai/lab/saves/` on `/arc/home` — resume them in the next session with `astroai resume NAME`.
 
-### Home base: AstroAI hub (openresearch)
+### Home base: AstroAI Studio (coding portal)
+
+1. Launch **`studio`** with tag `26.09` / `latest`.
+2. Open the connect URL — DeepSeek Harness (`dsh`) coding agent in the browser.
+3. Blue **AstroAI** chip (top-right) or `/astroai-agents/` → Install/Setup agents, **Start batch compute**.
+4. Skills: `npx skills add astroai/canfar-skills`. Team review: pick **AstroAI Studio Team** preset (or `astroai panel run` headless).
+5. Laptop: `astroai studio` (same stack, no Skaha proxy).
+
+```bash
+canfar create --name studio contributed images.canfar.net/astroai/studio:26.09
+```
+
+### Alternate home base: AstroAI hub (openresearch)
 
 1. Launch **`openresearch`** with tag `26.09` / `latest`.
 2. Open the connect URL, then either:
@@ -124,6 +136,7 @@ Compilers and editors are in interactive images; put CUDA/ML stacks in your pixi
 | `marimo` | Reactive `.py` notebooks; starter seeded once under `$SRCDIR/notebooks` |
 | `notebook` | JupyterLab `:8888`. Stock Skaha may run platform Jupyter CMD — AstroAI `startup-notebook.sh` only with a platform override ([OPERATORS.md](OPERATORS.md)) |
 | `openresearch` | Autoresearch UI (`orx`) on `:5000`; AstroAI hub at `/astroai-agents/` (batch compute + agent list) |
+| `studio` | dsh coding portal on `:5000`; AstroAI hub at `/astroai-agents/` — see [STUDIO.md](STUDIO.md) |
 | `ray-manager` | Cluster UI + Ray head; see Ray section |
 | `improc` | Headless FITS/HDF5 image-processing CLIs — see [Image processing (`improc`)](#image-processing-improc) |
 | `improc-webterm` | Same tools + browser terminal (ttyd/tmux) |

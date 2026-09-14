@@ -9,7 +9,7 @@ PYTHON_VERSION ?= 3.13
 
 export OWNER REGISTRY PYTHON_VERSION
 
-SESSION_IMAGES := base webterm ghostty-web notebook vscode marimo openresearch
+SESSION_IMAGES := base webterm ghostty-web notebook vscode marimo openresearch studio
 RAY_IMAGES := ray-manager ray-worker
 IMAGE_PREFIX := $(REGISTRY)/$(OWNER)
 
@@ -150,7 +150,7 @@ lock-check: ## fail CI if a lockfile's package body drifts from its source. The 
 
 test-local: ## verify session images (parallel)
 	@fails=0; pids=(); \
-	for img in webterm ghostty-web notebook vscode marimo openresearch base; do \
+	for img in webterm ghostty-web notebook vscode marimo openresearch studio base; do \
 		./scripts/test-local.sh "$$img" --verify-only & pids+=($$!); \
 	done; \
 	for pid in "$${pids[@]}"; do wait "$$pid" || fails=$$((fails + 1)); done; \
@@ -233,6 +233,7 @@ test-host: ## docker-free checks (selfchecks + agent-wizard unit tests)
 	./scripts/lib/test_astroai_boot_log.sh
 	python3 scripts/lib/test_agent_wizard_verbs.py
 	python3 scripts/lib/test_orx_canfar_proxy.py
+	python3 scripts/lib/test_studio_canfar_proxy.py
 	python3 scripts/lib/test_astroai_html_proxy.py
 	python3 scripts/lib/test_session_title.py
 	python3 scripts/lib/test_canfar_marimo_env.py
