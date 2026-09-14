@@ -19,16 +19,17 @@ channel with `CHANNEL_PATTERN` (single path segment). Rewriting the string
 
 Instead the proxy:
 
-1. Leaves the channel string `"/api"` alone.
-2. Injects an early **fetch + WebSocket shim** that prefixes same-origin `/api…`
-   URLs with `/session/contrib/<id>` so the browser hits the session path.
-3. **Splices WebSocket upgrades** (dsh `/api/remote.mux`) like the marimo
+1. Leaves the channel string `"/api"` alone (`CHANNEL_PATTERN`).
+2. Rewrites quoted `"/api/…"`, `/assets`, favicon, hub, and `/plugins/` paths
+   in HTML/JS/CSS (covers `/api/file` img URLs, present.open, remote.mux).
+3. Injects an early **fetch + WebSocket + EventSource shim** that prefixes
+   same-origin `/api…` and `/plugins…` URLs with `/session/contrib/<id>`.
+4. **Splices WebSocket upgrades** (dsh `/api/remote.mux`) like the marimo
    HTML proxy — plain `HTTPConnection` cannot upgrade.
-4. Forwards browser **Host** and **Origin** to dsh. Start dsh with
+5. Forwards browser **Host** and **Origin** to dsh. Start dsh with
    `--trusted-host <public-host>` (startup trusts `ws-uv.canfar.net`,
    `ws-uvic.canfar.net`, `staging.canfar.net`, plus
    `ASTROAI_STUDIO_TRUSTED_HOST` and the pod hostname).
-5. Rewrites `/assets/`, favicon, and `/astroai-agents` the usual way.
 
 Do **not** put Studio behind vscode `/proxy/3080/` — absolute `/api` still
 escapes that path (canfar-lab review-bench HOWTO §11).

@@ -123,6 +123,7 @@ def test_compute_ensure_idempotent_and_wires() -> None:
         home = Path(tmp)
         with (
             patch.object(wiz, "_load_wire", return_value=wire),
+            patch.object(wiz, "WIRE_ORX", True),
             patch.object(wiz, "WIRE_OPENRESEARCH", True),
             patch.object(wiz, "shutil") as sh,
             patch.object(wiz, "_run_cmd", side_effect=fake_cmd),
@@ -145,6 +146,52 @@ def test_compute_ensure_idempotent_and_wires() -> None:
     assert "--autoscaling" not in ensure_cmds[0]
     assert "RAY_AUTOSCALING_ENABLED=1" in env
     assert "do not add workers" in data["user_message"]
+
+
+def test_compute_ensure_studio_skips_orx_wire() -> None:
+    """Studio needs ray-manager/Jobs URL only — never OpenResearch wire_orx."""
+    wire = MagicMock()
+    wire.find_manager_sessions.return_value = [
+        {"status": "Running", "image": "astroai/ray-manager", "connectURL": "https://mgr/"}
+    ]
+    wire._session_status.side_effect = lambda m: m["status"]
+    wire._session_connect_url.side_effect = lambda m: m.get("connectURL", "")
+    wire.jobs_url_from_connect.return_value = "https://mgr/dashboard"
+
+    def fake_cmd(cmd: list[str], *, timeout: int) -> tuple[int, str, str]:
+        if cmd[:2] == ["astroai", "cluster"]:
+            return (
+                0,
+                json.dumps(
+                    {
+                        "jobs_address": "https://mgr/dashboard",
+                        "joined_workers": 0,
+                        "cluster_phase": "running",
+                        "manager_url": "https://mgr/",
+                    }
+                ),
+                "",
+            )
+        return 0, "", ""
+
+    with tempfile.TemporaryDirectory() as tmp:
+        home = Path(tmp)
+        with (
+            patch.object(wiz, "_load_wire", return_value=wire),
+            patch.object(wiz, "WIRE_ORX", False),
+            patch.object(wiz, "WIRE_OPENRESEARCH", False),
+            patch.object(wiz, "shutil") as sh,
+            patch.object(wiz, "_run_cmd", side_effect=fake_cmd),
+            patch.object(wiz.Path, "home", return_value=home),
+        ):
+            sh.which.return_value = "/usr/bin/astroai"
+            data = wiz._compute_ensure()
+
+    assert data["ok"] is True
+    assert data["jobs_address"] == "https://mgr/dashboard"
+    assert "wire-orx" not in data["steps"]
+    wire.wire_orx.assert_not_called()
+    assert "OpenResearch is wired" not in data["user_message"]
 
 
 def test_compute_ensure_runs_in_background_and_status_polls() -> None:
@@ -276,6 +323,7 @@ if __name__ == "__main__":
     test_addons_and_catalog_use_list_config()
     test_install_by_tag_loops_plugins_install()
     test_compute_ensure_idempotent_and_wires()
+    test_compute_ensure_studio_skips_orx_wire()
     test_compute_ensure_runs_in_background_and_status_polls()
     test_back_link_prefers_saved_referrer_over_marker()
     test_index_html_agent_table()

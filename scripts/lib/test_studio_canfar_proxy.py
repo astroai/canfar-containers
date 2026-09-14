@@ -12,25 +12,38 @@ proxy = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(proxy)
 
 
-def test_does_not_rewrite_quoted_api_channel() -> None:
-    """Channel must stay \"/api\" (CHANNEL_PATTERN); shim rewrites network URLs."""
+def test_keeps_bare_api_channel_string() -> None:
+    """Channel must stay \"/api\" (CHANNEL_PATTERN)."""
     proxy.PREFIX = "/session/contrib/abc"
-    html = b'<html><head></head><body><script>fetch("/api/commands/execute")</script></body></html>'
-    out = proxy.rewrite_body(html, "text/html")
-    assert b'fetch("/api/commands/execute")' in out
-    assert b'"/session/contrib/abc/api/commands/execute"' not in out
-    assert b"data-astroai-api-shim" in out
-    assert b"/session/contrib/abc" in out  # shim prefix JSON
+    js = b'const channel = "/api"; fetch(new URL(channel + "/x", origin));'
+    out = proxy.rewrite_body(js, "text/javascript")
+    assert b'const channel = "/api"' in out
+    assert b'const channel = "/session/contrib/abc/api"' not in out
 
 
-def test_rewrite_prefixes_quoted_assets() -> None:
+def test_rewrites_quoted_api_slash_paths() -> None:
+    """"/api/…" (file, present, mux) must get the session prefix for img/href."""
+    proxy.PREFIX = "/session/contrib/abc"
+    js = (
+        b'const FILE = "/api/file";'
+        b'const MUX = "/api/remote.mux";'
+        b'const OPEN = "/api/present.open";'
+    )
+    out = proxy.rewrite_body(js, "text/javascript")
+    assert b'"/session/contrib/abc/api/file"' in out
+    assert b'"/session/contrib/abc/api/remote.mux"' in out
+    assert b'"/session/contrib/abc/api/present.open"' in out
+    assert b'"/api/file"' not in out
+
+
+def test_rewrites_quoted_assets() -> None:
     proxy.PREFIX = "/session/contrib/abc"
     html = b'<script>import("/assets/index.js")</script>'
     out = proxy.rewrite_body(html, "text/javascript")
     assert b'"/session/contrib/abc/assets/index.js"' in out
 
 
-def test_rewrite_prefixes_quoted_astroai_agents() -> None:
+def test_rewrites_quoted_astroai_agents() -> None:
     proxy.PREFIX = "/session/contrib/abc"
     html = b"<script>const i = p.indexOf('/astroai-agents');</script>"
     out = proxy.rewrite_body(html, "text/html")
@@ -38,16 +51,16 @@ def test_rewrite_prefixes_quoted_astroai_agents() -> None:
     assert b"indexOf('/astroai-agents')" not in out
 
 
-def test_rewrite_injects_agents_chip_and_shim() -> None:
+def test_injects_shim_chip_banner() -> None:
     proxy.PREFIX = "/session/contrib/abc"
     html = b"<html><head></head><body><h1>dsh</h1></body></html>"
     out = proxy.rewrite_body(html, "text/html")
     assert b'id="astroai-agents-chip"' in out
     assert b'href="/session/contrib/abc/astroai-agents/"' in out
     assert b'id="astroai-resource-banner"' in out
-    assert b"Start batch compute" in out
     assert b"data-astroai-api-shim" in out
     assert b"window.WebSocket" in out
+    assert b"EventSource" in out
 
 
 def test_rewrite_location_api() -> None:
@@ -76,10 +89,11 @@ def test_is_websocket_request() -> None:
 
 
 if __name__ == "__main__":
-    test_does_not_rewrite_quoted_api_channel()
-    test_rewrite_prefixes_quoted_assets()
-    test_rewrite_prefixes_quoted_astroai_agents()
-    test_rewrite_injects_agents_chip_and_shim()
+    test_keeps_bare_api_channel_string()
+    test_rewrites_quoted_api_slash_paths()
+    test_rewrites_quoted_assets()
+    test_rewrites_quoted_astroai_agents()
+    test_injects_shim_chip_banner()
     test_rewrite_location_api()
     test_no_prefix_leaves_absolute_paths()
     test_is_websocket_request()

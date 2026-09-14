@@ -51,8 +51,9 @@ REWRITE_TYPES = (
     "application/json",
 )
 
-# Static / hub paths only — never rewrite "/api" in JS (CHANNEL_PATTERN).
-ABS_PREFIXES = ("/assets/", "/favicon", "/astroai-agents")
+# Static / hub paths — rewrite "/api/…" (trailing slash) for img/present/upload
+# strings in bundles. Never rewrite the bare channel "/api" (CHANNEL_PATTERN).
+ABS_PREFIXES = ("/api/", "/assets/", "/favicon", "/astroai-agents", "/plugins/")
 
 AGENTS_CHIP = (
     '<a id="astroai-agents-chip" href="{href}" '
@@ -77,17 +78,22 @@ RESOURCE_BANNER = (
     "</div>"
 )
 
-# Keep channel as "/api"; only the network URL gets the session prefix.
+# Keep channel as "/api"; only network URLs get the session prefix.
+# Also wrap EventSource (HMR /plugins/events) and cover /api/file img src via
+# ABS_PREFIXES rewrite of quoted "/api/" in bundles.
 API_SHIM = """<script data-astroai-api-shim>
 (function () {
   var P = {prefix};
   if (!P) return;
+  function needs(path) {
+    return (path === "/api" || path.indexOf("/api/") === 0 ||
+            path.indexOf("/plugins/") === 0) &&
+           path.indexOf(P + "/") !== 0;
+  }
   function rewrite(u) {
     try {
       var url = new URL(u, location.href);
-      if (url.origin === location.origin &&
-          url.pathname.indexOf("/api") === 0 &&
-          url.pathname.indexOf(P + "/api") !== 0) {
+      if (url.origin === location.origin && needs(url.pathname)) {
         url.pathname = P + url.pathname;
         return url.href;
       }
@@ -111,6 +117,17 @@ API_SHIM = """<script data-astroai-api-shim>
   Wrapped.CLOSING = W.CLOSING;
   Wrapped.CLOSED = W.CLOSED;
   window.WebSocket = Wrapped;
+  if (typeof window.EventSource === "function") {
+    var E = window.EventSource;
+    function ES(url, config) {
+      return config === undefined ? new E(rewrite(url)) : new E(rewrite(url), config);
+    }
+    ES.prototype = E.prototype;
+    ES.CONNECTING = E.CONNECTING;
+    ES.OPEN = E.OPEN;
+    ES.CLOSED = E.CLOSED;
+    window.EventSource = ES;
+  }
 })();
 </script>"""
 
