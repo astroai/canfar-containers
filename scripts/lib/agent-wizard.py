@@ -46,8 +46,11 @@ BACK_UI_LABEL = {
     "openresearch": "OpenResearch",
     "studio": "Studio",
 }.get(SESSION_KIND, "main UI")
-# Wire helper starts ray-manager batch compute from the hub; Studio needs it too.
-WIRE_OPENRESEARCH = SESSION_KIND in {"openresearch", "studio"}
+# OpenResearch needs orx config wired to the Jobs URL. Studio only needs the
+# ray-manager / Jobs URL (astroai cluster); do not require wire_orx.
+WIRE_ORX = SESSION_KIND == "openresearch"
+# Legacy alias used by older tests / call sites.
+WIRE_OPENRESEARCH = WIRE_ORX
 
 
 def _run_cmd(cmd: list[str], *, timeout: int) -> tuple[int, str, str]:
@@ -171,14 +174,17 @@ def _ray_status() -> dict[str, Any]:
     if not jobs and connect:
         jobs = wire.jobs_url_from_connect(connect).rstrip("/")
 
-    orx = _orx_wire_state(wire) if WIRE_OPENRESEARCH else {"wired": False, "address": "", "default_backend": ""}
-    if WIRE_OPENRESEARCH and orx["address"] and not jobs:
+    orx = _orx_wire_state(wire) if WIRE_ORX else {"wired": False, "address": "", "default_backend": ""}
+    if WIRE_ORX and orx["address"] and not jobs:
         jobs = orx["address"]
-    wired = bool(WIRE_OPENRESEARCH and orx["wired"] and jobs)
+    wired = bool(WIRE_ORX and orx["wired"] and jobs)
+    compute_ready = bool(running) and (wired if WIRE_ORX else True)
 
-    if running and wired:
+    if compute_ready and WIRE_ORX:
         hint = "Batch compute ready — go back and run experiments."
-    elif running and WIRE_OPENRESEARCH and not wired:
+    elif compute_ready:
+        hint = "Batch compute ready — use `astroai run` / cluster jobs for heavy work."
+    elif running and WIRE_ORX and not wired:
         hint = "Manager is Running — click Start batch compute to wire OpenResearch."
     elif running:
         hint = "Manager is Running."
@@ -194,8 +200,8 @@ def _ray_status() -> dict[str, Any]:
         "ray_address": jobs or None,
         "orx_wired": wired,
         "orx_default_backend": orx.get("default_backend") or None,
-        "wire_supported": WIRE_OPENRESEARCH,
-        "compute_ready": bool(running) and (wired if WIRE_OPENRESEARCH else True),
+        "wire_supported": WIRE_ORX,
+        "compute_ready": compute_ready,
         "hint": hint,
     }
 
@@ -477,7 +483,7 @@ def _compute_ensure() -> dict[str, Any]:
             _step("discover-jobs")
 
     wired = None
-    if WIRE_OPENRESEARCH and jobs:
+    if WIRE_ORX and jobs:
         try:
             wired = wire.wire_orx(jobs_address=jobs, make_default=True)
             _step("wire-orx")
@@ -492,10 +498,10 @@ def _compute_ensure() -> dict[str, Any]:
                 "error": str(exc),
             }
 
-    ready = bool(jobs) and (not WIRE_OPENRESEARCH or bool(wired))
+    ready = bool(jobs) and (not WIRE_ORX or bool(wired))
     if ready:
         msg = "Batch compute ready. Jobs with --cpus will add workers."
-        if WIRE_OPENRESEARCH:
+        if WIRE_ORX:
             msg += " OpenResearch is wired — go back and run."
         elif connect:
             msg += f" Manager: {connect}"
