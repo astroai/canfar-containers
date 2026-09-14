@@ -43,6 +43,7 @@ flowchart TB
 | `notebook` | JupyterLab | Notebook |
 | `marimo` | Reactive notebooks | Contributed |
 | `openresearch` | OpenResearch (`orx`) autoresearch dashboard | Contributed |
+| `studio` | AstroAI Studio (`dsh` coding portal) — [STUDIO.md](docs/STUDIO.md) | Contributed |
 | `base` | Headless parent (CI / batch) | — |
 | `improc` | Astronomy FITS/HDF5 image-processing CLIs | Headless |
 | `improc-webterm` | Same tools + browser terminal (ttyd/tmux) | Contributed |
