@@ -1,4 +1,5 @@
-.PHONY: help build-all build/% build-ray build-improc push-all push/% push-ray push-improc test-local test-agent-local test-ray test-improc-local test-base-local test-host test-canfar test-canfar-agents test-canfar-session test-canfar-ray test-canfar-ray-gpu test-canfar-ray-autoscale clean clean-all lock-ray lock-astroai-lab lock-check lint lint-doc-quota sync-marimo-starter sync-notebook-starters
+.PHONY: help build-all build/% build-ray build-improc push-all push/% push-ray push-improc push-latest-tags release-push release-push-ray test-local test-agent-local test-ray test-improc-local test-base-local test-host test-canfar test-canfar-agents test-canfar-session test-canfar-ray test-canfar-ray-gpu test-canfar-ray-autoscale clean clean-all lock-ray lock-astroai-lab lock-check lint lint-doc-quota sync-marimo-starter sync-notebook-starters
+
 
 SHELL := bash
 OWNER ?= astroai
@@ -23,6 +24,8 @@ help:
 	@echo "  make push-all           push session images to Harbor"
 	@echo "  make push-ray           push Ray images to Harbor"
 	@echo "  make push-improc        push improc stack to Harbor"
+	@echo "  make release-push       bake+push session stack to Harbor (no local load; disk-safe)"
+	@echo "  make release-push-ray   bake+push Ray stack to Harbor (no local load; disk-safe)"
 	@echo "  make test-local         verify session images locally"
 	@echo "  make test-improc-local  verify improc family locally (improc/terminal/notebook)"
 	@echo "  make test-base-local    run every base-image CLI (not just command -v)"
@@ -125,6 +128,25 @@ push/%:
 	docker push $(IMAGE_PREFIX)/$(notdir $@):$(TAG)
 	docker tag $(IMAGE_PREFIX)/$(notdir $@):$(BUILD_TAG) $(IMAGE_PREFIX)/$(notdir $@):latest
 	docker push $(IMAGE_PREFIX)/$(notdir $@):latest
+
+# Disk-safe Harbor release: bake streams straight to the registry (no --load).
+# Requires docker login to $(REGISTRY). TAG defaults to YY.MM.
+# Also publishes :latest via registry-side retag (no local image download).
+push-latest-tags: ## point :latest at existing :$(TAG) digests in Harbor
+	@for img in $(IMAGES); do \
+		src="$(IMAGE_PREFIX)/$$img:$(TAG)"; \
+		dst="$(IMAGE_PREFIX)/$$img:latest"; \
+		echo "latest ← $$src"; \
+		docker buildx imagetools create -t "$$dst" "$$src"; \
+	done
+
+release-push: ## bake+push session images to Harbor as :$(TAG) and :latest
+	TAG=$(TAG) docker buildx bake --push
+	@$(MAKE) push-latest-tags IMAGES="$(SESSION_IMAGES)" TAG=$(TAG)
+
+release-push-ray: ## bake+push ray-manager + ray-worker as :$(TAG) and :latest
+	TAG=$(TAG) docker buildx bake --push ray-manager ray-worker
+	@$(MAKE) push-latest-tags IMAGES="$(RAY_IMAGES)" TAG=$(TAG)
 
 lock-ray: ## regenerate config/ray-deps.lock from config/ray-deps.txt (Python 3.13, Ray).
 	@tmp=$$(mktemp); \

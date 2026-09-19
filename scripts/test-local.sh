@@ -25,7 +25,8 @@ fi
 
 OWNER="${OWNER:-astroai}"
 REGISTRY="${REGISTRY:-images.canfar.net}"
-TAG="${TAG:-local}"
+# Prefer TAG; fall back to BUILD_TAG so release smokes match bake/push.
+TAG="${TAG:-${BUILD_TAG:-local}}"
 SESSION_ID="${SESSION_ID:-test-session-001}"
 FAILURES=0
 
