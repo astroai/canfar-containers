@@ -66,17 +66,21 @@ sync-notebook-starters: sync-marimo-starter ## copy all lab notebooks into confi
 	cp "$(ASTROAI_LAB_RAY_NB)" config/notebooks/ray_train.ipynb
 	@echo "updated config/notebooks/{starter.ipynb,ray_train.ipynb}"
 
-build-all: ## build session images
-	TAG=$(BUILD_TAG) docker buildx bake
+# --load lands tags in the local docker daemon (required for test-local /
+# test-agent-local). Without it, a docker-container buildx driver only caches.
+BAKE_FLAGS ?= --load
+
+build-all: ## build session images into local docker
+	TAG=$(BUILD_TAG) docker buildx bake $(BAKE_FLAGS)
 
 build-ray: ## build Ray manager + worker (uses same base TAG)
-	TAG=$(BUILD_TAG) docker buildx bake ray-manager ray-worker
+	TAG=$(BUILD_TAG) docker buildx bake $(BAKE_FLAGS) ray-manager ray-worker
 
 build-improc: ## build improc + improc-terminal + improc-notebook (+ base)
-	TAG=$(BUILD_TAG) docker buildx bake improc improc-terminal improc-notebook
+	TAG=$(BUILD_TAG) docker buildx bake $(BAKE_FLAGS) improc improc-terminal improc-notebook
 
 build/%:
-	TAG=$(BUILD_TAG) docker buildx bake $(notdir $@)
+	TAG=$(BUILD_TAG) docker buildx bake $(BAKE_FLAGS) $(notdir $@)
 
 push-all: $(addprefix push/,$(SESSION_IMAGES))
 
@@ -162,7 +166,9 @@ test-local: ## verify session images (parallel)
 # adding/removing an image stays single-sourced). For a single-image dev run
 # use the script directly after building it: make build/openresearch &&
 # ./scripts/test-agent-local.sh openresearch (no build-all dependency).
-test-agent-local: build-all ## agent command matrix on all session images (local, mounted fresh home)
+# SKIP_BUILD=1 reuses already-loaded local tags (avoids a full bake).
+test-agent-local: ## agent command matrix on all session images (local, mounted fresh home)
+	@if [ "$(SKIP_BUILD)" != "1" ]; then $(MAKE) build-all BUILD_TAG=$(BUILD_TAG); fi
 	@chmod +x scripts/test-agent-local.sh
 	@TAG=$(BUILD_TAG) ./scripts/test-agent-local.sh $(if $(IMAGE),$(IMAGE),$(SESSION_IMAGES))
 	@echo "agent-local E2E passed for $(if $(IMAGE),$(IMAGE),all session images)"
