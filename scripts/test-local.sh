@@ -6,17 +6,17 @@
 # overlay, WORK → /scratch/src — is covered by test-work-overlay.sh.
 #
 # Usage:
-#   ./scripts/test-local.sh webterm [port]
+#   ./scripts/test-local.sh terminal [port]
 #   ./scripts/test-local.sh notebook [port]   # defaults to 8888
-#   ./scripts/test-local.sh webterm --verify-only   # PATH/CADC checks only (no server)
+#   ./scripts/test-local.sh terminal --verify-only   # PATH/CADC checks only (no server)
 
-IMAGE="${1:-webterm}"
+IMAGE="${1:-terminal}"
 PORT="${2:-}"
 VERIFY_ONLY=0
 
 if [[ "${IMAGE}" == "--verify-only" ]]; then
     VERIFY_ONLY=1
-    IMAGE="${2:-webterm}"
+    IMAGE="${2:-terminal}"
     PORT="${3:-}"
 elif [[ "${PORT}" == "--verify-only" || "${2:-}" == "--verify-only" ]]; then
     VERIFY_ONLY=1

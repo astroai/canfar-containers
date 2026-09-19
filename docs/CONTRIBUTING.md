@@ -59,22 +59,22 @@ git checkout -b my-change
 | Bake graph, tags | `docker-bake.hcl`, `Makefile` | Depends |
 
 Interactive `base` keeps compilers and session tools (scientists compile in
-webterm/vscode). CUDA and heavy science stacks still belong in user pixi/uv
+terminal/vscode). CUDA and heavy science stacks still belong in user pixi/uv
 projects. Slim `ray-base` (workers only) stays minimal — see [RAY.md](RAY.md).
 
 ## Local build and test
 
 ```bash
-make build/webterm
+make build/terminal
 make build-all
-./scripts/test-local.sh webterm 5000
+./scripts/test-local.sh terminal 5000
 ./scripts/test-local.sh notebook 8888
 ```
 
 After profile or base changes:
 
 ```bash
-./scripts/test-local.sh webterm 5000
+./scripts/test-local.sh terminal 5000
 # inside container:
 source /etc/profile.d/astroai.sh
 astroai status

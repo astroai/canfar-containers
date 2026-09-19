@@ -68,12 +68,16 @@ install_path_candidates() {
     local tool="$1"
     local cmd path
     cmd="$(install_cmd_for "${tool}")"
+    # Scratch-canonical: managed bin only. Do not treat ~/.local/bin as success.
     if [[ -n "${ASTROAI_LAB_BIN_DIR:-}" ]]; then
         printf '%s\n' "${ASTROAI_LAB_BIN_DIR}/${cmd}"
+    elif [[ -n "${SCRATCH:-}" && -d "${SCRATCH}" ]]; then
+        printf '%s\n' "${SCRATCH}/.local/bin/${cmd}"
     fi
-    printf '%s\n' "${HOME}/.local/bin/${cmd}"
     case "${tool}" in
-        opencode) printf '%s\n' "${HOME}/.opencode/bin/opencode" ;;
+        opencode)
+            # Curl installer may land under sandbox/share; still require managed bin above.
+            ;;
     esac
 }
 

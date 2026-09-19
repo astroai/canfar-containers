@@ -7,7 +7,7 @@
 #      (list, install, verify, plugins list/install/remove,
 #       and the registry-driven verbs
 #       setup <agent> / config <agent> / verify --fix <agent> / update <agent>);
-#   2. agent CLI installs land in ~/.local/bin (upstream-compatible home).
+#   2. agent CLI installs land in $SCRATCH/.local/bin (never ~/.local/bin).
 #
 # Runs TWO scenarios per image: with scratch (CANFAR-like) and without
 # (plain local machine) — caches/runtimes still prefer scratch when mounted.
@@ -15,7 +15,7 @@
 # Usage:
 #   ./scripts/test-agent-local.sh                 # ALL session images
 #   ./scripts/test-agent-local.sh openresearch    # one image
-#   ./scripts/test-agent-local.sh base webterm    # explicit list
+#   ./scripts/test-agent-local.sh base terminal    # explicit list
 #
 # Env:
 #   OWNER / REGISTRY / TAG     image coordinates (defaults: astroai /
@@ -29,7 +29,7 @@
 if [[ "$#" -gt 0 ]]; then
     IMAGES=("$@")
 else
-    IMAGES=(base webterm ghostty-web notebook vscode marimo openresearch studio)
+    IMAGES=(base terminal notebook vscode marimo openresearch studio)
 fi
 OWNER="${OWNER:-astroai}"
 REGISTRY="${REGISTRY:-images.canfar.net}"
@@ -73,21 +73,28 @@ export SCRATCH="${SCRATCH:-}"
 fail() { echo "  FAIL: $*" >&2; exit 1; }
 ok()   { echo "  ok: $*"; }
 
-# 0. bin dir resolution is upstream-default ~/.local/bin (home-canonical).
-#    Caches/runtimes still use scratch when mounted.
+# 0. bin dir prefers $SCRATCH/.local/bin (scratch-canonical). Never ~/.local/bin.
+#    Configs stay on $HOME; caches/runtimes already use scratch when mounted.
 ENV_JSON="$(astroai env export --json)"
 BIN_DIR="$(printf '%s' "${ENV_JSON}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["ASTROAI_LAB_BIN_DIR"])')"
-case "${BIN_DIR}" in
-    "${HOME_DIR}/.local/bin") ok "bin dir home-canonical: ${BIN_DIR}";;
-    *) fail "expected ${HOME_DIR}/.local/bin, got ${BIN_DIR}";;
-esac
+if [[ -n "${SCRATCH}" && -d "${SCRATCH}" ]]; then
+    case "${BIN_DIR}" in
+        "${SCRATCH}/.local/bin") ok "bin dir scratch-canonical: ${BIN_DIR}";;
+        *) fail "expected ${SCRATCH}/.local/bin, got ${BIN_DIR}";;
+    esac
+else
+    case "${BIN_DIR}" in
+        "${HOME_DIR}/.local/bin") fail "bin dir must not be home ~/.local/bin without scratch";;
+        *) ok "bin dir offline fallback: ${BIN_DIR}";;
+    esac
+fi
 
 # 1. read commands work out of the box.
 # Rich Console writes tables to stderr; drop both streams so a pass stays quiet.
 astroai agent list          >/dev/null 2>&1 || fail "agent list"
 astroai agent plugins list  >/dev/null 2>&1 || fail "agent plugins list"
 
-# 2. install a curl-installer agent into ~/.local/bin (upstream land site).
+# 2. install a curl-installer agent into the managed bin dir (scratch).
 astroai agent install kilo  >/dev/null || fail "agent install kilo"
 [[ -x "${BIN_DIR}/kilo" || -L "${BIN_DIR}/kilo" ]] || fail "kilo not in ${BIN_DIR}"
 
@@ -198,7 +205,7 @@ import json, sys
 assert json.load(sys.stdin)["value"] == "keep-me"
 ' || fail "verify --fix hermes: healthy config clobbered"
 
-ok "home-canonical installs; all agent commands OK (bin dir ${BIN_DIR})"
+ok "scratch-canonical installs; all agent commands OK (bin dir ${BIN_DIR})"
 PROBE_EOF
 chmod +x "${PROBE}"
 
@@ -261,4 +268,4 @@ if [[ "${FAILURES}" -gt 0 ]]; then
     exit 1
 fi
 echo ""
-echo "ALL PASS: ${#IMAGES[@]} image(s) — agent command matrix + home-canonical installs"
+echo "ALL PASS: ${#IMAGES[@]} image(s) — agent command matrix + scratch-canonical installs"

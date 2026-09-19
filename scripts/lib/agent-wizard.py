@@ -46,6 +46,10 @@ BACK_UI_LABEL = {
     "openresearch": "OpenResearch",
     "studio": "Studio",
 }.get(SESSION_KIND, "main UI")
+HUB_TITLE = {
+    "studio": "AstroAI Studio",
+    "openresearch": "AstroAI",
+}.get(SESSION_KIND, "AstroAI")
 # OpenResearch needs orx config wired to the Jobs URL. Studio only needs the
 # ray-manager / Jobs URL (astroai cluster); do not require wire_orx.
 WIRE_ORX = SESSION_KIND == "openresearch"
@@ -127,7 +131,7 @@ def _canfar_auth_line() -> tuple[bool, str]:
     if rc == 124:
         return False, f"canfar auth show timed out after {PLATFORM_CANFAR_TIMEOUT}s"
     if rc != 0 and not line:
-        return False, "Not authenticated — run canfar login in webterm"
+        return False, "Not authenticated — run canfar login in terminal"
     bad = not line or any(
         tok in line.lower() for tok in ("not authenticated", "timed out", "failed", "error")
     )
@@ -626,7 +630,7 @@ INDEX_HTML = """<!DOCTYPE html>
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>AstroAI</title>
+<title>__HUB_TITLE__</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Source+Sans+3:wght@400;600&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap" rel="stylesheet"/>
@@ -746,9 +750,12 @@ INDEX_HTML = """<!DOCTYPE html>
 <body>
   <div class="wrap">
     <a class="back" id="back-link" href="../">← Back to __BACK_LABEL__</a>
-    <h1>AstroAI</h1>
-    <p class="lede">Start batch compute for this session. Agent CLIs and configs live on shared <code>/arc/home</code>.</p>
+    <h1>__HUB_TITLE__</h1>
+    <p class="lede">Launch an autoscaling Ray cluster for heavy/GPU work, or install agent CLIs for this session.</p>
+    <p class="lede-sm">CLIs install to <code>$SCRATCH/.local/bin</code> (fast local disk). Configs and auth stay on <code>$HOME</code> (<code>/arc/home</code>). Use the <strong>Terminal</strong> chip on the main UI for a ghostty shell.</p>
 
+    <h2>Batch compute</h2>
+    <p class="lede-sm">Starts a ray-manager with autoscaling workers (0–8 by default). Jobs pick up workers on demand.</p>
     <div class="status" id="status">Loading…</div>
     <div class="actions">
       <button id="btn-compute">Start batch compute</button>
@@ -756,10 +763,10 @@ INDEX_HTML = """<!DOCTYPE html>
     <div id="msg"></div>
 
     <h2>Agents</h2>
-    <p class="lede-sm">Same columns as <code>astroai agent list</code>. Install puts the CLI on PATH; Setup writes that agent's config, skills dirs, and default MCP/rules/tools. Skills packs: <code>npx skills add astroai/canfar-skills</code>.</p>
+    <p class="lede-sm">Same columns as <code>astroai agent list</code>. <strong>Install</strong> puts the CLI on <code>$SCRATCH</code> PATH; <strong>Setup</strong> writes that agent's config, skills dirs, and default MCP/rules/tools. Skills packs: <code>npx skills add astroai/canfar-skills</code>.</p>
     <div id="agent-table">Loading…</div>
     <p class="foot">
-      Need <code>canfar login</code>? Open <strong>webterm</strong> (same home), then come back.<br/>
+      Need <code>canfar login</code>? Open <strong>Terminal</strong> (chip on the main UI), then come back.<br/>
       Power users: <code>astroai agent …</code> · <code>astroai cluster …</code>
     </p>
   </div>
@@ -1000,7 +1007,7 @@ refresh();
 </html>
 """.replace("__BACK_LABEL__", BACK_UI_LABEL).replace(
     "__BACK_LABEL_JSON__", json.dumps(BACK_UI_LABEL)
-)
+).replace("__HUB_TITLE__", HUB_TITLE)
 
 
 class WizardHandler(BaseHTTPRequestHandler):
@@ -1033,7 +1040,7 @@ class WizardHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         path, qs = self._path()
         if path in ("/", "/index.html"):
-            html = stick_html_title(INDEX_HTML, "AstroAI")
+            html = stick_html_title(INDEX_HTML, HUB_TITLE)
             self._send(200, html.encode("utf-8"), "text/html; charset=utf-8")
             return
         if path == "/api/platform":

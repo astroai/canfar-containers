@@ -42,7 +42,8 @@ set -euo pipefail
 REGISTRY="${REGISTRY:-images.canfar.net}"
 OWNER="${OWNER:-astroai}"
 KEEP_TAGS="${KEEP_TAGS:-26.09 26.08 latest}"
-KNOWN_REPOS="${KNOWN_REPOS:-base webterm ghostty-web vscode notebook marimo openresearch improc improc-webterm improc-notebook ray-manager ray-worker}"
+KNOWN_REPOS="${KNOWN_REPOS:-base terminal vscode notebook marimo openresearch studio improc improc-terminal improc-notebook ray-manager ray-worker webterm improc-webterm}"
+# webterm / improc-webterm: legacy Harbor names (renamed to terminal / improc-terminal)
 CANDIDATE_TAGS_DEFAULT='26.09 26.08 latest 26.07 26.06 26.05 26.04 25.12 25.11 25.10 25.09 25.08 25.07 25.06 25.05 25.04 25.03 25.02 25.01 24.12 24.11 24.10 24.09 24.08 24.07 local sha-'
 CANDIDATE_TAGS="${CANDIDATE_TAGS:-${CANDIDATE_TAGS_DEFAULT}}"
 DRY_RUN="${DRY_RUN:-0}"

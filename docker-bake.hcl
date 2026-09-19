@@ -17,11 +17,11 @@ variable "PYTHON_VERSION" {
 }
 
 group "default" {
-  targets = ["base", "webterm", "ghostty-web", "notebook", "vscode", "marimo", "openresearch", "studio"]
+  targets = ["base", "terminal", "notebook", "vscode", "marimo", "openresearch", "studio"]
 }
 
 group "improc" {
-  targets = ["improc", "improc-webterm", "improc-notebook"]
+  targets = ["improc", "improc-terminal", "improc-notebook"]
 }
 
 # Untagged bake parent. Never a Harbor image.
@@ -58,16 +58,10 @@ target "_interface" {
   }
 }
 
-target "webterm" {
+target "terminal" {
   inherits   = ["_interface"]
-  dockerfile = "dockerfiles/webterm/Dockerfile"
-  tags       = ["${REGISTRY}/${OWNER}/webterm:${TAG}"]
-}
-
-target "ghostty-web" {
-  inherits   = ["_interface"]
-  dockerfile = "dockerfiles/ghostty-web/Dockerfile"
-  tags       = ["${REGISTRY}/${OWNER}/ghostty-web:${TAG}"]
+  dockerfile = "dockerfiles/terminal/Dockerfile"
+  tags       = ["${REGISTRY}/${OWNER}/terminal:${TAG}"]
 }
 
 target "notebook" {
@@ -158,14 +152,14 @@ target "improc" {
   }
 }
 
-# Interactive browser terminal on improc (reuses webterm Dockerfile, BASE_NAME=improc).
-target "improc-webterm" {
+# Interactive browser terminal on improc (reuses terminal Dockerfile, BASE_NAME=improc).
+target "improc-terminal" {
   context    = "."
-  dockerfile = "dockerfiles/webterm/Dockerfile"
+  dockerfile = "dockerfiles/terminal/Dockerfile"
   contexts = {
     "${REGISTRY}/${OWNER}/improc:${TAG}" = "target:improc"
   }
-  tags = ["${REGISTRY}/${OWNER}/improc-webterm:${TAG}"]
+  tags = ["${REGISTRY}/${OWNER}/improc-terminal:${TAG}"]
   args = {
     REGISTRY  = "${REGISTRY}"
     OWNER     = "${OWNER}"

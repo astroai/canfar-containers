@@ -8,7 +8,7 @@ from session_title import session_tab_title, stick_html_title, write_jupyter_lab
 
 def test_session_name_from_hostname() -> None:
     with patch("session_title.socket.gethostname", return_value="gputerm"):
-        assert session_tab_title("AstroAI Webterm") == "gputerm"
+        assert session_tab_title("AstroAI Terminal") == "gputerm"
 
 
 def test_fallback_for_docker_id() -> None:

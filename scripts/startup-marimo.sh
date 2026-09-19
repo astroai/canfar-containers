@@ -60,7 +60,7 @@ if [[ -f "${STARTER_DST}" ]]; then
 fi
 
 # CANFAR contributed ingress strips /session/contrib/<id> before forwarding
-# (same as webterm). Do not pass --base-url here — marimo would only serve under
+# (same as terminal). Do not pass --base-url here — marimo would only serve under
 # that prefix and the proxied request for / would 404.
 
 MARIMO_INTERNAL_PORT="${ASTROAI_MARIMO_INTERNAL_PORT:-2718}"

@@ -5,8 +5,8 @@
 # kinds still schedule. Verifies: create → Running → connectURL HTTP healthy.
 #
 # Usage:
-#   ./scripts/test-canfar-session.sh webterm 26.08
-#   ./scripts/test-canfar-session.sh ghostty-web 26.08
+#   ./scripts/test-canfar-session.sh terminal 26.08
+#   ./scripts/test-canfar-session.sh studio 26.08
 #   ./scripts/test-canfar-session.sh notebook 26.08
 #   ./scripts/test-canfar-session.sh vscode 26.08
 #   ./scripts/test-canfar-session.sh marimo 26.08
@@ -16,7 +16,7 @@
 # Environment:
 #   REGISTRY, OWNER, CANFAR_TEST_TIMEOUT (default 900)
 
-IMAGE="${1:?image name required (webterm|ghostty-web|notebook|vscode|marimo|openresearch|ray-manager|improc-webterm|improc-notebook)}"
+IMAGE="${1:?image name required (terminal|notebook|vscode|marimo|openresearch|studio|ray-manager|improc-terminal|improc-notebook)}"
 TAG="${2:-${TAG:-latest}}"
 OWNER="${OWNER:-astroai}"
 REGISTRY="${REGISTRY:-images.canfar.net}"
@@ -104,7 +104,13 @@ echo "  timeout: ${TIMEOUT}s"
 echo ""
 
 if ! canfar auth show >/dev/null 2>&1; then
-    echo "canfar is not authenticated. Run: canfar auth login" >&2
+    echo "canfar is not authenticated. Run: canfar login" >&2
+    exit 1
+fi
+# auth show stays exit-0 on expired x509 — refuse before create.
+if canfar ps 2>&1 | grep -Eiq 'auth.*(expired|Authenticate with canfar login)'; then
+    echo "canfar auth expired. Run: canfar login" >&2
+    canfar auth show 2>&1 | head -20 || true
     exit 1
 fi
 
@@ -248,7 +254,78 @@ case "${HTTP_CODE}" in
         ;;
 esac
 
-# openresearch: AstroAI hub at /astroai-agents/
+# Minimum post-push bar: session Running + connect URL healthy + no boot fatals.
+# Pull logs once and scan; surface the tail on any hit so operators can act.
+LOGS="$(mktemp)"
+canfar logs "${SESSION_ID}" 2>&1 | tee "${LOGS}" >/dev/null || true
+if [[ ! -s "${LOGS}" ]]; then
+    echo "Warning: empty session logs (Skaha lag?); re-fetching..." >&2
+    sleep 5
+    canfar logs "${SESSION_ID}" 2>&1 | tee "${LOGS}" >/dev/null || true
+fi
+echo "--- session logs (tail) ---"
+tail -80 "${LOGS}" || true
+echo "--- end logs ---"
+
+# Shared fatal patterns (any image).
+if grep -Eiq \
+    'FATAL:|Traceback \(most recent call last\)|panic:|oom-kill|Out of memory|dsh not ready|exited early|cannot prepare' \
+    "${LOGS}"; then
+    echo "Session logs contain fatal/boot errors." >&2
+    FAILURES=$((FAILURES + 1))
+fi
+
+# studio: token redirect path must be armed (Skaha Connect omits ?token=).
+if [[ "${IMAGE}" == "studio" ]]; then
+    if ! grep -q 'dsh web token captured for Skaha Connect redirect' "${LOGS}"; then
+        echo "Studio logs missing dsh web token capture — Connect URL will 401." >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    if grep -q 'WARN: dsh web token not found' "${LOGS}"; then
+        echo "Studio failed to scrape dsh launch token." >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    # Follow one hop: bare Connect URL should 302 to ?token= (proxy), then leave
+    # the SPA alone (cookie / further redirects are browser-side).
+    if [[ "${HTTP_CODE}" == "302" || "${HTTP_CODE}" == "303" ]]; then
+        loc="$(curl -sk -o /dev/null -w '%{redirect_url}' --max-time 30 "${URL}" || true)"
+        echo "Studio redirect Location: ${loc}"
+        if [[ "${loc}" != *token=* ]]; then
+            echo "Studio 302 Location missing token= (got: ${loc})." >&2
+            FAILURES=$((FAILURES + 1))
+        fi
+    fi
+fi
+rm -f "${LOGS}"
+
+# studio: Terminal + AstroAI chips (same overlay as openresearch).
+if [[ "${FAILURES}" -eq 0 && "${IMAGE}" == "studio" ]]; then
+    BASE="${URL%/}"
+    # Authed HTML may require following token redirect once.
+    ROOT_HTML="$(curl -skL --max-time 30 "${URL}" || true)"
+    if ! grep -q 'astroai-terminal-chip' <<<"${ROOT_HTML}"; then
+        echo "Studio Terminal chip missing from root HTML." >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    if ! grep -q 'astroai-agents-chip' <<<"${ROOT_HTML}"; then
+        echo "Studio AstroAI chip missing from root HTML." >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    term_code="$(curl -sk -o /dev/null -w '%{http_code}' --max-time 20 "${BASE}/astroai-terminal/" || true)"
+    echo "Studio Terminal HTML HTTP ${term_code}"
+    if [[ "${term_code}" != "200" ]]; then
+        echo "Studio ghostty-web /astroai-terminal/ check failed." >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    hub_code="$(curl -sk -o /dev/null -w '%{http_code}' --max-time 20 "${BASE}/astroai-agents/" || true)"
+    echo "Studio Hub HTML HTTP ${hub_code}"
+    if [[ "${hub_code}" != "200" ]]; then
+        echo "Studio AstroAI hub /astroai-agents/ check failed." >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+fi
+
+# openresearch: AstroAI hub at /astroai-agents/ + ghostty at /astroai-terminal/
 if [[ "${FAILURES}" -eq 0 && "${IMAGE}" == "openresearch" ]]; then
     BASE="${URL%/}"
     HUB_HTML="$(mktemp)"
@@ -263,8 +340,19 @@ if [[ "${FAILURES}" -eq 0 && "${IMAGE}" == "openresearch" ]]; then
         echo "AstroAI hub missing Back link." >&2
         FAILURES=$((FAILURES + 1))
     fi
-    if ! curl -sk --max-time 20 "${URL}" | grep -q 'astroai-agents-chip'; then
+    ROOT_HTML="$(curl -sk --max-time 20 "${URL}" || true)"
+    if ! grep -q 'astroai-agents-chip' <<<"${ROOT_HTML}"; then
         echo "AstroAI chip missing from root HTML." >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    if ! grep -q 'astroai-terminal-chip' <<<"${ROOT_HTML}"; then
+        echo "Terminal chip missing from root HTML." >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    term_code="$(curl -sk -o /dev/null -w '%{http_code}' --max-time 20 "${BASE}/astroai-terminal/" || true)"
+    echo "Terminal HTML HTTP ${term_code}"
+    if [[ "${term_code}" != "200" ]]; then
+        echo "ghostty-web /astroai-terminal/ check failed." >&2
         FAILURES=$((FAILURES + 1))
     fi
     report_code="$(curl -sk -o "${HUB_JSON}" -w '%{http_code}' --max-time 90 "${BASE}/astroai-agents/api/report" || true)"

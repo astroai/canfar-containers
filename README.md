@@ -37,8 +37,7 @@ flowchart TB
 
 | Image | Use for | Skaha type |
 |-------|---------|------------|
-| `webterm` | Browser terminal (ttyd + tmux) | Contributed |
-| `ghostty-web` | Browser terminal (ghostty-web + tmux) | Contributed |
+| `terminal` | Browser terminal (ghostty-web + tmux) | Contributed |
 | `vscode` | Browser IDE (OpenVSCode Server) | Contributed |
 | `notebook` | JupyterLab | Notebook |
 | `marimo` | Reactive notebooks | Contributed |
@@ -46,7 +45,7 @@ flowchart TB
 | `studio` | AstroAI Studio (`dsh` coding portal) — [STUDIO.md](docs/STUDIO.md) | Contributed |
 | `base` | Headless parent (CI / batch) | — |
 | `improc` | Astronomy FITS/HDF5 image-processing CLIs | Headless |
-| `improc-webterm` | Same tools + browser terminal (ttyd/tmux) | Contributed |
+| `improc-terminal` | Same tools + browser terminal (ghostty-web/tmux) | Contributed |
 | `improc-notebook` | Same tools + JupyterLab (improc kernel) | Notebook |
 | `ray-manager` | Ray head + control panel + Dashboard ([RAY.md](docs/RAY.md)) | Contributed |
 | `ray-worker` | Ray worker CPU or GPU (manager-launched) | Headless |

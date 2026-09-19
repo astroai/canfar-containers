@@ -67,7 +67,7 @@ or set `CANFAR_RAY_SKIP_PREFLIGHT=1` for UI-only checks.
 
 ## Authentication
 
-From any AstroAI session (webterm/vscode):
+From any AstroAI session (terminal/vscode):
 
 ```bash
 canfar login

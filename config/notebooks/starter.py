@@ -31,7 +31,7 @@ Welcome. Marimo notebooks are plain **`.py` files** — easy to git and review.
 
 Built-in shell: press **Ctrl-`** (backtick), or open the footer **Developer**
 panel (**Ctrl/Cmd-J**) → **Terminal**. Use it for `astroai clone`, `pixi install`,
-`canfar login`, `git`, … A separate **webterm** session also works if you prefer.
+`canfar login`, `git`, … A separate **terminal** session also works if you prefer.
 
 ### Coming from Jupyter?
 
