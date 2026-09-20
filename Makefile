@@ -1,4 +1,4 @@
-.PHONY: help build-all build/% build-ray build-improc push-all push/% push-ray push-improc push-latest-tags release-push release-push-ray release-push-improc test-local test-agent-local test-ray test-improc-local test-base-local test-host test-canfar test-canfar-agents test-canfar-session test-canfar-ray test-canfar-ray-gpu test-canfar-ray-autoscale clean clean-all lock-ray lock-astroai-lab lock-check lint lint-doc-quota sync-marimo-starter sync-notebook-starters
+.PHONY: help build-all build/% build-ray build-improc push-all push/% push-ray push-improc push-latest-tags release-push release-push-ray release-push-improc test-local test-agent-local test-studio-local test-ray test-improc-local test-base-local test-host test-canfar test-canfar-agents test-canfar-session test-canfar-ray test-canfar-ray-gpu test-canfar-ray-autoscale clean clean-all lock-ray lock-astroai-lab lock-check lint lint-doc-quota sync-marimo-starter sync-notebook-starters
 
 
 SHELL := bash
@@ -29,6 +29,7 @@ help:
 	@echo "  make release-push-ray   bake+push Ray stack to Harbor (no local load; disk-safe)"
 	@echo "  make release-push-improc bake+push improc stack to Harbor (no local load; disk-safe)"
 	@echo "  make test-local         verify session images locally"
+	@echo "  make test-studio-local  Studio stamp+dangling .dsh boot → token → 200"
 	@echo "  make test-improc-local  verify improc family locally (improc/terminal/notebook)"
 	@echo "  make test-base-local    run every base-image CLI (not just command -v)"
 	@echo "  make test-agent-local   agent command matrix + no ~/.local pollution (all session images)"
@@ -200,6 +201,10 @@ test-agent-local: ## agent command matrix on all session images (local, mounted 
 	@chmod +x scripts/test-agent-local.sh
 	@TAG=$(BUILD_TAG) ./scripts/test-agent-local.sh $(if $(IMAGE),$(IMAGE),$(SESSION_IMAGES))
 	@echo "agent-local E2E passed for $(if $(IMAGE),$(IMAGE),all session images)"
+
+test-studio-local: ## Studio Connect regression: stamp + dangling ~/.dsh → token → 200
+	@chmod +x scripts/test-studio-local.sh
+	@TAG=$(BUILD_TAG) ./scripts/test-studio-local.sh
 
 test-ray: build-ray build/base ## Ray image checks + local cluster join + UI
 	chmod +x scripts/test-ray-*.sh scripts/test-astroai-lab-loop.sh scripts/ray-head-start.sh \
