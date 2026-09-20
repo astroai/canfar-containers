@@ -1,4 +1,4 @@
-.PHONY: help build-all build/% build-ray build-improc push-all push/% push-ray push-improc push-latest-tags release-push release-push-ray test-local test-agent-local test-ray test-improc-local test-base-local test-host test-canfar test-canfar-agents test-canfar-session test-canfar-ray test-canfar-ray-gpu test-canfar-ray-autoscale clean clean-all lock-ray lock-astroai-lab lock-check lint lint-doc-quota sync-marimo-starter sync-notebook-starters
+.PHONY: help build-all build/% build-ray build-improc push-all push/% push-ray push-improc push-latest-tags release-push release-push-ray release-push-improc test-local test-agent-local test-ray test-improc-local test-base-local test-host test-canfar test-canfar-agents test-canfar-session test-canfar-ray test-canfar-ray-gpu test-canfar-ray-autoscale clean clean-all lock-ray lock-astroai-lab lock-check lint lint-doc-quota sync-marimo-starter sync-notebook-starters
 
 
 SHELL := bash
@@ -12,6 +12,7 @@ export OWNER REGISTRY PYTHON_VERSION
 
 SESSION_IMAGES := base terminal notebook vscode marimo openresearch studio
 RAY_IMAGES := ray-manager ray-worker
+IMPROC_IMAGES := improc improc-terminal improc-notebook
 IMAGE_PREFIX := $(REGISTRY)/$(OWNER)
 
 help:
@@ -26,6 +27,7 @@ help:
 	@echo "  make push-improc        push improc stack to Harbor"
 	@echo "  make release-push       bake+push session stack to Harbor (no local load; disk-safe)"
 	@echo "  make release-push-ray   bake+push Ray stack to Harbor (no local load; disk-safe)"
+	@echo "  make release-push-improc bake+push improc stack to Harbor (no local load; disk-safe)"
 	@echo "  make test-local         verify session images locally"
 	@echo "  make test-improc-local  verify improc family locally (improc/terminal/notebook)"
 	@echo "  make test-base-local    run every base-image CLI (not just command -v)"
@@ -147,6 +149,10 @@ release-push: ## bake+push session images to Harbor as :$(TAG) and :latest
 release-push-ray: ## bake+push ray-manager + ray-worker as :$(TAG) and :latest
 	TAG=$(TAG) docker buildx bake --push ray-manager ray-worker
 	@$(MAKE) push-latest-tags IMAGES="$(RAY_IMAGES)" TAG=$(TAG)
+
+release-push-improc: ## bake+push improc + improc-terminal + improc-notebook as :$(TAG) and :latest
+	TAG=$(TAG) docker buildx bake --push improc improc-terminal improc-notebook
+	@$(MAKE) push-latest-tags IMAGES="$(IMPROC_IMAGES)" TAG=$(TAG)
 
 lock-ray: ## regenerate config/ray-deps.lock from config/ray-deps.txt (Python 3.13, Ray).
 	@tmp=$$(mktemp); \
