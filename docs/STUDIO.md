@@ -92,7 +92,9 @@ From the **AstroAI** hub:
 - **Install** — agent CLIs land on `$SCRATCH/.local/bin` (not `/arc/home`).
 - **Setup** — agent configs, MCP, and rules on `$HOME` (`/arc/home`).
 
-dsh workspaces are durable under `$HOME/.dsh` (on `/arc`). Studio boots with
+dsh workspaces are durable under `$HOME/.dsh` (on `/arc`). Do **not** symlink
+`~/.dsh/sessions` or `~/.dsh/storages` onto scratch — that leaves dangling links
+on the next session and Studio Connect fails without a dsh web token. Studio boots with
 cwd / dsh `defaultCwd` = `$SRCDIR` (usually `/scratch/src`; override with
 `ASTROAI_STUDIO_CWD`). A name like `torchregress` in the sidebar is a prior
 saved workspace — pick or create one under `$SRCDIR` via the directory picker.
