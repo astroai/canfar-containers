@@ -259,7 +259,7 @@ def rewrite_body(data: bytes, content_type: str) -> bytes:
         if 'data-astroai-proxy-rev="' not in text:
             text = text.replace(
                 "<head>",
-                '<head><meta data-astroai-proxy-rev="7" />',
+                '<head><meta data-astroai-proxy-rev="8" />',
                 1,
             )
         chips = ""
@@ -395,8 +395,13 @@ STARTING_HTML = (
 
 
 def _is_index_path(path: str) -> bool:
+    """Bare ``/`` or the Skaha-prefixed session index (with optional query)."""
     route = urlparse(path).path or "/"
-    return route in ("/", "")
+    if route in ("/", ""):
+        return True
+    if PREFIX and (route == PREFIX or route == f"{PREFIX}/"):
+        return True
+    return False
 
 
 def _send_html(handler: BaseHTTPRequestHandler, status: int, body: bytes) -> None:
@@ -513,6 +518,15 @@ class StudioProxyHandler(BaseHTTPRequestHandler):
                 self.end_headers()
                 self.log_message('"token-redirect" %s → %s', self.path, loc)
                 return
+            # No cookie and no launch token yet: keep Connect on the starting
+            # page (auto-refresh) instead of proxying a bare dsh 401/404.
+            if _is_index_path(self.path) and not has_dsh_auth_cookie(
+                self.headers.get("Cookie")
+            ):
+                if not read_launch_token():
+                    _send_html(self, 200, STARTING_HTML)
+                    self.log_message('"starting" %s (waiting for dsh token)', self.path)
+                    return
         # Mounts are under the Skaha prefix; strip before matching sidecars.
         public = upstream_path(self.path)
         route = urlparse(public).path or "/"

@@ -3,10 +3,6 @@
 # path-rewrite proxy on :5000. See docs/STUDIO.md.
 
 export ASTROAI_SESSION_KIND="${ASTROAI_SESSION_KIND:-studio}"
-source /cadc/common-init.sh
-# shellcheck disable=SC1091
-source /opt/astroai/lib/skaha-proxy.sh
-
 export PATH="/opt/astroai/venv/cadc/bin:/opt/astroai/bin:${PATH}"
 
 DSH_PORT="${DSH_PORT:-3080}"
@@ -15,6 +11,37 @@ export ASTROAI_STUDIO_PORT="${ASTROAI_STUDIO_PORT:-5000}"
 export ASTROAI_AGENT_WIZARD_PORT="${ASTROAI_AGENT_WIZARD_PORT:-4792}"
 export ASTROAI_TERMINAL_PORT="${ASTROAI_TERMINAL_PORT:-4793}"
 export ASTROAI_TAB_TITLE="${ASTROAI_TAB_TITLE:-AstroAI Studio}"
+
+# Bind :5000 BEFORE common-init. On CANFAR, walking a large CephFS home in
+# common-init can exceed Skaha liveness (connection refused on :5000) and
+# crash-loop the pod before the proxy ever starts.
+_user="${USER:-${LOGNAME:-$(id -un 2>/dev/null || echo user)}}"
+if [[ -n "${SCRATCH:-}" && -d "${SCRATCH}" && -w "${SCRATCH}" ]]; then
+    _studio_state="${SCRATCH}/.studio-${_user}"
+elif [[ -d /scratch && -w /scratch ]]; then
+    _studio_state="/scratch/.studio-${_user}"
+else
+    _studio_state="${TMPDIR:-/tmp}/.studio-${_user}"
+fi
+mkdir -p "${_studio_state}/pnpm-store" "${_studio_state}/pnpm-home" "${_studio_state}/tmp" \
+    "${HOME:-/tmp}/.astroai/lab" 2>/dev/null || mkdir -p "${_studio_state}"
+export ASTROAI_STUDIO_STATE="${_studio_state}"
+export ASTROAI_STUDIO_PROFILE=canfar
+export npm_config_store_dir="${_studio_state}/pnpm-store"
+export PNPM_HOME="${_studio_state}/pnpm-home"
+export TMPDIR="${_studio_state}/tmp"
+_dsh_log="${_studio_state}/dsh.log"
+_token_file="${_studio_state}/dsh-web-token"
+: >"${_dsh_log}" 2>/dev/null || true
+rm -f "${_token_file}"
+export ASTROAI_DSH_TOKEN_FILE="${_token_file}"
+python3 /opt/astroai/lib/studio-canfar-proxy.py &
+PROXY_PID=$!
+echo "[astroai-boot] studio-proxy :${ASTROAI_STUDIO_PORT} pre-init (pid=${PROXY_PID})" >&2
+
+source /cadc/common-init.sh
+# shellcheck disable=SC1091
+source /opt/astroai/lib/skaha-proxy.sh
 
 # Default workspace: $SRCDIR (scratch src on CANFAR). dsh uses process.cwd()
 # as defaultCwd for new sessions — so we must cd here before boot.
@@ -25,33 +52,6 @@ STUDIO_CWD="${ASTROAI_STUDIO_CWD:-${SRCDIR}}"
 mkdir -p "${STUDIO_CWD}" "${HOME}/.dsh" "${HOME}/.astroai/lab"
 astroai_boot_log "studio cwd=${STUDIO_CWD} (SRCDIR=${SRCDIR})"
 _state="${HOME}/.astroai/lab"
-
-# Match canfar-lab studio_env(): keep pnpm store / TMPDIR off quota /arc home.
-_user="${USER:-${LOGNAME:-$(id -un 2>/dev/null || echo user)}}"
-if [[ -n "${SCRATCH:-}" && -d "${SCRATCH}" && -w "${SCRATCH}" ]]; then
-    _studio_state="${SCRATCH}/.studio-${_user}"
-elif [[ -d /scratch && -w /scratch ]]; then
-    _studio_state="/scratch/.studio-${_user}"
-else
-    _studio_state="${TMPDIR:-/tmp}/.studio-${_user}"
-    astroai_boot_log "WARN: no writable scratch — Studio state → ${_studio_state}"
-fi
-mkdir -p "${_studio_state}/pnpm-store" "${_studio_state}/pnpm-home" "${_studio_state}/tmp"
-export ASTROAI_STUDIO_STATE="${_studio_state}"
-export ASTROAI_STUDIO_PROFILE=canfar
-export npm_config_store_dir="${_studio_state}/pnpm-store"
-export PNPM_HOME="${_studio_state}/pnpm-home"
-export TMPDIR="${_studio_state}/tmp"
-
-# Bind :5000 immediately (marimo pattern) so Skaha Connect does not 502 while
-# prepare/dsh still run. Proxy serves a 200 "starting" page until dsh is up.
-_dsh_log="${_studio_state}/dsh.log"
-_token_file="${_studio_state}/dsh-web-token"
-: >"${_dsh_log}"
-rm -f "${_token_file}"
-export ASTROAI_DSH_TOKEN_FILE="${_token_file}"
-python3 /opt/astroai/lib/studio-canfar-proxy.py &
-PROXY_PID=$!
 astroai_boot_log "studio-proxy :${ASTROAI_STUDIO_PORT} early (pid=${PROXY_PID})"
 
 cleanup() {
@@ -93,8 +93,10 @@ if command -v astroai >/dev/null 2>&1; then
             "${_state}/studio-prepare.log" 2>/dev/null; then
         astroai_boot_log "WARN: Team layers not mounted — run: astroai studio --prepare"
     fi
+    # Never block Connect on skills.sh network fetch (can hang minutes on cold
+    # npm). Install in the background after prepare returns.
     if command -v npx >/dev/null 2>&1; then
-        npx --yes skills add astroai/canfar-skills >/dev/null 2>&1 || true
+        (npx --yes skills add astroai/canfar-skills >/dev/null 2>&1 || true) &
     fi
 else
     astroai_boot_log "FATAL: astroai CLI missing — cannot prepare Studio profile"
@@ -127,14 +129,28 @@ cd "${STUDIO_CWD}"
 # Log to a file so we can scrape the one-shot ``?token=`` (Skaha Connect omits it).
 : >"${_dsh_log}"
 rm -f "${_token_file}"
+# Do NOT wrap node-based `dsh` in stdbuf — LD_PRELOAD breaks the binary and
+# the session crash-loops (Skaha liveness → connection refused on :5000).
+astroai_boot_log "starting dsh --profile astroai on :${DSH_PORT}"
 dsh --profile astroai --no-open --port "${DSH_PORT}" "${_DSH_TRUST[@]}" \
     >"${_dsh_log}" 2>&1 &
 DSH_PID=$!
+astroai_boot_log "dsh pid=${DSH_PID}"
 
 _extract_dsh_token() {
     # dsh prints: dsh web: http://127.0.0.1:3080/?token=…
+    # Tolerate ANSI, alternate separators, and delayed flushes on CephFS.
     local tok
-    tok="$(grep -oE 'token=[A-Za-z0-9_-]+' "${_dsh_log}" 2>/dev/null | head -1 | cut -d= -f2- || true)"
+    tok="$(
+        grep -aoE 'token[=:][A-Za-z0-9_-]+' "${_dsh_log}" 2>/dev/null \
+            | head -1 | sed -E 's/^token[=:]//' || true
+    )"
+    if [[ -z "${tok}" ]]; then
+        tok="$(
+            sed -nE 's/.*[?&]token=([A-Za-z0-9_-]+).*/\1/p' "${_dsh_log}" 2>/dev/null \
+                | head -1 || true
+        )"
+    fi
     if [[ -n "${tok}" ]]; then
         printf '%s\n' "${tok}" >"${_token_file}"
         return 0
@@ -163,17 +179,42 @@ for _ in $(seq 1 120); do
 done
 if [[ "${_dsh_ready}" != "1" ]]; then
     astroai_boot_log "dsh not ready on :${DSH_PORT} within 60s"
+    if [[ -s "${_dsh_log}" ]]; then
+        astroai_boot_log "dsh.log tail:"
+        tail -n 40 "${_dsh_log}" | while IFS= read -r _line; do
+            astroai_boot_log "  ${_line}"
+        done
+    fi
     exit 1
 fi
-# Token may land slightly after the listen socket opens.
-for _ in $(seq 1 20); do
+# Token often lands after the listen socket opens (slow home / CephFS). Wait up
+# to ~60s; keep a background scavenger for even later flushes.
+for _ in $(seq 1 120); do
     _extract_dsh_token && break
-    sleep 0.25
+    sleep 0.5
 done
 if [[ -s "${_token_file}" ]]; then
     astroai_boot_log "dsh web token captured for Skaha Connect redirect"
 else
-    astroai_boot_log "WARN: dsh web token not found — Connect URL may 401 without ?token="
+    astroai_boot_log "WARN: dsh web token not found yet — proxy stays on starting page"
+    if [[ -s "${_dsh_log}" ]]; then
+        astroai_boot_log "dsh.log tail (no token):"
+        tail -n 40 "${_dsh_log}" | while IFS= read -r _line; do
+            astroai_boot_log "  ${_line}"
+        done
+    else
+        astroai_boot_log "dsh.log empty after ready"
+    fi
+    (
+        for _ in $(seq 1 600); do
+            if _extract_dsh_token; then
+                astroai_boot_log "dsh web token captured (late) for Skaha Connect redirect"
+                exit 0
+            fi
+            kill -0 "${DSH_PID}" 2>/dev/null || exit 0
+            sleep 1
+        done
+    ) &
 fi
 
 # AstroAI hub + ghostty-web (proxy mounts /astroai-agents/ and /astroai-terminal/).
