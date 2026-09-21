@@ -57,7 +57,7 @@ def test_injects_api_shim_and_chips() -> None:
     assert b'id="astroai-agents-chip"' in out
     assert b'href="/session/contrib/abc/astroai-agents/"' in out
     assert b"astroai-resource-banner" not in out
-    assert b'data-astroai-proxy-rev="7"' in out
+    assert b'data-astroai-proxy-rev="8"' in out
     assert b"data-astroai-tab" in out  # branded tab stick
 
 
@@ -129,9 +129,14 @@ def test_index_token_redirect_without_prefix(tmp_path: Path, monkeypatch) -> Non
 
 
 def test_is_index_path() -> None:
+    proxy.PREFIX = ""
     assert proxy._is_index_path("/") is True
     assert proxy._is_index_path("/?token=x") is True
     assert proxy._is_index_path("/api/x") is False
+    proxy.PREFIX = "/session/contrib/abc"
+    assert proxy._is_index_path("/session/contrib/abc/") is True
+    assert proxy._is_index_path("/session/contrib/abc") is True
+    assert proxy._is_index_path("/session/contrib/abc/api") is False
 
 
 def test_starting_html_is_refreshable() -> None:

@@ -127,14 +127,30 @@ cd "${STUDIO_CWD}"
 # Log to a file so we can scrape the one-shot ``?token=`` (Skaha Connect omits it).
 : >"${_dsh_log}"
 rm -f "${_token_file}"
-dsh --profile astroai --no-open --port "${DSH_PORT}" "${_DSH_TRUST[@]}" \
-    >"${_dsh_log}" 2>&1 &
+# Line-buffer dsh so the launch URL is visible before the CephFS flush race.
+if command -v stdbuf >/dev/null 2>&1; then
+    stdbuf -oL -eL dsh --profile astroai --no-open --port "${DSH_PORT}" \
+        "${_DSH_TRUST[@]}" >"${_dsh_log}" 2>&1 &
+else
+    dsh --profile astroai --no-open --port "${DSH_PORT}" "${_DSH_TRUST[@]}" \
+        >"${_dsh_log}" 2>&1 &
+fi
 DSH_PID=$!
 
 _extract_dsh_token() {
     # dsh prints: dsh web: http://127.0.0.1:3080/?token=…
+    # Tolerate ANSI, alternate separators, and delayed flushes on CephFS.
     local tok
-    tok="$(grep -oE 'token=[A-Za-z0-9_-]+' "${_dsh_log}" 2>/dev/null | head -1 | cut -d= -f2- || true)"
+    tok="$(
+        grep -aoE 'token[=:][A-Za-z0-9_-]+' "${_dsh_log}" 2>/dev/null \
+            | head -1 | sed -E 's/^token[=:]//' || true
+    )"
+    if [[ -z "${tok}" ]]; then
+        tok="$(
+            sed -nE 's/.*[?&]token=([A-Za-z0-9_-]+).*/\1/p' "${_dsh_log}" 2>/dev/null \
+                | head -1 || true
+        )"
+    fi
     if [[ -n "${tok}" ]]; then
         printf '%s\n' "${tok}" >"${_token_file}"
         return 0
@@ -163,17 +179,42 @@ for _ in $(seq 1 120); do
 done
 if [[ "${_dsh_ready}" != "1" ]]; then
     astroai_boot_log "dsh not ready on :${DSH_PORT} within 60s"
+    if [[ -s "${_dsh_log}" ]]; then
+        astroai_boot_log "dsh.log tail:"
+        tail -n 40 "${_dsh_log}" | while IFS= read -r _line; do
+            astroai_boot_log "  ${_line}"
+        done
+    fi
     exit 1
 fi
-# Token may land slightly after the listen socket opens.
-for _ in $(seq 1 20); do
+# Token often lands after the listen socket opens (slow home / CephFS). Wait up
+# to ~60s; keep a background scavenger for even later flushes.
+for _ in $(seq 1 120); do
     _extract_dsh_token && break
-    sleep 0.25
+    sleep 0.5
 done
 if [[ -s "${_token_file}" ]]; then
     astroai_boot_log "dsh web token captured for Skaha Connect redirect"
 else
-    astroai_boot_log "WARN: dsh web token not found — Connect URL may 401 without ?token="
+    astroai_boot_log "WARN: dsh web token not found yet — proxy stays on starting page"
+    if [[ -s "${_dsh_log}" ]]; then
+        astroai_boot_log "dsh.log tail (no token):"
+        tail -n 40 "${_dsh_log}" | while IFS= read -r _line; do
+            astroai_boot_log "  ${_line}"
+        done
+    else
+        astroai_boot_log "dsh.log empty after ready"
+    fi
+    (
+        for _ in $(seq 1 600); do
+            if _extract_dsh_token; then
+                astroai_boot_log "dsh web token captured (late) for Skaha Connect redirect"
+                exit 0
+            fi
+            kill -0 "${DSH_PID}" 2>/dev/null || exit 0
+            sleep 1
+        done
+    ) &
 fi
 
 # AstroAI hub + ghostty-web (proxy mounts /astroai-agents/ and /astroai-terminal/).
