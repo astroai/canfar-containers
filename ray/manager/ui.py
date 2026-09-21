@@ -90,7 +90,7 @@ def setup_checklist_html(
         if authenticated
         else (
             '<span class="phase-bad">Not authenticated</span>'
-            ' — run in an AstroAI <strong>webterm</strong> or <strong>vscode</strong> session:'
+            ' — run in an AstroAI <strong>terminal</strong> or <strong>vscode</strong> session:'
             ' <code>canfar auth login</code>'
             ' <button type="button" class="btn btn-ghost btn-sm" id="copy-auth-cmd">Copy</button>'
         )

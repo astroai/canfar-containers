@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Local smoke for the improc image family:
 #   images.canfar.net/astroai/improc:<tag>
-#   images.canfar.net/astroai/improc-webterm:<tag>   (ttyd shell on improc)
+#   images.canfar.net/astroai/improc-terminal:<tag>   (browser shell on improc)
 #   images.canfar.net/astroai/improc-notebook:<tag>  (JupyterLab on improc)
 set -euo pipefail
 
@@ -11,7 +11,7 @@ OWNER="${OWNER:-astroai}"
 
 check_image() {
     local name="$1"
-    local extra="$2"  # image-specific check, e.g. "command -v ttyd" (empty for improc)
+    local extra="$2"  # image-specific check (empty for improc)
     local image="${REGISTRY}/${OWNER}/${name}:${TAG}"
     echo "Testing ${image}"
     docker run --rm --entrypoint bash "${image}" -lc "
@@ -47,10 +47,10 @@ check_image() {
 
 check_image improc ""
 
-# improc-webterm: browser shell on improc — ttyd must be present.
-check_image improc-webterm "command -v ttyd >/dev/null && echo 'PASS: ttyd' || { echo 'FAIL: ttyd missing'; missing=\$((missing + 1)); }"
+# improc-terminal: browser shell on improc — ghostty-web server must be present.
+check_image improc-terminal "test -f /opt/ghostty-web/server.mjs && echo 'PASS: ghostty-web' || { echo 'FAIL: ghostty-web missing'; missing=\$((missing + 1)); }"
 
 # improc-notebook: JupyterLab on improc — the improc science kernel must be registered.
 check_image improc-notebook "jupyter kernelspec list 2>/dev/null | grep -q improc && echo 'PASS: improc jupyter kernel' || { echo 'FAIL: improc jupyter kernel not registered'; missing=\$((missing + 1)); }"
 
-echo "improc family local smoke passed (improc, improc-webterm, improc-notebook)"
+echo "improc family local smoke passed (improc, improc-terminal, improc-notebook)"

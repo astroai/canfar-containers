@@ -553,7 +553,7 @@ echo "${AUTH_JSON}" | python3 -m json.tool || echo "${AUTH_JSON}"
 if ! printf '%s' "${AUTH_JSON}" | python3 -c "import json,sys; d=json.load(sys.stdin); sys.exit(0 if d.get('authenticated') else 1)"; then
     echo ""
     echo "Manager is not authenticated to CANFAR." >&2
-    echo "Run 'canfar auth login' once from an AstroAI webterm (persists under /arc/home), then retry." >&2
+    echo "Run 'canfar auth login' once from an AstroAI terminal (persists under /arc/home), then retry." >&2
     exit 1
 fi
 

@@ -11,4 +11,6 @@ exclude = ["*.ipynb", "config/notebooks/starter.py"]
 # byte-identical rendering; wrapping them risks changing output.
 [lint.per-file-ignores]
 "scripts/lib/agent-wizard.py" = ["E501"]
-"scripts/build-custom-webterm-ui.py" = ["E501"]
+"scripts/lib/studio-canfar-proxy.py" = ["E501"]
+"scripts/lib/orx-canfar-proxy.py" = ["E501"]
+"scripts/lib/astroai-html-proxy.py" = ["E501"]

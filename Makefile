@@ -1,4 +1,5 @@
-.PHONY: help build-all build/% build-ray build-improc push-all push/% push-ray push-improc test-local test-agent-local test-ray test-improc-local test-base-local test-host test-canfar test-canfar-agents test-canfar-session test-canfar-ray test-canfar-ray-gpu test-canfar-ray-autoscale clean clean-all lock-ray lock-astroai-lab lock-check lint lint-doc-quota sync-marimo-starter sync-notebook-starters
+.PHONY: help build-all build/% build-ray build-improc push-all push/% push-ray push-improc push-latest-tags release-push release-push-ray release-push-improc test-local test-agent-local test-studio-local test-ray test-improc-local test-base-local test-host test-canfar test-canfar-agents test-canfar-session test-canfar-ray test-canfar-ray-gpu test-canfar-ray-autoscale clean clean-all lock-ray lock-astroai-lab lock-check lint lint-doc-quota sync-marimo-starter sync-notebook-starters
+
 
 SHELL := bash
 OWNER ?= astroai
@@ -9,8 +10,9 @@ PYTHON_VERSION ?= 3.13
 
 export OWNER REGISTRY PYTHON_VERSION
 
-SESSION_IMAGES := base webterm ghostty-web notebook vscode marimo openresearch studio
+SESSION_IMAGES := base terminal notebook vscode marimo openresearch studio
 RAY_IMAGES := ray-manager ray-worker
+IMPROC_IMAGES := improc improc-terminal improc-notebook
 IMAGE_PREFIX := $(REGISTRY)/$(OWNER)
 
 help:
@@ -18,13 +20,17 @@ help:
 	@echo "========================="
 	@echo "  make build-all          build session images (base → sessions)"
 	@echo "  make build-ray          build ray-manager + ray-worker (+ base/slim chain)"
-	@echo "  make build-improc       build improc + improc-webterm + improc-notebook (+ base)"
+	@echo "  make build-improc       build improc + improc-terminal + improc-notebook (+ base)"
 	@echo "  make build/vscode       build one image (+ parents)"
 	@echo "  make push-all           push session images to Harbor"
 	@echo "  make push-ray           push Ray images to Harbor"
 	@echo "  make push-improc        push improc stack to Harbor"
+	@echo "  make release-push       bake+push session stack to Harbor (no local load; disk-safe)"
+	@echo "  make release-push-ray   bake+push Ray stack to Harbor (no local load; disk-safe)"
+	@echo "  make release-push-improc bake+push improc stack to Harbor (no local load; disk-safe)"
 	@echo "  make test-local         verify session images locally"
-	@echo "  make test-improc-local  verify improc family locally (improc/webterm/notebook)"
+	@echo "  make test-studio-local  Studio stamp+dangling .dsh boot → token → 200"
+	@echo "  make test-improc-local  verify improc family locally (improc/terminal/notebook)"
 	@echo "  make test-base-local    run every base-image CLI (not just command -v)"
 	@echo "  make test-agent-local   agent command matrix + no ~/.local pollution (all session images)"
 	@echo "  make test-ray           Ray container + local cluster + UI tests"
@@ -66,23 +72,27 @@ sync-notebook-starters: sync-marimo-starter ## copy all lab notebooks into confi
 	cp "$(ASTROAI_LAB_RAY_NB)" config/notebooks/ray_train.ipynb
 	@echo "updated config/notebooks/{starter.ipynb,ray_train.ipynb}"
 
-build-all: ## build session images
-	TAG=$(BUILD_TAG) docker buildx bake
+# --load lands tags in the local docker daemon (required for test-local /
+# test-agent-local). Without it, a docker-container buildx driver only caches.
+BAKE_FLAGS ?= --load
+
+build-all: ## build session images into local docker
+	TAG=$(BUILD_TAG) docker buildx bake $(BAKE_FLAGS)
 
 build-ray: ## build Ray manager + worker (uses same base TAG)
-	TAG=$(BUILD_TAG) docker buildx bake ray-manager ray-worker
+	TAG=$(BUILD_TAG) docker buildx bake $(BAKE_FLAGS) ray-manager ray-worker
 
-build-improc: ## build improc + improc-webterm + improc-notebook (+ base)
-	TAG=$(BUILD_TAG) docker buildx bake improc improc-webterm improc-notebook
+build-improc: ## build improc + improc-terminal + improc-notebook (+ base)
+	TAG=$(BUILD_TAG) docker buildx bake $(BAKE_FLAGS) improc improc-terminal improc-notebook
 
 build/%:
-	TAG=$(BUILD_TAG) docker buildx bake $(notdir $@)
+	TAG=$(BUILD_TAG) docker buildx bake $(BAKE_FLAGS) $(notdir $@)
 
 push-all: $(addprefix push/,$(SESSION_IMAGES))
 
 push-ray: $(addprefix push/,$(RAY_IMAGES))
 
-push-improc: push/improc push/improc-webterm push/improc-notebook ## push improc stack
+push-improc: push/improc push/improc-terminal push/improc-notebook ## push improc stack
 
 # Production Ray push: bake TAG into manager env (RAY_IMAGE_TAG) — use BUILD_TAG=$(TAG).
 #   make build-ray BUILD_TAG=26.09 TAG=26.09 && make push-ray TAG=26.09 BUILD_TAG=26.09
@@ -122,6 +132,29 @@ push/%:
 	docker tag $(IMAGE_PREFIX)/$(notdir $@):$(BUILD_TAG) $(IMAGE_PREFIX)/$(notdir $@):latest
 	docker push $(IMAGE_PREFIX)/$(notdir $@):latest
 
+# Disk-safe Harbor release: bake streams straight to the registry (no --load).
+# Requires docker login to $(REGISTRY). TAG defaults to YY.MM.
+# Also publishes :latest via registry-side retag (no local image download).
+push-latest-tags: ## point :latest at existing :$(TAG) digests in Harbor
+	@for img in $(IMAGES); do \
+		src="$(IMAGE_PREFIX)/$$img:$(TAG)"; \
+		dst="$(IMAGE_PREFIX)/$$img:latest"; \
+		echo "latest ← $$src"; \
+		docker buildx imagetools create -t "$$dst" "$$src"; \
+	done
+
+release-push: ## bake+push session images to Harbor as :$(TAG) and :latest
+	TAG=$(TAG) docker buildx bake --push
+	@$(MAKE) push-latest-tags IMAGES="$(SESSION_IMAGES)" TAG=$(TAG)
+
+release-push-ray: ## bake+push ray-manager + ray-worker as :$(TAG) and :latest
+	TAG=$(TAG) docker buildx bake --push ray-manager ray-worker
+	@$(MAKE) push-latest-tags IMAGES="$(RAY_IMAGES)" TAG=$(TAG)
+
+release-push-improc: ## bake+push improc + improc-terminal + improc-notebook as :$(TAG) and :latest
+	TAG=$(TAG) docker buildx bake --push improc improc-terminal improc-notebook
+	@$(MAKE) push-latest-tags IMAGES="$(IMPROC_IMAGES)" TAG=$(TAG)
+
 lock-ray: ## regenerate config/ray-deps.lock from config/ray-deps.txt (Python 3.13, Ray).
 	@tmp=$$(mktemp); \
 	UV_NO_CACHE=1 uv pip compile --python-version 3.13 --output-file "$$tmp" config/ray-deps.txt >/dev/null; \
@@ -150,7 +183,7 @@ lock-check: ## fail CI if a lockfile's package body drifts from its source. The 
 
 test-local: ## verify session images (parallel)
 	@fails=0; pids=(); \
-	for img in webterm ghostty-web notebook vscode marimo openresearch studio base; do \
+	for img in terminal notebook vscode marimo openresearch studio base; do \
 		./scripts/test-local.sh "$$img" --verify-only & pids+=($$!); \
 	done; \
 	for pid in "$${pids[@]}"; do wait "$$pid" || fails=$$((fails + 1)); done; \
@@ -162,10 +195,16 @@ test-local: ## verify session images (parallel)
 # adding/removing an image stays single-sourced). For a single-image dev run
 # use the script directly after building it: make build/openresearch &&
 # ./scripts/test-agent-local.sh openresearch (no build-all dependency).
-test-agent-local: build-all ## agent command matrix on all session images (local, mounted fresh home)
+# SKIP_BUILD=1 reuses already-loaded local tags (avoids a full bake).
+test-agent-local: ## agent command matrix on all session images (local, mounted fresh home)
+	@if [ "$(SKIP_BUILD)" != "1" ]; then $(MAKE) build-all BUILD_TAG=$(BUILD_TAG); fi
 	@chmod +x scripts/test-agent-local.sh
 	@TAG=$(BUILD_TAG) ./scripts/test-agent-local.sh $(if $(IMAGE),$(IMAGE),$(SESSION_IMAGES))
 	@echo "agent-local E2E passed for $(if $(IMAGE),$(IMAGE),all session images)"
+
+test-studio-local: ## Studio Connect regression: stamp + dangling ~/.dsh → token → 200
+	@chmod +x scripts/test-studio-local.sh
+	@TAG=$(BUILD_TAG) ./scripts/test-studio-local.sh
 
 test-ray: build-ray build/base ## Ray image checks + local cluster join + UI
 	chmod +x scripts/test-ray-*.sh scripts/test-astroai-lab-loop.sh scripts/ray-head-start.sh \
@@ -191,9 +230,9 @@ test-canfar-agents: ## post-push agent verb-surface probe on CANFAR (lightweight
 	CANFAR_TEST_AGENTS=1 ./scripts/test-canfar.sh $(or $(IMAGE),base) $(TAG)
 	@echo "CANFAR agent verb-surface verification passed for $(or $(IMAGE),base):$(TAG)"
 
-test-canfar-session: ## contributed/notebook Running + connectURL HTTP smoke
+test-canfar-session: ## post-push: Running + connectURL HTTP + log fatal scan
 	chmod +x scripts/test-canfar-session.sh
-	./scripts/test-canfar-session.sh $(or $(IMAGE),webterm) $(TAG)
+	./scripts/test-canfar-session.sh $(or $(IMAGE),terminal) $(TAG)
 
 test-canfar-ray: ## CANFAR manager UI + 2-worker cluster lifecycle
 	chmod +x scripts/test-canfar-ray.sh

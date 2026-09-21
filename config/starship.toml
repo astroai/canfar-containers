@@ -1,4 +1,4 @@
-# Prompt for webterm sessions: path, git, python, slow-command duration.
+# Prompt for terminal sessions: path, git, python, slow-command duration.
 
 format = """$directory$git_branch$git_status$python$cmd_duration$character"""
 

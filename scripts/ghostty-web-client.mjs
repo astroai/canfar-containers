@@ -20,6 +20,89 @@ function showError(err) {
   el.appendChild(box);
 }
 
+/** Decode OSC 52 payload (`Ps;Pt` where Pt is base64). Returns null on query/?/bad. */
+function decodeOsc52Payload(data) {
+  const semi = data.indexOf(";");
+  if (semi < 0) return null;
+  const b64 = data.slice(semi + 1);
+  if (!b64 || b64.charAt(0) === "?") return null;
+  try {
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new TextDecoder().decode(bytes);
+  } catch {
+    return null;
+  }
+}
+
+function writeClipboardText(text) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    return navigator.clipboard.writeText(text);
+  }
+  return new Promise((resolve, reject) => {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.cssText = "position:fixed;left:-9999px";
+    document.body.appendChild(ta);
+    ta.select();
+    ta.setSelectionRange(0, text.length);
+    try {
+      if (document.execCommand("copy")) resolve();
+      else reject(new Error("execCommand copy failed"));
+    } catch (e) {
+      reject(e);
+    } finally {
+      ta.remove();
+    }
+  });
+}
+
+/**
+ * ghostty-web does not expose xterm's registerOscHandler. Strip OSC 52 write
+ * sequences from the PTY stream, copy to the OS clipboard, and pass the rest
+ * through. Handles BEL and ST terminators; carries a small hold buffer for
+ * split frames.
+ */
+function makeOsc52Filter(onCopy) {
+  let hold = "";
+  const maxHold = 256 * 1024;
+  // ESC ] 52 ; <clipboard> ; <b64> BEL | ST
+  const osc52 = /\x1b\]52;([^\x07\x1b]*?)(?:\x07|\x1b\\)/g;
+
+  return (chunk) => {
+    let data = typeof chunk === "string" ? chunk : String(chunk);
+    if (hold) {
+      data = hold + data;
+      hold = "";
+    }
+    // Incomplete OSC at end: keep from last ESC ] that has no terminator yet.
+    const lastEsc = data.lastIndexOf("\x1b]");
+    if (lastEsc >= 0) {
+      const tail = data.slice(lastEsc);
+      if (!/(?:\x07|\x1b\\)/.test(tail) && tail.length < maxHold) {
+        hold = tail;
+        data = data.slice(0, lastEsc);
+      }
+    }
+    if (hold.length > maxHold) hold = "";
+
+    let out = "";
+    let last = 0;
+    osc52.lastIndex = 0;
+    let m;
+    while ((m = osc52.exec(data)) !== null) {
+      out += data.slice(last, m.index);
+      last = m.index + m[0].length;
+      const text = decodeOsc52Payload(m[1]);
+      if (text != null) onCopy(text);
+    }
+    out += data.slice(last);
+    return out;
+  };
+}
+
 try {
   await init();
   const term = new Terminal({
@@ -84,13 +167,25 @@ try {
     };
   }
 
+  const filterOsc52 = makeOsc52Filter((text) => {
+    writeClipboardText(text).catch(() => {});
+  });
+
+  // Selection drag → OS clipboard (parity with former ttyd terminal UX).
+  if (typeof term.onSelectionChange === "function") {
+    term.onSelectionChange(() => {
+      const sel = typeof term.getSelection === "function" ? term.getSelection() : "";
+      if (sel) writeClipboardText(sel).catch(() => {});
+    });
+  }
+
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
   const wsUrl =
     `${proto}//${location.host}${sessionBase()}ws?cols=${term.cols}&rows=${term.rows}`;
   let ws;
   function connect() {
     ws = new WebSocket(wsUrl);
-    ws.onmessage = (ev) => term.write(ev.data);
+    ws.onmessage = (ev) => term.write(filterOsc52(ev.data));
     ws.onclose = () => setTimeout(connect, 2000);
     ws.onerror = () => {
       term.write("\r\n\x1b[31mWebSocket error — retrying…\x1b[0m\r\n");

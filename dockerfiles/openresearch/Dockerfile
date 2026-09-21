@@ -2,7 +2,7 @@
 # AstroAI openresearch: OpenResearch (orx) autoresearch dashboard.
 # Installs the pinned upstream alphaXiv release musl binary — the Ray Jobs
 # compute backend ships upstream since v0.1.88 (#141), so no fork build.
-# Proxies :4791 → :5000.
+# Proxies :4791 → :5000; embeds ghostty-web at /astroai-terminal/.
 
 ARG REGISTRY=images.canfar.net
 ARG OWNER=astroai
@@ -10,18 +10,25 @@ ARG BASE_NAME=base
 ARG TAG=local
 # Pinned upstream release. Bump ORX_SHA256 together with ORX_VERSION
 # (sha256 of openresearch-cli-x86_64-unknown-linux-musl.tar.xz).
-ARG ORX_VERSION=v0.1.119
-ARG ORX_SHA256=19d96344435d444ac170f550c6a4e07aeed85c63459635027f368b51e7d6c2fd
+ARG ORX_VERSION=v0.2.4
+ARG ORX_SHA256=d86d6b5516b9274ed180911ba30cff0640f543e48115b2d58ef100d2a0121fd1
+# Keep in sync with dockerfiles/terminal/Dockerfile.
+ARG GHOSTTY_WEB_VERSION=0.4.0-next.20.g1858a59
+ARG NODE_PTY_VERSION=1.1.0
+ARG WS_VERSION=8.21.3
 
 FROM ${REGISTRY}/${OWNER}/${BASE_NAME}:${TAG}
 
 ARG ORX_VERSION
 ARG ORX_SHA256
+ARG GHOSTTY_WEB_VERSION
+ARG NODE_PTY_VERSION
+ARG WS_VERSION
 
 LABEL io.canfar.skaha.session.type="contributed" \
       org.opencontainers.image.title="AstroAI OpenResearch" \
       org.opencontainers.image.description="OpenResearch (orx) autoresearch dashboard for CANFAR" \
-      org.opencontainers.image.source="https://github.com/alphaXiv/openresearch-cli" \
+      org.opencontainers.image.source="https://github.com/alphaXiv/OpenResearch" \
       org.opencontainers.image.version="${ORX_VERSION}"
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
@@ -36,6 +43,30 @@ RUN TARBALL="openresearch-cli-x86_64-unknown-linux-musl.tar.xz"; \
     && install -m 0755 openresearch-cli-x86_64-unknown-linux-musl/orx /opt/astroai/bin/orx \
     && rm -rf "/tmp/${TARBALL}" /tmp/orx.sha256 /tmp/openresearch-cli-x86_64-unknown-linux-musl \
     && /opt/astroai/bin/orx --version
+
+# ghostty-web sidecar (same stack as astroai/terminal; proxy mounts /astroai-terminal/).
+RUN apt-get update && apt-get install -y --no-install-recommends tmux \
+    && rm -rf /var/lib/apt/lists/* \
+    && printf '%s\n' \
+        'set -g default-shell /bin/bash' \
+        'set -g mouse on' \
+        'set -g history-limit 50000' \
+        'set -g status-position top' \
+        'set -g status-left "#[fg=colour117,bold]AstroAI "' \
+        'set -g status-right "#[fg=colour245]#{host_short}"' \
+        'set -s escape-time 10' \
+        > /etc/tmux.conf
+
+COPY scripts/ghostty-web-server.mjs /opt/ghostty-web/server.mjs
+COPY scripts/ghostty-web-client.mjs /opt/ghostty-web/client.mjs
+RUN chmod a+r /opt/ghostty-web/server.mjs /opt/ghostty-web/client.mjs \
+    && npm install --omit=dev --prefix /opt/ghostty-web \
+        "ghostty-web@${GHOSTTY_WEB_VERSION}" \
+        "@lydell/node-pty@${NODE_PTY_VERSION}" \
+        "ws@${WS_VERSION}" \
+    && test -f /opt/ghostty-web/node_modules/ghostty-web/dist/ghostty-web.js \
+    && test -f /opt/ghostty-web/node_modules/ghostty-web/ghostty-vt.wasm \
+    && chmod -R a+rX /opt/ghostty-web
 
 ENV PATH="/opt/astroai/bin:${PATH}" \
     ORX_NO_UPDATE_CHECK=1 \

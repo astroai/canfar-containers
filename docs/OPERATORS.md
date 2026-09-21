@@ -26,8 +26,7 @@ flowchart LR
 | Image | Harbor path | Skaha type | Port | Portal? |
 |-------|-------------|------------|------|---------|
 | `base` | `…/astroai/base:<tag>` | — | — | No (parent / headless verify) |
-| `webterm` | `…/astroai/webterm:<tag>` | Contributed | 5000 | Yes |
-| `ghostty-web` | `…/astroai/ghostty-web:<tag>` | Contributed | 5000 | Yes |
+| `terminal` | `…/astroai/terminal:<tag>` | Contributed | 5000 | Yes |
 | `vscode` | `…/astroai/vscode:<tag>` | Contributed | 5000 | Yes |
 | `notebook` | `…/astroai/notebook:<tag>` | Notebook | 8888 | Yes |
 | `marimo` | `…/astroai/marimo:<tag>` | Contributed | 5000 | Yes |
@@ -36,13 +35,17 @@ flowchart LR
 | `ray-manager` | `…/astroai/ray-manager:<tag>` | Contributed | 5000 | Yes |
 | `ray-worker` | `…/astroai/ray-worker:<tag>` | Headless | — | No — manager launches |
 | `improc` | `…/astroai/improc:<tag>` | Headless | — | Optional (batch) |
-| `improc-webterm` | `…/astroai/improc-webterm:<tag>` | Contributed | 5000 | Yes |
+| `improc-terminal` | `…/astroai/improc-terminal:<tag>` | Contributed | 5000 | Yes |
 | `improc-notebook` | `…/astroai/improc-notebook:<tag>` | Notebook | 8888 | Yes |
 
 OCI label `io.canfar.skaha.session.type` marks `headless` / `contributed` / `notebook`.
 
+> **Rename:** Harbor image `webterm` is now **`terminal`** (`astroai/terminal`);
+> `improc-webterm` → **`improc-terminal`**. Re-register the new names in the
+> Science Portal; leave old Harbor tags until users migrate.
+
 Register **`ray-manager` only** for Ray. Workers stay headless. See [RAY.md](RAY.md).
-Register **`improc-webterm`** (Contributed) and **`improc-notebook`** (Notebook);
+Register **`improc-terminal`** (Contributed) and **`improc-notebook`** (Notebook);
 leave **`improc`** headless for batch. Build/push: `make build-improc` /
 `make push-improc`.
 
@@ -87,13 +90,12 @@ Session UIs listen at `/` on port **5000**.
 
 | Image | Proxy / listen notes |
 |-------|----------------------|
-| `webterm` | Listen `/` — no ttyd `--base-path` |
-| `ghostty-web` | Listen `/` — relative `./client.mjs`, `./dist/*`, WebSocket under session path |
+| `terminal` | Listen `/` — relative `./client.mjs`, `./dist/*`, WebSocket under session path (ghostty-web) |
 | `vscode` | `--server-base-path /session/contrib/<id>` for URL generation |
 | `marimo` | Listen `/` — **no** `--base-url`; HTML proxy on :5000 sticks session name in tab |
 | `notebook` | Ingress keeps path; Jupyter `base_url=session/notebook/<id>`; `appName` = session name |
-| `openresearch` | Path-rewrite proxy on :5000 + HTML title stick |
-| `studio` | dsh web loopback + path-rewrite proxy on :5000 + HTML title stick |
+| `openresearch` | Path-rewrite proxy on :5000 + HTML title stick; ghostty at `/astroai-terminal/` |
+| `studio` | dsh `astroai` profile loopback + path-rewrite proxy on :5000 + HTML title stick |
 | `ray-manager` | Server-rendered HTML `<title>` = session name |
 
 **Browser tab title:** Skaha sets the pod `hostname` to the session name (lowercase).
@@ -101,12 +103,11 @@ AstroAI images read it via `socket.gethostname()` (`scripts/lib/session_title.py
 
 | Mechanism | Images |
 |-----------|--------|
-| ttyd `titleFixed` | `webterm`, `improc-webterm` |
-| `ASTROAI_TAB_TITLE` + stick script | `ghostty-web` |
+| `ASTROAI_TAB_TITLE` + stick script | `terminal`, `improc-terminal` |
 | VS Code `window.title` | `vscode` |
 | JupyterLab `page_config.json` `appName` | `notebook`, `improc-notebook` |
 | `astroai-html-proxy.py` | `marimo` |
-| `orx-canfar-proxy.py` / agent wizard | `openresearch` |
+| `orx-canfar-proxy.py` / agent wizard / ghostty-web | `openresearch` |
 | `studio-canfar-proxy.py` / agent wizard | `studio` |
 | FastAPI HTML template | `ray-manager` |
 
@@ -123,18 +124,18 @@ entrypoint, ask the science-platform team for a per-image override that sets
 ## Science Portal checklist
 
 1. Push `images.canfar.net/astroai/*:<tag>` (sessions + Ray + improc stack).
-2. Register Contributed: `webterm`, `ghostty-web`, `vscode`, `marimo`, `openresearch`, `studio`, `ray-manager`, `improc-webterm` → port **5000**.
+2. Register Contributed: `terminal`, `vscode`, `marimo`, `openresearch`, `studio`, `ray-manager`, `improc-terminal` → port **5000**.
 3. Register Notebook: `notebook`, `improc-notebook` → port **8888**.
 4. Leave `base`, `ray-worker`, and `improc` (headless) off the interactive catalog (or list `improc` under headless only). `python` and `ray-base` are bake-only, never Harbor images.
 5. Document the published tag for users (`YY.MM`).
-6. Smoke: `make test-canfar-session IMAGE=webterm TAG=…`, `IMAGE=ghostty-web`, `IMAGE=openresearch`, `IMAGE=improc-webterm`, and `make test-canfar-ray TAG=…`.
+6. Smoke: `make test-canfar-session IMAGE=terminal TAG=…`, `IMAGE=studio`, `IMAGE=openresearch`, `IMAGE=improc-terminal`, and `make test-canfar-ray TAG=…`.
 7. **Agent verbs:** `make test-canfar-agents TAG=…` (lightweight in-session probe of the full agent verb surface — required after every image push; see below).
 
 ## Local smoke
 
 ```bash
-make build/webterm
-./scripts/test-local.sh webterm 5000
+make build/terminal
+./scripts/test-local.sh terminal 5000
 make build/notebook
 ./scripts/test-local.sh notebook 8888
 ```
@@ -142,6 +143,17 @@ make build/notebook
 ## Post-push verification on CANFAR
 
 Requires authenticated [`canfar`](https://opencadc.github.io/canfar/) (`canfar login`).
+
+**Minimum after every image push:** create a real session, confirm Running +
+healthy Connect URL, and **scan session logs for fatals** (no `FATAL:`,
+tracebacks, OOM, or studio missing `dsh web token captured…`):
+
+```bash
+make test-canfar-session IMAGE=studio TAG=26.09   # or terminal / openresearch / …
+```
+
+Local docker smokes are not a substitute — they miss Skaha Connect URL,
+trusted-host, and path-prefix behaviour.
 
 ```mermaid
 flowchart TD
@@ -153,8 +165,8 @@ flowchart TD
 **Interactive HTTP smoke** (works when headless scheduling is unhealthy):
 
 ```bash
-make test-canfar-session IMAGE=webterm TAG=26.09
-make test-canfar-session IMAGE=ghostty-web TAG=26.09
+make test-canfar-session IMAGE=terminal TAG=26.09
+make test-canfar-session IMAGE=studio TAG=26.09
 make test-canfar-session IMAGE=vscode TAG=26.09
 make test-canfar-session IMAGE=marimo TAG=26.09
 make test-canfar-session IMAGE=notebook TAG=26.09
@@ -162,11 +174,14 @@ make test-canfar-session IMAGE=openresearch TAG=26.09
 ```
 
 
-**OpenResearch notes:** Image installs the pinned upstream [alphaXiv](https://github.com/alphaXiv/openresearch-cli) musl release (`ORX_VERSION` + `ORX_SHA256` in the Dockerfile; the Ray Jobs backend ships upstream since v0.1.88). Startup defaults compute to Ray when a manager Jobs URL is already known; the AstroAI hub **Start batch compute** button ensures an autoscaling ray-manager and wires OpenResearch. Bump `ORX_VERSION`/`ORX_SHA256` together on upstream releases. See [USAGE.md](USAGE.md).
+**OpenResearch notes:** Image installs the pinned upstream [alphaXiv OpenResearch](https://github.com/alphaXiv/OpenResearch) musl release (`ORX_VERSION` + `ORX_SHA256` in the Dockerfile; currently **v0.2.4**; the Ray Jobs backend ships upstream since v0.1.88). Startup defaults compute to Ray when a manager Jobs URL is already known; the AstroAI hub **Start batch compute** button ensures an autoscaling ray-manager and wires OpenResearch. Bump `ORX_VERSION`/`ORX_SHA256` together on upstream releases. See [USAGE.md](USAGE.md).
 
-**Agent auto-setup:** UI kinds (`openresearch`, `vscode`, `studio`) default `ASTROAI_LAB_AGENT_SETUP=bg` when unset. **Marimo** stays opt-in for full setup (startup still runs `agent setup marimo` only). Webterm and ghostty-web stay opt-in. Failures never block the main UI; see `~/.astroai/lab/agent-setup.log`.
+**Agent auto-setup:** UI kinds (`openresearch`, `vscode`, `studio`) default `ASTROAI_LAB_AGENT_SETUP=bg` when unset. **Marimo** stays opt-in for full setup (startup still runs `agent setup marimo` only). Terminal stays opt-in. Failures never block the main UI; see `~/.astroai/lab/agent-setup.log`.
 
-**Studio notes:** Image bakes `@deepseek-ai/dsh` (pin in Dockerfile). Startup runs `dsh web` on loopback `:3080` and `studio-canfar-proxy.py` on `:5000`. See [STUDIO.md](STUDIO.md).
+**Studio notes:** Image bakes `@deepseek-ai/dsh` + pnpm (pins in Dockerfile).
+Startup runs sync `astroai studio --prepare --profile canfar --no-install`,
+then `dsh --profile astroai` on loopback `:3080` and `studio-canfar-proxy.py`
+on `:5000`. pnpm/TMPDIR land on session scratch. See [STUDIO.md](STUDIO.md).
 
 **Home quota readings:** Prefer CephFS xattrs over raw `df` (`astroai` `disk_usage`). `ceph.dir.rbytes` can lag after writes — expected Ceph behavior.
 
@@ -245,9 +260,10 @@ session record ages out. Prefer grepping `[astroai-boot]` for `common-init:ERR`,
 
 ## Agents and quota (operator view)
 
-- Agents install on demand via `astroai agent install` into `$HOME`
-  (`~/.local/bin`, upstream-compatible) — prefer that over baking agent
-  binaries into images. Skills: `npx skills add astroai/canfar-skills`.
+- Agents install on demand via `astroai agent install` into `$SCRATCH/.local/bin`
+  (`ASTROAI_LAB_BIN_DIR`) — prefer that over baking agent binaries into images
+  or installing onto `/arc` home (NFS is too slow). Skills:
+  `npx skills add astroai/canfar-skills`.
 - **Plugins vs skills:** images bake `astroai-lab` from `config/astroai-lab.lock`. That package's plugins are **MCP / tools / rules only**. Skill packs (`SKILL.md`) install via `npx skills add astroai/canfar-skills` (skills.sh), not `astroai agent plugins`.
 - **Release order:** merge/push `astroai-lab` first → `make lock-astroai-lab` here → rebuild/push images. Skipping the lock leaves Harbor on an older lab that still managed skills as plugins.
 - Quota warnings fire at session start and via `astroai status` (≈80 / 90 / 95%).

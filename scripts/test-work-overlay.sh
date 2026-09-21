@@ -8,7 +8,7 @@
 #
 # Usage:
 #   ./scripts/test-work-overlay.sh
-#   IMAGE=images.canfar.net/astroai/webterm:local ./scripts/test-work-overlay.sh
+#   IMAGE=images.canfar.net/astroai/terminal:local ./scripts/test-work-overlay.sh
 set -o pipefail
 
 REGISTRY="${REGISTRY:-images.canfar.net}"

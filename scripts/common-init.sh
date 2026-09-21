@@ -26,7 +26,7 @@ fi
 astroai_boot_log "common-init:profile.d done"
 
 _cache_dirs=(
-    "${ASTROAI_LAB_BIN_DIR:-${HOME}/.local/bin}"
+    "${ASTROAI_LAB_BIN_DIR:-${SCRATCH:+${SCRATCH}/.local/bin}}"
     "${ASTROAI_LAB_SAVE_DIR:-${HOME}/.astroai/lab/saves}"
     "${ASTROAI_LAB_CONFIG_DIR:-${HOME}/.astroai/lab}"
     "${HOME}/.ssh"
@@ -91,14 +91,14 @@ if [[ ! -f "${_state}/welcomed" ]]; then
            npx skills add astroai/canfar-skills   # skill packs (skills.sh)
            astroai agent install codex      # public release — no GitHub login
 WELCOME
-        if [[ "${ASTROAI_SESSION_KIND:-}" == "webterm" || "${ASTROAI_SESSION_KIND:-}" == "ghostty-web" ]]; then
+        if [[ "${ASTROAI_SESSION_KIND:-}" == "terminal" ]]; then
             printf '\n\033[1;36m%s\033[0m\n' "  Tmux: Ctrl-b c (new tab)  Ctrl-b n/p (switch)  Ctrl-b z (zoom)"
         fi
     fi
 fi
 
-# Startup scripts exec(3) into ttyd/jupyter/etc. Drop the profile guard so login
-# children (bash -l in webterm tmux) re-source profile after /etc/profile.
+# Startup scripts exec(3) into ghostty-web/jupyter/etc. Drop the profile guard so login
+# children (bash -l in terminal tmux) re-source profile after /etc/profile.
 
 # Notebook-safe caches even when platform overrides Jupyter CMD.
 if command -v astroai >/dev/null 2>&1; then
@@ -111,7 +111,7 @@ if command -v astroai >/dev/null 2>&1; then
   fi
   # Agent configs (MCP, rules, tools). Skills via npx skills — not AstroAI.
   # UI sessions default to background setup;
-  # webterm stays opt-in so terminal users are not surprised.
+  # terminal stays opt-in so terminal users are not surprised.
   #   ASTROAI_LAB_AGENT_SETUP=0     skip (explicit)
   #   ASTROAI_LAB_AGENT_SETUP=1     run in foreground before UI
   #   ASTROAI_LAB_AGENT_SETUP=bg    run in background
@@ -125,6 +125,20 @@ if command -v astroai >/dev/null 2>&1; then
   fi
   _agent_state="${HOME}/.astroai/lab"
   _agent_log="${_agent_state}/agent-setup.log"
+  # Scratch is per-session. Restore durable ~/.dsh before Studio/dsh boot, but
+  # do not block Connect on multi-hundred-MB force-relocates (those run async).
+  if command -v astroai >/dev/null 2>&1; then
+    mkdir -p "${_agent_state}"
+    {
+      echo "---- $(date -u +%Y-%m-%dT%H:%M:%SZ) agent layout --boot ----"
+      astroai --yes agent layout --boot
+    } >>"${_agent_state}/agent-runtime.log" 2>&1 || true
+    (
+      echo "---- $(date -u +%Y-%m-%dT%H:%M:%SZ) agent layout (full, bg) ----"
+      astroai --yes agent layout
+      echo "---- $(date -u +%Y-%m-%dT%H:%M:%SZ) agent layout end ----"
+    ) >>"${_agent_state}/agent-runtime.log" 2>&1 &
+  fi
   _agent_needs_run=0
   if [[ ! -f "${_agent_state}/agent-setup-stamp" || -f "${_agent_state}/agent-setup-failed" ]]; then
     _agent_needs_run=1

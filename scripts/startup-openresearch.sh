@@ -51,10 +51,26 @@ ORX_PORT="${ORX_PORT:-4791}"
 export ORX_PORT
 export ASTROAI_OPENRESEARCH_PORT="${ASTROAI_OPENRESEARCH_PORT:-5000}"
 export ASTROAI_AGENT_WIZARD_PORT="${ASTROAI_AGENT_WIZARD_PORT:-4792}"
+export ASTROAI_TERMINAL_PORT="${ASTROAI_TERMINAL_PORT:-4793}"
 
 # AstroAI agent wizard — never block orx if it fails.
 python3 /opt/astroai/lib/agent-wizard.py &
 WIZARD_PID=$!
+
+# ghostty-web shell (proxy mounts /astroai-terminal/). Same home as orx.
+if [[ -f /opt/ghostty-web/server.mjs ]]; then
+    _term_back="/"
+    if [[ -n "${skaha_sessionid:-}" ]]; then
+        _term_back="/session/contrib/${skaha_sessionid}/"
+    fi
+    HOST=127.0.0.1 PORT="${ASTROAI_TERMINAL_PORT}" \
+        ASTROAI_TAB_TITLE="${ASTROAI_TAB_TITLE:-AstroAI Terminal}" \
+        ASTROAI_TERMINAL_BACK_HREF="${_term_back}" \
+        ASTROAI_TERMINAL_BACK_LABEL="OpenResearch" \
+        PWD="${WORK:-${SRCDIR:-${HOME}}}" \
+        node /opt/ghostty-web/server.mjs &
+    GHOSTTY_PID=$!
+fi
 
 orx --no-telemetry up --port "${ORX_PORT}" --no-browser &
 ORX_PID=$!
@@ -62,8 +78,8 @@ ORX_PID=$!
 cleanup() {
     local rc=$?
     astroai_boot_log "session:exit rc=${rc}"
-    kill "${PROXY_PID:-}" "${WIZARD_PID:-}" "${ORX_PID}" 2>/dev/null || true
-    wait "${PROXY_PID:-}" "${WIZARD_PID:-}" "${ORX_PID}" 2>/dev/null || true
+    kill "${PROXY_PID:-}" "${WIZARD_PID:-}" "${GHOSTTY_PID:-}" "${ORX_PID}" 2>/dev/null || true
+    wait "${PROXY_PID:-}" "${WIZARD_PID:-}" "${GHOSTTY_PID:-}" "${ORX_PID}" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
 

@@ -43,29 +43,48 @@ def test_rewrites_quoted_assets() -> None:
     assert b'"/session/contrib/abc/assets/index.js"' in out
 
 
-def test_rewrites_quoted_astroai_agents() -> None:
-    proxy.PREFIX = "/session/contrib/abc"
-    html = b"<script>const i = p.indexOf('/astroai-agents');</script>"
-    out = proxy.rewrite_body(html, "text/html")
-    assert b"/session/contrib/abc/astroai-agents" in out
-    assert b"indexOf('/astroai-agents')" not in out
-
-
-def test_injects_shim_chip_banner() -> None:
+def test_injects_api_shim_and_chips() -> None:
     proxy.PREFIX = "/session/contrib/abc"
     html = b"<html><head></head><body><h1>dsh</h1></body></html>"
     out = proxy.rewrite_body(html, "text/html")
-    assert b'id="astroai-agents-chip"' in out
-    assert b'href="/session/contrib/abc/astroai-agents/"' in out
-    assert b'id="astroai-resource-banner"' in out
     assert b"data-astroai-api-shim" in out
+    assert b"instanceof URL" in out  # fetch(URL) rewrite for directoryPicker RPCs
+    assert b"ownsHost" in out  # Settings→Models needs isLoopback / ownsHost
     assert b"window.WebSocket" in out
     assert b"EventSource" in out
+    assert b'id="astroai-terminal-chip"' in out
+    assert b'href="/session/contrib/abc/astroai-terminal/"' in out
+    assert b'id="astroai-agents-chip"' in out
+    assert b'href="/session/contrib/abc/astroai-agents/"' in out
+    assert b"astroai-resource-banner" not in out
+    assert b'data-astroai-proxy-rev="7"' in out
+    assert b"data-astroai-tab" in out  # branded tab stick
+
+
+def test_rewrites_base_href_to_session_prefix() -> None:
+    proxy.PREFIX = "/session/contrib/abc"
+    html = b'<html><head><base href="/"><link href="./assets/x.js"></head><body></body></html>'
+    out = proxy.rewrite_body(html, "text/html")
+    assert b'<base href="/session/contrib/abc/">' in out
+    assert b'<base href="/">' not in out
 
 
 def test_rewrite_location_api() -> None:
     proxy.PREFIX = "/session/contrib/abc"
     assert proxy.rewrite_location("/api/foo") == "/session/contrib/abc/api/foo"
+    assert proxy.rewrite_location("/") == "/session/contrib/abc/"
+    assert proxy.rewrite_location("/?x=1") == "/session/contrib/abc/?x=1"
+    assert proxy.rewrite_location("/session/contrib/abc/") == "/session/contrib/abc/"
+
+
+def test_upstream_path_strips_session_prefix() -> None:
+    proxy.PREFIX = "/session/contrib/abc"
+    assert proxy.upstream_path("/session/contrib/abc/") == "/"
+    assert proxy.upstream_path("/session/contrib/abc/?token=t") == "/?token=t"
+    assert proxy.upstream_path("/session/contrib/abc/assets/x.js") == "/assets/x.js"
+    assert proxy.upstream_path("/api/x") == "/api/x"
+    proxy.PREFIX = ""
+    assert proxy.upstream_path("/session/contrib/abc/") == "/session/contrib/abc/"
 
 
 def test_no_prefix_leaves_absolute_paths() -> None:
@@ -78,23 +97,68 @@ def test_no_prefix_leaves_absolute_paths() -> None:
 
 def test_is_websocket_request() -> None:
     class H:
-        headers = {"Connection": "Upgrade", "Upgrade": "websocket"}
+        headers: dict[str, str]
 
-    assert proxy.is_websocket_request(H()) is True  # type: ignore[arg-type]
+    h = H()
+    h.headers = {"Connection": "Upgrade", "Upgrade": "websocket"}
+    assert proxy.is_websocket_request(h) is True
+    h.headers = {"Connection": "keep-alive"}
+    assert proxy.is_websocket_request(h) is False
 
-    class H2:
-        headers = {"Connection": "keep-alive", "Upgrade": ""}
 
-    assert proxy.is_websocket_request(H2()) is False  # type: ignore[arg-type]
+def test_index_token_redirect_adds_token(tmp_path: Path, monkeypatch) -> None:
+    token_file = tmp_path / "dsh-web-token"
+    token_file.write_text("sekrit\n", encoding="utf-8")
+    monkeypatch.setenv("ASTROAI_DSH_TOKEN_FILE", str(token_file))
+    proxy.TOKEN_FILE = str(token_file)
+    proxy.PREFIX = "/session/contrib/abc"
+    loc = proxy.index_token_redirect("/", None)
+    assert loc == "/session/contrib/abc/?token=sekrit"
+    assert proxy.index_token_redirect("/?token=sekrit", None) is None
+    assert proxy.index_token_redirect("/", "dsh-auth-xyz=1") is None
+    assert proxy.index_token_redirect("/api/x", None) is None
+
+
+def test_index_token_redirect_without_prefix(tmp_path: Path, monkeypatch) -> None:
+    token_file = tmp_path / "tok"
+    token_file.write_text("t1", encoding="utf-8")
+    monkeypatch.setenv("ASTROAI_DSH_TOKEN_FILE", str(token_file))
+    proxy.TOKEN_FILE = str(token_file)
+    proxy.PREFIX = ""
+    assert proxy.index_token_redirect("/", None) == "/?token=t1"
+
+
+def test_is_index_path() -> None:
+    assert proxy._is_index_path("/") is True
+    assert proxy._is_index_path("/?token=x") is True
+    assert proxy._is_index_path("/api/x") is False
+
+
+def test_starting_html_is_refreshable() -> None:
+    assert b'meta http-equiv="refresh"' in proxy.STARTING_HTML
+    assert b"AstroAI Studio is starting" in proxy.STARTING_HTML
 
 
 if __name__ == "__main__":
+    import tempfile
+
     test_keeps_bare_api_channel_string()
     test_rewrites_quoted_api_slash_paths()
     test_rewrites_quoted_assets()
-    test_rewrites_quoted_astroai_agents()
-    test_injects_shim_chip_banner()
+    test_injects_api_shim_and_chips()
+    test_rewrites_base_href_to_session_prefix()
     test_rewrite_location_api()
+    test_upstream_path_strips_session_prefix()
     test_no_prefix_leaves_absolute_paths()
     test_is_websocket_request()
+    test_is_index_path()
+    test_starting_html_is_refreshable()
+    with tempfile.TemporaryDirectory() as td:
+        tok = Path(td) / "dsh-web-token"
+        tok.write_text("sekrit\n", encoding="utf-8")
+        proxy.TOKEN_FILE = str(tok)
+        proxy.PREFIX = "/session/contrib/abc"
+        assert proxy.index_token_redirect("/", None) == "/session/contrib/abc/?token=sekrit"
+        proxy.PREFIX = ""
+        assert proxy.index_token_redirect("/", None) == "/?token=sekrit"
     print("ok")

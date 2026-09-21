@@ -14,7 +14,7 @@ This file ships inside images as `/opt/astroai/USAGE.md`.
 
 ## Scientist card
 
-1. Portal → launch **studio** (coding portal) or **openresearch** (autoresearch) as home base (or webterm/vscode/notebook/marimo/ray-manager as needed).
+1. Portal → launch **studio** (coding portal) or **openresearch** (autoresearch) as home base (or terminal/vscode/notebook/marimo/ray-manager as needed).
 2. Inside: `astroai` · `astroai help` · `less /opt/astroai/USAGE.md`
 3. Work under `$SRCDIR` (same as `$WORK`; `/scratch/src` on CANFAR so container OOM does not wipe it) and `/scratch` (data/caches).
 4. Persist to `/arc/home` or `/arc/projects` before the session ends (`astroai save` / `git push`).
@@ -24,7 +24,9 @@ This file ships inside images as `/opt/astroai/USAGE.md`.
 
 1. Launch **`studio`** with tag `26.09` / `latest`.
 2. Open the connect URL — DeepSeek Harness (`dsh`) coding agent in the browser.
-3. Blue **AstroAI** chip (top-right) or `/astroai-agents/` → Install/Setup agents, **Start batch compute**.
+3. Top-right chips (same as openresearch):
+   - **Terminal** → `/astroai-terminal/` (ghostty-web + tmux; **← Studio** returns)
+   - **AstroAI** → `/astroai-agents/` — Install/Setup agents, **Start batch compute**
 4. Skills: `npx skills add astroai/canfar-skills`. Team review: pick **AstroAI Studio Team** preset (or `astroai panel run` headless).
 5. Laptop: `astroai studio` (same stack, no Skaha proxy).
 
@@ -38,16 +40,18 @@ canfar create --name studio contributed images.canfar.net/astroai/studio:26.09
 2. Open the connect URL, then either:
    - click the blue **AstroAI** chip (top-right), or
    - append `/astroai-agents/` (e.g. `…/session/contrib/<id>/astroai-agents/`).
-3. In the hub (one screen):
+3. For a shell in the same session: click **Terminal** (left of AstroAI) or open
+   `/astroai-terminal/` — ghostty-web + tmux. **← OpenResearch** returns to orx.
+4. In the hub (one screen):
    - **Start batch compute** — autoscaling ray-manager, wires OpenResearch (when on openresearch)
-   - Agent table — same columns as `astroai agent list` (Agent, Bin, Cfg, Where, Ver). **Install** puts the CLI on PATH; **Setup** writes that agent's config, skills dirs, and default MCP/rules/tools on `/arc/home`. Skill packs: `npx skills add astroai/canfar-skills`
+   - Agent table — same columns as `astroai agent list` (Agent, Bin, Cfg, Where, Ver). **Install** puts the CLI on `$SCRATCH/.local/bin`; **Setup** writes that agent's config, skills dirs, and default MCP/rules/tools on `/arc/home`. Skill packs: `npx skills add astroai/canfar-skills`
    - Status shows CANFAR auth, manager Running/Pending, wire state, Jobs URL
    - **← Back** returns to the main UI
-4. Run experiments in OpenResearch — default compute is already CANFAR batch. Put shared I/O on `/arc` (`/scratch` is per-pod only).
-5. Power users: `astroai agent …` in webterm; cluster ops on ray-manager.
+5. Run experiments in OpenResearch — default compute is already CANFAR batch. Put shared I/O on `/arc` (`/scratch` is per-pod only).
+6. Power users: `astroai agent …` in the Terminal chip; cluster ops on ray-manager.
 
 ```bash
-canfar login   # once, from webterm — persists under /arc/home
+canfar login   # once, from terminal — persists under /arc/home
 canfar create --name orx contributed images.canfar.net/astroai/openresearch:26.09
 canfar open <session-id>
 # Hub: …/astroai-agents/ → Start batch compute
@@ -117,7 +121,7 @@ astroai save mylab
 astroai resume mylab --yes
 astroai cluster start
 astroai run train.py --cpus 2
-astroai agent setup         # once (UI sessions auto-run in background; webterm opt-in)
+astroai agent setup         # once (UI sessions auto-run in background; terminal opt-in)
 astroai agent install claude
 astroai kernel ensure       # notebook
 ```
@@ -130,16 +134,15 @@ Compilers and editors are in interactive images; put CUDA/ML stacks in your pixi
 
 | Image | Notes |
 |-------|-------|
-| `webterm` | ttyd + tmux on `:5000` |
-| `ghostty-web` | ghostty-web + tmux on `:5000` |
+| `terminal` | ghostty-web + tmux on `:5000` |
 | `vscode` | OpenVSCode on `:5000` |
 | `marimo` | Reactive `.py` notebooks; starter seeded once under `$SRCDIR/notebooks` |
 | `notebook` | JupyterLab `:8888`. Stock Skaha may run platform Jupyter CMD — AstroAI `startup-notebook.sh` only with a platform override ([OPERATORS.md](OPERATORS.md)) |
-| `openresearch` | Autoresearch UI (`orx`) on `:5000`; AstroAI hub at `/astroai-agents/` (batch compute + agent list) |
-| `studio` | dsh coding portal on `:5000`; AstroAI hub at `/astroai-agents/` — see [STUDIO.md](STUDIO.md) |
+| `openresearch` | Autoresearch UI (`orx`) on `:5000`; **Terminal** chip → `/astroai-terminal/` (ghostty-web); AstroAI hub at `/astroai-agents/` |
+| `studio` | dsh coding portal on `:5000`; **Terminal** + **AstroAI** chips — see [STUDIO.md](STUDIO.md) |
 | `ray-manager` | Cluster UI + Ray head; see Ray section |
 | `improc` | Headless FITS/HDF5 image-processing CLIs — see [Image processing (`improc`)](#image-processing-improc) |
-| `improc-webterm` | Same tools + browser terminal (ttyd/tmux) |
+| `improc-terminal` | Same tools + browser terminal (ghostty-web/tmux) |
 | `improc-notebook` | Same tools + JupyterLab (default kernel = science venv) |
 
 CADC clients (`cadcget`, `vls`, …) are on PATH from `/opt/astroai/venv/cadc`.
@@ -151,7 +154,7 @@ CADC clients (`cadcget`, `vls`, …) are on PATH from `/opt/astroai/venv/cadc`.
 | Image | Use |
 |-------|-----|
 | `improc` | Headless batch |
-| `improc-webterm` | Interactive CLI (Contributed, :5000) |
+| `improc-terminal` | Interactive CLI (Contributed, :5000) |
 | `improc-notebook` | JupyterLab (Notebook, :8888); kernel **Python 3 (improc)** has healpy/galsim/… |
 
 PATH includes `/opt/astroai/venv/improc/bin` and sourcextractor++.

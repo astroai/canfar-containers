@@ -14,7 +14,9 @@ const require = createRequire(import.meta.url);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 5000);
 const HOST = process.env.HOST || "0.0.0.0";
-const TITLE = process.env.ASTROAI_TAB_TITLE || "AstroAI ghostty-web";
+const TITLE = process.env.ASTROAI_TAB_TITLE || "AstroAI Terminal";
+const BACK_HREF = process.env.ASTROAI_TERMINAL_BACK_HREF || "";
+const BACK_LABEL = process.env.ASTROAI_TERMINAL_BACK_LABEL || "Back";
 const CWD = process.env.PWD || process.cwd();
 
 function stickTitleScript(title) {
@@ -36,6 +38,10 @@ const MIME = {
   ".wasm": "application/wasm",
 };
 
+const backLink = BACK_HREF
+  ? `<a href="${BACK_HREF.replace(/"/g, "")}" style="position:fixed;left:12px;top:10px;z-index:2;padding:6px 10px;border-radius:6px;background:#313244;color:#cdd6f4;font:600 12px/1.2 system-ui,sans-serif;text-decoration:none;border:1px solid #585b70">← ${BACK_LABEL.replace(/[<>]/g, "")}</a>`
+  : "";
+
 const HTML = `<!doctype html>
 <html lang="en">
 <head>
@@ -51,6 +57,7 @@ html,body{margin:0;height:100%;background:#1e1e2e;overflow:hidden}
 </style>
 </head>
 <body>
+${backLink}
 <div id="terminal"></div>
 <script type="module" src="./client.mjs"></script>
 </body>

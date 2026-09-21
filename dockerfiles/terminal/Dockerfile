@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-# AstroAI ghostty-web: browser shell via ghostty-web + tmux.
+# AstroAI terminal: browser shell via ghostty-web + tmux (Harbor: astroai/terminal).
 
 ARG REGISTRY=images.canfar.net
 ARG OWNER=astroai
@@ -7,7 +7,7 @@ ARG BASE_NAME=base
 ARG TAG=local
 ARG STARSHIP_VERSION=1.26.0
 ARG STARSHIP_SHA256_X64=b7c232b0e8249d8e55a40beb79c5c43a7d370f3f9408bd215deb0170daeaadf3
-ARG STARSHIP_SHA256_ARM64=dc30189378d2f2e287384e8a692d3f95ad1df64cf0e8c36aa9201516028aed6b
+ARG STARSHIP_SHA256_ARM64=dc30189378d2f2e287384e8a805d3f95ad1df64cf0e8c36aa9201516028aed6b
 # 0.4.0 stubs getHyperlinkUri()→null (OSC 8 links dead). next.20 wires the WASM URI API.
 ARG GHOSTTY_WEB_VERSION=0.4.0-next.20.g1858a59
 ARG NODE_PTY_VERSION=1.1.0
@@ -84,6 +84,11 @@ RUN printf '%s\n' \
          printf '%s\n' 'set -as terminal-features ",*:clipboard"' >> /etc/tmux.conf; \
        fi
 
+ENV PATH="/opt/astroai/bin:${PATH}"
+
+# Session kind for common-init / agent setup policy (also set in startup-terminal.sh).
+ENV ASTROAI_SESSION_KIND=terminal
+
 COPY scripts/osc52-copy /opt/astroai/bin/osc52-copy
 RUN chmod a+rx /opt/astroai/bin/osc52-copy
 
@@ -99,8 +104,8 @@ RUN chmod a+r /opt/ghostty-web/server.mjs /opt/ghostty-web/client.mjs \
     && test -f /opt/ghostty-web/node_modules/ghostty-web/ghostty-vt.wasm \
     && chmod -R a+rX /opt/ghostty-web
 
-COPY scripts/common-init.sh scripts/startup-ghostty-web.sh /cadc/
-COPY scripts/skaha-startup-ghostty-web.sh /skaha/startup.sh
+COPY scripts/common-init.sh scripts/startup-terminal.sh /cadc/
+COPY scripts/skaha-startup-terminal.sh /skaha/startup.sh
 RUN chmod a+rx /cadc/*.sh /skaha/startup.sh
 
 EXPOSE 5000

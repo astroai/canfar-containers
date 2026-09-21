@@ -10,7 +10,7 @@ Operating guidance for coding agents and maintainers working in `astroai/canfar-
 
 - **Bake Graph (`docker-bake.hcl`):**
   - Untagged `python` stage (Python 3.13 + uv/pixi foundation).
-  - Fat `base` (compilers + session tools) → interactive sessions (`webterm`, `ghostty-web`, `vscode`, `notebook`, `marimo`, `openresearch`, `studio`) and `improc` stack (`improc`, `improc-webterm`, `improc-notebook`).
+  - Fat `base` (compilers + session tools) → interactive sessions (`terminal`, `vscode`, `notebook`, `marimo`, `openresearch`, `studio`) and `improc` stack (`improc`, `improc-terminal`, `improc-notebook`).
   - Slim `ray-base` → `ray-worker`; fat `base` → `ray-manager`.
 - **Ray Stack (`ray/`):**
   - FastAPI-based Ray cluster manager app (`ray/manager/`) and worker lifecycle helpers (`ray/worker/`).
