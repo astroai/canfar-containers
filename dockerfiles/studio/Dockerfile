@@ -37,6 +37,11 @@ RUN npm install -g --prefix /opt/astroai "@deepseek-ai/dsh@${DSH_VERSION}" \
     && corepack prepare pnpm@9.15.9 --activate \
     && pnpm --version
 
+# Keys-only: do not force the DeepSeek-only "Add an API key to get started" gate.
+COPY scripts/patch-dsh-skip-deepseek-onboarding.sh /tmp/patch-dsh-skip-deepseek-onboarding.sh
+RUN bash /tmp/patch-dsh-skip-deepseek-onboarding.sh /opt/astroai \
+    && rm -f /tmp/patch-dsh-skip-deepseek-onboarding.sh
+
 # ghostty-web sidecar (same stack as astroai/terminal; proxy mounts /astroai-terminal/).
 RUN apt-get update && apt-get install -y --no-install-recommends tmux \
     && rm -rf /var/lib/apt/lists/* \
