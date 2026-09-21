@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import contextlib
 import os
+import re
 import select
 import socket
 import sys
@@ -186,6 +187,36 @@ def has_dsh_auth_cookie(cookie_header: str | None) -> bool:
     return any(part.strip().startswith(COOKIE_PREFIX) for part in cookie_header.split(";"))
 
 
+def expire_dsh_auth_cookies(cookie_header: str | None) -> list[str]:
+    """Expire every ``dsh-auth-*`` cookie the browser sent (stale session recovery)."""
+    if not cookie_header:
+        return []
+    headers: list[str] = []
+    seen: set[str] = set()
+    for part in cookie_header.split(";"):
+        name = part.strip().split("=", 1)[0].strip()
+        if not name.startswith(COOKIE_PREFIX) or name in seen:
+            continue
+        seen.add(name)
+        # Clear both Path=/ (dsh default) and PREFIX/ in case a prior rewrite
+        # scoped the cookie to the session path.
+        headers.append(f"{name}=; Max-Age=0; Path=/")
+        if PREFIX:
+            headers.append(f"{name}=; Max-Age=0; Path={PREFIX}/")
+    return headers
+
+
+def rewrite_set_cookie(value: str) -> str:
+    """Make dsh auth cookies usable after Skaha portal → workloads Connect.
+
+    dsh emits ``SameSite=Strict``. Connect is a cross-site top-level navigation
+    from the science portal host, so Strict cookies set on the ``?token=``
+    hop are omitted on the following ``/`` redirect and the SPA 401s with
+    "dsh web authentication required".
+    """
+    return re.sub(r"(?i)SameSite=Strict", "SameSite=Lax", value)
+
+
 def index_token_redirect(path: str, cookie_header: str | None) -> str | None:
     """If Skaha hit ``/`` without ``?token=``, redirect to the dsh launch token URL.
 
@@ -259,7 +290,7 @@ def rewrite_body(data: bytes, content_type: str) -> bytes:
         if 'data-astroai-proxy-rev="' not in text:
             text = text.replace(
                 "<head>",
-                '<head><meta data-astroai-proxy-rev="8" />',
+                '<head><meta data-astroai-proxy-rev="9" />',
                 1,
             )
         chips = ""
@@ -463,6 +494,30 @@ def _forward(
 
     content_type = upstream.getheader("Content-Type") or ""
     raw = b"" if streaming else upstream.read()
+
+    # Stale dsh-auth-* cookie: proxy skipped ?token= redirect, dsh answers 401
+    # "authentication required". Clear cookies and bounce to the launch token.
+    if (
+        not streaming
+        and upstream.status == 401
+        and host == DSH_HOST
+        and port == DSH_PORT
+        and _is_index_path(path)
+        and not parse_qs(urlparse(path).query).get("token")
+    ):
+        loc = index_token_redirect("/", None)
+        if loc:
+            handler.send_response(302, "Found")
+            handler.send_header("Location", loc)
+            handler.send_header("Cache-Control", "no-store")
+            for cookie in expire_dsh_auth_cookies(handler.headers.get("Cookie")):
+                handler.send_header("Set-Cookie", cookie)
+            handler.send_header("Content-Length", "0")
+            handler.end_headers()
+            handler.log_message('"auth-recovery" %s → %s', path, loc)
+            conn.close()
+            return
+
     if not streaming and rewrite:
         raw = rewrite_body(raw, content_type)
 
@@ -473,6 +528,8 @@ def _forward(
             continue
         if lk == "location":
             value = rewrite_location(value)
+        if lk == "set-cookie":
+            value = rewrite_set_cookie(value)
         if lk == "content-length" and not streaming:
             continue
         handler.send_header(key, value)

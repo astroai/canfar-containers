@@ -57,7 +57,7 @@ def test_injects_api_shim_and_chips() -> None:
     assert b'id="astroai-agents-chip"' in out
     assert b'href="/session/contrib/abc/astroai-agents/"' in out
     assert b"astroai-resource-banner" not in out
-    assert b'data-astroai-proxy-rev="8"' in out
+    assert b'data-astroai-proxy-rev="9"' in out
     assert b"data-astroai-tab" in out  # branded tab stick
 
 
@@ -137,6 +137,29 @@ def test_is_index_path() -> None:
     assert proxy._is_index_path("/session/contrib/abc/") is True
     assert proxy._is_index_path("/session/contrib/abc") is True
     assert proxy._is_index_path("/session/contrib/abc/api") is False
+
+
+def test_rewrite_set_cookie_relaxes_samesite() -> None:
+    raw = (
+        "dsh-auth-X=v1.abc; Max-Age=2592000; Path=/; "
+        "HttpOnly; SameSite=Strict"
+    )
+    out = proxy.rewrite_set_cookie(raw)
+    assert "SameSite=Lax" in out
+    assert "SameSite=Strict" not in out
+
+
+def test_expire_dsh_auth_cookies() -> None:
+    proxy.PREFIX = "/session/contrib/abc"
+    headers = proxy.expire_dsh_auth_cookies(
+        "dsh-auth-dead=v1.x; other=1; dsh-auth-dead=v1.x"
+    )
+    assert any(h.startswith("dsh-auth-dead=; Max-Age=0; Path=/") for h in headers)
+    assert any(
+        h.startswith("dsh-auth-dead=; Max-Age=0; Path=/session/contrib/abc/")
+        for h in headers
+    )
+    assert len(headers) == 2  # deduped name, two paths
 
 
 def test_starting_html_is_refreshable() -> None:
