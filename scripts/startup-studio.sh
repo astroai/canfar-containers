@@ -133,10 +133,64 @@ export ASTROAI_DSH_TOKEN_FILE="${_token_file}"
 : >"${_dsh_log}"
 rm -f "${_token_file}"
 
+_dsh_home="${DSH_HOME:-${HOME}/.dsh}"
+mkdir -p "${_dsh_home}"
+
+# dsh-atomic-write leaves `<file>.lock` (pid inside) and never removes orphans —
+# "orphan recovery is an operator action". Prior Skaha crash-loops leave
+# ~/.dsh/.credentials.yaml.lock on CephFS; the next boot then times out (~2s
+# default, longer when waitMs is raised) and Connect sticks on STARTING.
+_clear_stale_dsh_locks() {
+    local lock pid
+    shopt -s nullglob
+    for lock in "${_dsh_home}"/*.lock "${_dsh_home}"/.*.lock; do
+        [[ -f "${lock}" ]] || continue
+        pid="$(tr -dc '0-9' <"${lock}" 2>/dev/null | head -c 16 || true)"
+        if [[ -n "${pid}" ]] && kill -0 "${pid}" 2>/dev/null; then
+            continue
+        fi
+        rm -f "${lock}" && astroai_boot_log "removed stale dsh lock $(basename "${lock}")"
+    done
+    shopt -u nullglob
+}
+
+_dump_dsh_log() {
+    local reason="${1:-dsh.log}"
+    if [[ -s "${_dsh_log}" ]]; then
+        astroai_boot_log "${reason}:"
+        tail -n 60 "${_dsh_log}" | while IFS= read -r _line; do
+            astroai_boot_log "  ${_line}"
+        done
+    else
+        astroai_boot_log "${reason}: empty"
+    fi
+}
+
+_stop_dsh() {
+    if [[ -n "${DSH_PID:-}" ]] && kill -0 "${DSH_PID}" 2>/dev/null; then
+        kill "${DSH_PID}" 2>/dev/null || true
+        wait "${DSH_PID}" 2>/dev/null || true
+    fi
+    # Reap anything still bound to :DSH_PORT (restart races).
+    if command -v fuser >/dev/null 2>&1; then
+        fuser -k "${DSH_PORT}/tcp" 2>/dev/null || true
+    fi
+    DSH_PID=""
+}
+
 _start_dsh() {
+    _stop_dsh
+    _clear_stale_dsh_locks
     astroai_boot_log "starting dsh --profile astroai on :${DSH_PORT}"
-    dsh --profile astroai --no-open --port "${DSH_PORT}" "${_DSH_TRUST[@]}" \
-        >"${_dsh_log}" 2>&1 &
+    # Line-buffer when possible so the launch ?token= line hits dsh.log before
+    # any later crash (node often fully-buffers when stdout is a file).
+    if command -v stdbuf >/dev/null 2>&1; then
+        stdbuf -oL -eL dsh --profile astroai --no-open --port "${DSH_PORT}" \
+            "${_DSH_TRUST[@]}" >"${_dsh_log}" 2>&1 &
+    else
+        dsh --profile astroai --no-open --port "${DSH_PORT}" "${_DSH_TRUST[@]}" \
+            >"${_dsh_log}" 2>&1 &
+    fi
     DSH_PID=$!
     astroai_boot_log "dsh pid=${DSH_PID}"
 }
@@ -180,13 +234,7 @@ for _ in $(seq 1 180); do
     if ! kill -0 "${DSH_PID}" 2>/dev/null; then
         # Never exit 1 here: that kills :5000 and Skaha crash-loops the pod.
         astroai_boot_log "dsh exited before ready — dumping log and restarting"
-        if [[ -s "${_dsh_log}" ]]; then
-            tail -n 60 "${_dsh_log}" | while IFS= read -r _line; do
-                astroai_boot_log "  ${_line}"
-            done
-        else
-            astroai_boot_log "dsh.log empty"
-        fi
+        _dump_dsh_log "dsh.log"
         sleep 2
         _start_dsh
     fi
@@ -195,12 +243,7 @@ for _ in $(seq 1 180); do
 done
 if [[ "${_dsh_ready}" != "1" ]]; then
     astroai_boot_log "WARN: dsh not ready on :${DSH_PORT} within 90s — keeping proxy up"
-    if [[ -s "${_dsh_log}" ]]; then
-        astroai_boot_log "dsh.log tail:"
-        tail -n 60 "${_dsh_log}" | while IFS= read -r _line; do
-            astroai_boot_log "  ${_line}"
-        done
-    fi
+    _dump_dsh_log "dsh.log tail"
 fi
 # Token often lands after the listen socket opens (slow home / CephFS). Wait up
 # to ~60s; keep a background scavenger for even later flushes.
@@ -208,6 +251,7 @@ for _ in $(seq 1 120); do
     _extract_dsh_token && break
     if ! kill -0 "${DSH_PID}" 2>/dev/null; then
         astroai_boot_log "dsh died during token wait — restarting"
+        _dump_dsh_log "dsh.log"
         _start_dsh
     fi
     sleep 0.5
@@ -216,22 +260,14 @@ if [[ -s "${_token_file}" ]]; then
     astroai_boot_log "dsh web token captured for Skaha Connect redirect"
 else
     astroai_boot_log "WARN: dsh web token not found yet — proxy stays on starting page"
-    if [[ -s "${_dsh_log}" ]]; then
-        astroai_boot_log "dsh.log tail (no token):"
-        tail -n 60 "${_dsh_log}" | while IFS= read -r _line; do
-            astroai_boot_log "  ${_line}"
-        done
-    else
-        astroai_boot_log "dsh.log empty after ready"
-    fi
+    _dump_dsh_log "dsh.log (no token)"
     (
+        # Token-only scavenger: do NOT restart dsh here — the foreground
+        # supervisor owns that. Dual restarts race on ~/.dsh/*.lock.
         for _ in $(seq 1 600); do
             if _extract_dsh_token; then
                 astroai_boot_log "dsh web token captured (late) for Skaha Connect redirect"
                 exit 0
-            fi
-            if ! kill -0 "${DSH_PID}" 2>/dev/null; then
-                _start_dsh
             fi
             sleep 1
         done
@@ -266,11 +302,7 @@ while true; do
     fi
     if ! kill -0 "${DSH_PID}" 2>/dev/null; then
         astroai_boot_log "dsh died — restarting"
-        if [[ -s "${_dsh_log}" ]]; then
-            tail -n 40 "${_dsh_log}" | while IFS= read -r _line; do
-                astroai_boot_log "  ${_line}"
-            done
-        fi
+        _dump_dsh_log "dsh.log"
         _start_dsh
     fi
     if [[ -n "${WIZARD_PID:-}" ]] && ! kill -0 "${WIZARD_PID}" 2>/dev/null; then
