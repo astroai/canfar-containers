@@ -103,6 +103,20 @@ else
     exit 1
 fi
 
+# prepare writes discovered provider keys into ~/.astroai/lab/.env (and
+# agent-env.sh). Source them into this shell so dsh inherits DEEPSEEK_*/OPENAI_*/
+# OPENCODE_*/… — otherwise Models stays "missing" and the SPA prompts for a key
+# even when the user already configured one on the home volume.
+if [[ -f "${HOME}/.astroai/lab/agent-env.sh" ]]; then
+    # shellcheck disable=SC1091
+    source "${HOME}/.astroai/lab/agent-env.sh"
+elif [[ -f "${HOME}/.astroai/lab/.env" ]]; then
+    set -a
+    # shellcheck disable=SC1091
+    source "${HOME}/.astroai/lab/.env"
+    set +a
+fi
+
 # dsh Host fence: Origin.host must equal Host, and Host must be trusted.
 # Browser Host is the public Skaha host (not the pod hostname). Trust common
 # CANFAR connect hosts + optional ASTROAI_STUDIO_TRUSTED_HOST.
