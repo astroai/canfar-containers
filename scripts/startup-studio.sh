@@ -126,16 +126,20 @@ fi
 
 cd "${STUDIO_CWD}"
 # Owned composition from `astroai studio --prepare` (not the stock `web` profile).
-# Log to a file so we can scrape the one-shot ``?token=`` (Skaha Connect omits it).
+# Persist dsh.log on $HOME so crash-loop restarts still leave a trail (scratch dies).
+_dsh_log="${_state}/dsh.log"
+_token_file="${_studio_state}/dsh-web-token"
+export ASTROAI_DSH_TOKEN_FILE="${_token_file}"
 : >"${_dsh_log}"
 rm -f "${_token_file}"
-# Do NOT wrap node-based `dsh` in stdbuf — LD_PRELOAD breaks the binary and
-# the session crash-loops (Skaha liveness → connection refused on :5000).
-astroai_boot_log "starting dsh --profile astroai on :${DSH_PORT}"
-dsh --profile astroai --no-open --port "${DSH_PORT}" "${_DSH_TRUST[@]}" \
-    >"${_dsh_log}" 2>&1 &
-DSH_PID=$!
-astroai_boot_log "dsh pid=${DSH_PID}"
+
+_start_dsh() {
+    astroai_boot_log "starting dsh --profile astroai on :${DSH_PORT}"
+    dsh --profile astroai --no-open --port "${DSH_PORT}" "${_DSH_TRUST[@]}" \
+        >"${_dsh_log}" 2>&1 &
+    DSH_PID=$!
+    astroai_boot_log "dsh pid=${DSH_PID}"
+}
 
 _extract_dsh_token() {
     # dsh prints: dsh web: http://127.0.0.1:3080/?token=…
@@ -158,39 +162,54 @@ _extract_dsh_token() {
     return 1
 }
 
+_start_dsh
+
 _dsh_ready=0
-for _ in $(seq 1 120); do
+for _ in $(seq 1 180); do
     # Do not use curl -f: dsh may answer 401 without ?token= while still healthy.
     if curl -sS -o /dev/null --max-time 2 "http://127.0.0.1:${DSH_PORT}/" >/dev/null 2>&1; then
         _dsh_ready=1
         _extract_dsh_token || true
         break
     fi
-    if ! kill -0 "${DSH_PID}" 2>/dev/null; then
-        astroai_boot_log "dsh (profile astroai) exited early (before ready)"
-        exit 1
-    fi
     if ! kill -0 "${PROXY_PID}" 2>/dev/null; then
-        astroai_boot_log "studio-proxy exited early"
-        exit 1
+        astroai_boot_log "studio-proxy exited early — restarting proxy"
+        python3 /opt/astroai/lib/studio-canfar-proxy.py &
+        PROXY_PID=$!
+    fi
+    if ! kill -0 "${DSH_PID}" 2>/dev/null; then
+        # Never exit 1 here: that kills :5000 and Skaha crash-loops the pod.
+        astroai_boot_log "dsh exited before ready — dumping log and restarting"
+        if [[ -s "${_dsh_log}" ]]; then
+            tail -n 60 "${_dsh_log}" | while IFS= read -r _line; do
+                astroai_boot_log "  ${_line}"
+            done
+        else
+            astroai_boot_log "dsh.log empty"
+        fi
+        sleep 2
+        _start_dsh
     fi
     _extract_dsh_token || true
     sleep 0.5
 done
 if [[ "${_dsh_ready}" != "1" ]]; then
-    astroai_boot_log "dsh not ready on :${DSH_PORT} within 60s"
+    astroai_boot_log "WARN: dsh not ready on :${DSH_PORT} within 90s — keeping proxy up"
     if [[ -s "${_dsh_log}" ]]; then
         astroai_boot_log "dsh.log tail:"
-        tail -n 40 "${_dsh_log}" | while IFS= read -r _line; do
+        tail -n 60 "${_dsh_log}" | while IFS= read -r _line; do
             astroai_boot_log "  ${_line}"
         done
     fi
-    exit 1
 fi
 # Token often lands after the listen socket opens (slow home / CephFS). Wait up
 # to ~60s; keep a background scavenger for even later flushes.
 for _ in $(seq 1 120); do
     _extract_dsh_token && break
+    if ! kill -0 "${DSH_PID}" 2>/dev/null; then
+        astroai_boot_log "dsh died during token wait — restarting"
+        _start_dsh
+    fi
     sleep 0.5
 done
 if [[ -s "${_token_file}" ]]; then
@@ -199,7 +218,7 @@ else
     astroai_boot_log "WARN: dsh web token not found yet — proxy stays on starting page"
     if [[ -s "${_dsh_log}" ]]; then
         astroai_boot_log "dsh.log tail (no token):"
-        tail -n 40 "${_dsh_log}" | while IFS= read -r _line; do
+        tail -n 60 "${_dsh_log}" | while IFS= read -r _line; do
             astroai_boot_log "  ${_line}"
         done
     else
@@ -211,7 +230,9 @@ else
                 astroai_boot_log "dsh web token captured (late) for Skaha Connect redirect"
                 exit 0
             fi
-            kill -0 "${DSH_PID}" 2>/dev/null || exit 0
+            if ! kill -0 "${DSH_PID}" 2>/dev/null; then
+                _start_dsh
+            fi
             sleep 1
         done
     ) &
@@ -236,5 +257,41 @@ if [[ -f /opt/ghostty-web/server.mjs ]]; then
 fi
 
 astroai_boot_log "studio dsh+proxy+sidecars ready (profile=astroai), waiting"
-wait -n "${DSH_PID}" "${PROXY_PID}"
-exit $?
+# Supervise forever: never let a dsh crash take down :5000 (Skaha liveness).
+while true; do
+    if ! kill -0 "${PROXY_PID}" 2>/dev/null; then
+        astroai_boot_log "studio-proxy died — restarting"
+        python3 /opt/astroai/lib/studio-canfar-proxy.py &
+        PROXY_PID=$!
+    fi
+    if ! kill -0 "${DSH_PID}" 2>/dev/null; then
+        astroai_boot_log "dsh died — restarting"
+        if [[ -s "${_dsh_log}" ]]; then
+            tail -n 40 "${_dsh_log}" | while IFS= read -r _line; do
+                astroai_boot_log "  ${_line}"
+            done
+        fi
+        _start_dsh
+    fi
+    if [[ -n "${WIZARD_PID:-}" ]] && ! kill -0 "${WIZARD_PID}" 2>/dev/null; then
+        python3 /opt/astroai/lib/agent-wizard.py &
+        WIZARD_PID=$!
+    fi
+    if [[ -n "${GHOSTTY_PID:-}" ]] && ! kill -0 "${GHOSTTY_PID}" 2>/dev/null; then
+        if [[ -f /opt/ghostty-web/server.mjs ]]; then
+            _term_back="/"
+            if [[ -n "${skaha_sessionid:-}" ]]; then
+                _term_back="/session/contrib/${skaha_sessionid}/"
+            fi
+            HOST=127.0.0.1 PORT="${ASTROAI_TERMINAL_PORT}" \
+                ASTROAI_TAB_TITLE="${ASTROAI_TAB_TITLE:-AstroAI Studio}" \
+                ASTROAI_TERMINAL_BACK_HREF="${_term_back}" \
+                ASTROAI_TERMINAL_BACK_LABEL="Studio" \
+                PWD="${STUDIO_CWD}" \
+                node /opt/ghostty-web/server.mjs &
+            GHOSTTY_PID=$!
+        fi
+    fi
+    _extract_dsh_token || true
+    sleep 2
+done
