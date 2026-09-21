@@ -128,6 +128,17 @@ def test_index_token_redirect_without_prefix(tmp_path: Path, monkeypatch) -> Non
     assert proxy.index_token_redirect("/", None) == "/?token=t1"
 
 
+def test_is_index_path() -> None:
+    assert proxy._is_index_path("/") is True
+    assert proxy._is_index_path("/?token=x") is True
+    assert proxy._is_index_path("/api/x") is False
+
+
+def test_starting_html_is_refreshable() -> None:
+    assert b'meta http-equiv="refresh"' in proxy.STARTING_HTML
+    assert b"AstroAI Studio is starting" in proxy.STARTING_HTML
+
+
 if __name__ == "__main__":
     import tempfile
 
@@ -140,6 +151,8 @@ if __name__ == "__main__":
     test_upstream_path_strips_session_prefix()
     test_no_prefix_leaves_absolute_paths()
     test_is_websocket_request()
+    test_is_index_path()
+    test_starting_html_is_refreshable()
     with tempfile.TemporaryDirectory() as td:
         tok = Path(td) / "dsh-web-token"
         tok.write_text("sekrit\n", encoding="utf-8")

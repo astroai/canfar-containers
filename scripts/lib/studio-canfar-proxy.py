@@ -382,6 +382,34 @@ def _forward_headers(handler: BaseHTTPRequestHandler) -> dict[str, str]:
     return headers
 
 
+STARTING_HTML = (
+    b"<!DOCTYPE html><html><head>"
+    b'<meta charset="utf-8"/>'
+    b'<meta http-equiv="refresh" content="3"/>'
+    b"<title>AstroAI Studio</title></head>"
+    b"<body style='font-family:system-ui,sans-serif;padding:2rem;line-height:1.5'>"
+    b"<h1>AstroAI Studio is starting</h1>"
+    b"<p>Preparing the coding UI - this page refreshes automatically.</p>"
+    b"</body></html>"
+)
+
+
+def _is_index_path(path: str) -> bool:
+    route = urlparse(path).path or "/"
+    return route in ("/", "")
+
+
+def _send_html(handler: BaseHTTPRequestHandler, status: int, body: bytes) -> None:
+    handler.send_response(status)
+    handler.send_header("Content-Type", "text/html; charset=utf-8")
+    handler.send_header("Cache-Control", "no-store")
+    handler.send_header("Content-Length", str(len(body)))
+    handler.end_headers()
+    if handler.command != "HEAD":
+        with contextlib.suppress(BrokenPipeError, ConnectionResetError):
+            handler.wfile.write(body)
+
+
 def _forward(
     handler: BaseHTTPRequestHandler, host: str, port: int, path: str, *, rewrite: bool = True
 ) -> None:
@@ -408,12 +436,7 @@ def _forward(
                 b"<p>Use Terminal and run <code>astroai agent list --ui</code>.</p>"
                 b"</body></html>"
             )
-            handler.send_response(503)
-            handler.send_header("Content-Type", "text/html; charset=utf-8")
-            handler.send_header("Content-Length", str(len(fallback)))
-            handler.end_headers()
-            with contextlib.suppress(BrokenPipeError, ConnectionResetError):
-                handler.wfile.write(fallback)
+            _send_html(handler, 503, fallback)
             return
         if host == TERMINAL_HOST and port == TERMINAL_PORT:
             fallback = (
@@ -422,12 +445,13 @@ def _forward(
                 b"<p>ghostty-web is not running in this Studio session.</p>"
                 b"</body></html>"
             )
-            handler.send_response(503)
-            handler.send_header("Content-Type", "text/html; charset=utf-8")
-            handler.send_header("Content-Length", str(len(fallback)))
-            handler.end_headers()
-            with contextlib.suppress(BrokenPipeError, ConnectionResetError):
-                handler.wfile.write(fallback)
+            _send_html(handler, 503, fallback)
+            return
+        # Boot race: Skaha Connect hits :5000 before dsh listens. Return 200 so
+        # ingress/`Bad Gateway` is not the Connect experience (marimo pattern).
+        if host == DSH_HOST and port == DSH_PORT and _is_index_path(path):
+            _send_html(handler, 200, STARTING_HTML)
+            handler.log_message('"starting" %s (dsh not ready: %s)', path, exc)
             return
         handler.send_error(502, f"upstream unreachable: {exc}")
         return

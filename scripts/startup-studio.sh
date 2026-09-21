@@ -43,6 +43,25 @@ export npm_config_store_dir="${_studio_state}/pnpm-store"
 export PNPM_HOME="${_studio_state}/pnpm-home"
 export TMPDIR="${_studio_state}/tmp"
 
+# Bind :5000 immediately (marimo pattern) so Skaha Connect does not 502 while
+# prepare/dsh still run. Proxy serves a 200 "starting" page until dsh is up.
+_dsh_log="${_studio_state}/dsh.log"
+_token_file="${_studio_state}/dsh-web-token"
+: >"${_dsh_log}"
+rm -f "${_token_file}"
+export ASTROAI_DSH_TOKEN_FILE="${_token_file}"
+python3 /opt/astroai/lib/studio-canfar-proxy.py &
+PROXY_PID=$!
+astroai_boot_log "studio-proxy :${ASTROAI_STUDIO_PORT} early (pid=${PROXY_PID})"
+
+cleanup() {
+    local rc=$?
+    astroai_boot_log "session:exit rc=${rc}"
+    kill "${PROXY_PID:-}" "${WIZARD_PID:-}" "${GHOSTTY_PID:-}" "${DSH_PID:-}" 2>/dev/null || true
+    wait "${PROXY_PID:-}" "${WIZARD_PID:-}" "${GHOSTTY_PID:-}" "${DSH_PID:-}" 2>/dev/null || true
+}
+trap cleanup EXIT INT TERM
+
 # common-init already runs `astroai agent setup` in the background for studio.
 # Prepare must finish *before* dsh starts so the owned `astroai` profile exists.
 # --no-install: never block Connect URL on a cold `dsh plugin` / pnpm fetch
@@ -104,15 +123,10 @@ if [[ -n "${_host}" ]]; then
 fi
 
 cd "${STUDIO_CWD}"
-# Capture dsh's one-shot web token — Skaha Connect URLs omit ``?token=``.
-_dsh_log="${_studio_state}/dsh.log"
-_token_file="${_studio_state}/dsh-web-token"
-: >"${_dsh_log}"
-rm -f "${_token_file}"
-export ASTROAI_DSH_TOKEN_FILE="${_token_file}"
-
 # Owned composition from `astroai studio --prepare` (not the stock `web` profile).
 # Log to a file so we can scrape the one-shot ``?token=`` (Skaha Connect omits it).
+: >"${_dsh_log}"
+rm -f "${_token_file}"
 dsh --profile astroai --no-open --port "${DSH_PORT}" "${_DSH_TRUST[@]}" \
     >"${_dsh_log}" 2>&1 &
 DSH_PID=$!
@@ -128,14 +142,6 @@ _extract_dsh_token() {
     return 1
 }
 
-cleanup() {
-    local rc=$?
-    astroai_boot_log "session:exit rc=${rc}"
-    kill "${PROXY_PID:-}" "${WIZARD_PID:-}" "${GHOSTTY_PID:-}" "${DSH_PID}" 2>/dev/null || true
-    wait "${PROXY_PID:-}" "${WIZARD_PID:-}" "${GHOSTTY_PID:-}" "${DSH_PID}" 2>/dev/null || true
-}
-trap cleanup EXIT INT TERM
-
 _dsh_ready=0
 for _ in $(seq 1 120); do
     # Do not use curl -f: dsh may answer 401 without ?token= while still healthy.
@@ -146,6 +152,10 @@ for _ in $(seq 1 120); do
     fi
     if ! kill -0 "${DSH_PID}" 2>/dev/null; then
         astroai_boot_log "dsh (profile astroai) exited early (before ready)"
+        exit 1
+    fi
+    if ! kill -0 "${PROXY_PID}" 2>/dev/null; then
+        astroai_boot_log "studio-proxy exited early"
         exit 1
     fi
     _extract_dsh_token || true
@@ -183,9 +193,6 @@ if [[ -f /opt/ghostty-web/server.mjs ]]; then
         node /opt/ghostty-web/server.mjs &
     GHOSTTY_PID=$!
 fi
-
-python3 /opt/astroai/lib/studio-canfar-proxy.py &
-PROXY_PID=$!
 
 astroai_boot_log "studio dsh+proxy+sidecars ready (profile=astroai), waiting"
 wait -n "${DSH_PID}" "${PROXY_PID}"

@@ -12,7 +12,7 @@ profile (not stock `dsh web`).
 | `dsh --profile astroai` | `127.0.0.1:3080` | Coding agent SPA (upstream refuses `0.0.0.0`) |
 | `agent-wizard.py` | `127.0.0.1:4792` | AstroAI hub (`/astroai-agents/`) — batch compute + agents |
 | `ghostty-web` | `127.0.0.1:4793` | Browser terminal (`/astroai-terminal/`) |
-| `studio-canfar-proxy.py` | `0.0.0.0:5000` | Public edge; assets rewrite + `/api` shim + chips + WS splice |
+| `studio-canfar-proxy.py` | `0.0.0.0:5000` | Public edge; binds early with a 200 starting page until dsh is up; then assets rewrite + `/api` shim + chips + WS splice |
 
 Boot fails loud if `--prepare` fails (stale `astroai-lab.lock` or missing CLI).
 

@@ -125,15 +125,19 @@ if command -v astroai >/dev/null 2>&1; then
   fi
   _agent_state="${HOME}/.astroai/lab"
   _agent_log="${_agent_state}/agent-setup.log"
-  # Scratch is per-session. Always re-link agent runtime trees (and restore
-  # durable ~/.dsh/{sessions,storages}) even when agent-setup-stamp exists —
-  # otherwise dangling scratch symlinks leave Studio without a dsh web token.
+  # Scratch is per-session. Restore durable ~/.dsh before Studio/dsh boot, but
+  # do not block Connect on multi-hundred-MB force-relocates (those run async).
   if command -v astroai >/dev/null 2>&1; then
     mkdir -p "${_agent_state}"
     {
-      echo "---- $(date -u +%Y-%m-%dT%H:%M:%SZ) agent layout ----"
-      astroai --yes agent layout
+      echo "---- $(date -u +%Y-%m-%dT%H:%M:%SZ) agent layout --boot ----"
+      astroai --yes agent layout --boot
     } >>"${_agent_state}/agent-runtime.log" 2>&1 || true
+    (
+      echo "---- $(date -u +%Y-%m-%dT%H:%M:%SZ) agent layout (full, bg) ----"
+      astroai --yes agent layout
+      echo "---- $(date -u +%Y-%m-%dT%H:%M:%SZ) agent layout end ----"
+    ) >>"${_agent_state}/agent-runtime.log" 2>&1 &
   fi
   _agent_needs_run=0
   if [[ ! -f "${_agent_state}/agent-setup-stamp" || -f "${_agent_state}/agent-setup-failed" ]]; then
