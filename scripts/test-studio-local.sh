@@ -67,7 +67,14 @@ for _ in $(seq 1 90); do
             "http://127.0.0.1:${HOST_PORT}/session/contrib/${SESSION_ID}/" \
             2>/dev/null || echo 000
     )"
-    if [[ "${code}" == "302" || "${code}" == "200" ]]; then
+    # Early :5000 bind serves STARTING_HTML as 200 before dsh has a token.
+    # Ready means token redirect (302) or boot.log captured the web token.
+    if [[ "${code}" == "302" ]]; then
+        ready=1
+        break
+    fi
+    if grep -q 'dsh web token captured for Skaha Connect redirect' \
+            "${FAKE_HOME}/.astroai/lab/boot.log" 2>/dev/null; then
         ready=1
         break
     fi
