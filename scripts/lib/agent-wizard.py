@@ -77,7 +77,12 @@ def _run_cmd(cmd: list[str], *, timeout: int) -> tuple[int, str, str]:
 
 
 def _run_lab(args: list[str], *, timeout: int | None = None) -> tuple[int, str, str]:
-    lab = shutil.which("astroai") or "/opt/astroai/venv/cadc/bin/astroai"
+    lab = (
+        shutil.which("canfar-lab")
+        or "/opt/astroai/venv/cadc/bin/canfar-lab"
+        or shutil.which("astroai")
+        or "/opt/astroai/venv/cadc/bin/astroai"
+    )
     return _run_cmd([lab, *args], timeout=timeout or CLI_TIMEOUT)
 
 
@@ -441,10 +446,11 @@ def _compute_ensure() -> dict[str, Any]:
     jobs = ""
     workers: dict[str, Any] = {}
     connect = ""
-    if shutil.which("astroai"):
+    lab_prog = "canfar-lab" if shutil.which("canfar-lab") and not shutil.which("astroai") else "astroai"
+    if shutil.which("canfar-lab") or shutil.which("astroai"):
         ensure_rc, ensure_out, ensure_err = _run_cmd(
             [
-                "astroai",
+                lab_prog,
                 "cluster",
                 "start",
                 "--json",

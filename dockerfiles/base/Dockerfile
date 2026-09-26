@@ -164,24 +164,24 @@ COPY config/astroai-lab.in config/astroai-lab.lock /tmp/
 RUN uv venv /opt/astroai/venv/cadc \
     && uv pip install --python /opt/astroai/venv/cadc -r /opt/astroai/cadc-tools.txt \
     && uv pip install --python /opt/astroai/venv/cadc --requirements /tmp/astroai-lab.lock \
-    && /opt/astroai/venv/cadc/bin/astroai cluster --help >/dev/null \
+    && /opt/astroai/venv/cadc/bin/canfar-lab cluster --help >/dev/null \
     && printf '%s\n' \
         '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05"}}' \
         '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
-        | /opt/astroai/venv/cadc/bin/astroai mcp serve \
+        | /opt/astroai/venv/cadc/bin/canfar-lab mcp serve \
         | grep -q cluster_start \
     && bash /tmp/patch-clint-py313.sh /opt/astroai/venv/cadc \
     && rm /tmp/patch-clint-py313.sh /tmp/astroai-lab.in /tmp/astroai-lab.lock \
     && chmod -R a+rwX /opt/astroai/venv/cadc \
     # Copy the packaged session shell files straight out of the installed
-    # astroai-lab wheel — astroai-lab itself stays an in-session tool only.
+    # canfar-lab wheel — canfar-lab itself stays an in-session tool only.
     && mkdir -p /etc/astroai-lab \
-    && /opt/astroai/venv/cadc/bin/python -c "import importlib.resources as r, shutil; p=r.files('astroai_lab.data.shell'); shutil.copy(p.joinpath('profile.sh'), '/etc/astroai-lab/profile.sh'); shutil.copy(p.joinpath('hooks.sh'), '/etc/astroai-lab/hooks.sh')" \
+    && /opt/astroai/venv/cadc/bin/python -c "import importlib.resources as r, shutil; p=r.files('canfar_lab.data.shell'); shutil.copy(p.joinpath('profile.sh'), '/etc/astroai-lab/profile.sh'); shutil.copy(p.joinpath('hooks.sh'), '/etc/astroai-lab/hooks.sh')" \
     && chmod a+r /etc/astroai-lab/profile.sh /etc/astroai-lab/hooks.sh \
     && test -f /etc/astroai-lab/profile.sh \
     && test -f /etc/astroai-lab/hooks.sh \
     && HOME=/tmp WORK=/srcdir SCRATCH=/scratch \
-       /opt/astroai/venv/cadc/bin/astroai env export --no-ensure >/dev/null \
+       /opt/astroai/venv/cadc/bin/canfar-lab env export --no-ensure >/dev/null \
     && uv cache clean
 
 COPY scripts/lib/astroai-env-common.sh scripts/lib/astroai-ui.sh scripts/lib/skaha-proxy.sh \
