@@ -6,7 +6,9 @@ import importlib.util
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-SPEC = importlib.util.spec_from_file_location("studio_canfar_proxy", ROOT / "studio-canfar-proxy.py")
+SPEC = importlib.util.spec_from_file_location(
+    "studio_canfar_proxy", ROOT / "studio-canfar-proxy.py"
+)
 assert SPEC and SPEC.loader
 proxy = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(proxy)

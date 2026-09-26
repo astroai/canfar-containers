@@ -448,7 +448,7 @@ def rewrite_location(value: str) -> str:
     """Keep absolute Locations under the Skaha session path."""
     if not PREFIX or not value.startswith("/"):
         return value
-    if value == PREFIX or value.startswith(PREFIX + "/") or value.startswith(PREFIX + "?"):
+    if value == PREFIX or value.startswith((PREFIX + "/", PREFIX + "?")):
         return value
     return PREFIX + value
 
@@ -548,11 +548,7 @@ STARTING_HTML = (
 
 def _is_index_path(path: str) -> bool:
     route = urlparse(path).path or "/"
-    if route in ("/", ""):
-        return True
-    if PREFIX and (route == PREFIX or route == f"{PREFIX}/"):
-        return True
-    return False
+    return route in ("/", "") or bool(PREFIX and (route == PREFIX or route == f"{PREFIX}/"))
 
 
 def _send_html(handler: BaseHTTPRequestHandler, status: int, body: bytes) -> None:
@@ -661,7 +657,7 @@ def _forward(
             f"<p>{service_name} is currently starting or not running on port {port}.</p>"
             f"<p><a href='{PREFIX or '/'}' style='color:#89b4fa'>← Return to Studio</a></p>"
             "</body></html>"
-        ).encode("utf-8")
+        ).encode()
         _send_html(handler, 503, fallback)
         return
 
@@ -746,13 +742,14 @@ class StudioProxyHandler(BaseHTTPRequestHandler):
                 self.end_headers()
                 self.log_message('"token-redirect" %s → %s', self.path, loc)
                 return
-            if _is_index_path(self.path) and not has_dsh_auth_cookie(
-                self.headers.get("Cookie")
+            if (
+                _is_index_path(self.path)
+                and not has_dsh_auth_cookie(self.headers.get("Cookie"))
+                and not read_launch_token()
             ):
-                if not read_launch_token():
-                    _send_html(self, 200, STARTING_HTML)
-                    self.log_message('"starting" %s (waiting for dsh token)', self.path)
-                    return
+                _send_html(self, 200, STARTING_HTML)
+                self.log_message('"starting" %s (waiting for dsh token)', self.path)
+                return
 
         public = upstream_path(self.path)
         route = urlparse(public).path or "/"
