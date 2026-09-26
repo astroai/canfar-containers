@@ -56,15 +56,15 @@ sys.modules.setdefault("ray", MagicMock(__version__="2.56.0"))
 MANAGER_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(MANAGER_DIR))
 
-from astroai_workload.cluster import (  # noqa: E402
+from canfar_workload.cluster import (  # noqa: E402
     ClusterCreateRequest,
     clean_orphaned_workers,
     fail_create_cleanup,
     prepare_cluster_create,
     validate_cluster_create,
 )
-from astroai_workload.settings import ManagerSettings  # noqa: E402
-from astroai_workload.state_store import ClusterState, StateStore, WorkerRecord  # noqa: E402
+from canfar_workload.settings import ManagerSettings  # noqa: E402
+from canfar_workload.state_store import ClusterState, StateStore, WorkerRecord  # noqa: E402
 
 
 @pytest.fixture()
@@ -115,7 +115,7 @@ def test_validate_rejects_stale_preflight_ip(store: StateStore, monkeypatch: pyt
         preflight={"passed": True, "manager_ip": "10.0.0.1"},
     )
     store.save(state)
-    monkeypatch.setattr("astroai_workload.cluster.manager_pod_ip", lambda: "10.0.0.99")
+    monkeypatch.setattr("canfar_workload.cluster.manager_pod_ip", lambda: "10.0.0.99")
     req = ClusterCreateRequest(name="x", require_preflight=True)
     with pytest.raises(RuntimeError, match="stale"):
         validate_cluster_create(canfar=canfar, store=store, req=req)
@@ -130,7 +130,7 @@ def test_validate_accepts_matching_preflight_ip(store: StateStore, monkeypatch: 
             preflight={"passed": True, "manager_ip": "10.0.0.5"},
         )
     )
-    monkeypatch.setattr("astroai_workload.cluster.manager_pod_ip", lambda: "10.0.0.5")
+    monkeypatch.setattr("canfar_workload.cluster.manager_pod_ip", lambda: "10.0.0.5")
     validate_cluster_create(
         canfar=canfar,
         store=store,
@@ -153,7 +153,7 @@ def test_prepare_destroys_tracked_workers_before_recreate(
             ],
         )
     )
-    with patch("astroai_workload.cluster.archive_session_logs"), patch("astroai_workload.workers.archive_session_logs"):
+    with patch("canfar_workload.cluster.archive_session_logs"), patch("canfar_workload.workers.archive_session_logs"):
         prepare_cluster_create(settings=settings, canfar=canfar, store=store)
     destroyed_ids = {c.args[0] for c in canfar.destroy.call_args_list}
     assert "old1" in destroyed_ids
@@ -166,15 +166,15 @@ def test_fail_create_cleanup_sets_failed(
     canfar = MagicMock()
     canfar.list_headless_sessions.return_value = []
     canfar.destroy.return_value = True
-    monkeypatch.setattr("astroai_workload.cluster.manager_pod_ip", lambda: "10.1.1.1")
-    monkeypatch.setattr("astroai_workload.cluster.ray_address", lambda: "10.1.1.1:6379")
+    monkeypatch.setattr("canfar_workload.cluster.manager_pod_ip", lambda: "10.1.1.1")
+    monkeypatch.setattr("canfar_workload.cluster.ray_address", lambda: "10.1.1.1:6379")
     store.save(
         _state(
             phase="Creating",
             workers=[WorkerRecord(session_id="w1", name="ray-w-1", phase="CANFAR Pending")],
         )
     )
-    with patch("astroai_workload.cluster.archive_session_logs"), patch("astroai_workload.workers.archive_session_logs"):
+    with patch("canfar_workload.cluster.archive_session_logs"), patch("canfar_workload.workers.archive_session_logs"):
         result = fail_create_cleanup(
             settings=settings, canfar=canfar, store=store, message="boom"
         )

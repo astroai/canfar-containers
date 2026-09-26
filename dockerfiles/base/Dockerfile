@@ -165,6 +165,7 @@ RUN uv venv /opt/astroai/venv/cadc \
     && uv pip install --python /opt/astroai/venv/cadc -r /opt/astroai/cadc-tools.txt \
     && uv pip install --python /opt/astroai/venv/cadc --requirements /tmp/astroai-lab.lock \
     && /opt/astroai/venv/cadc/bin/canfar-lab cluster --help >/dev/null \
+    && ln -sf canfar-lab /opt/astroai/venv/cadc/bin/astroai \
     && printf '%s\n' \
         '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05"}}' \
         '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \

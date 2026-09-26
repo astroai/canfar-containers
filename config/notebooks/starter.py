@@ -30,7 +30,7 @@ Welcome. Marimo notebooks are plain **`.py` files** — easy to git and review.
 ### Terminal (right here)
 
 Built-in shell: press **Ctrl-`** (backtick), or open the footer **Developer**
-panel (**Ctrl/Cmd-J**) → **Terminal**. Use it for `astroai clone`, `pixi install`,
+panel (**Ctrl/Cmd-J**) → **Terminal**. Use it for `canfar lab clone`, `pixi install`,
 `canfar login`, `git`, … A separate **terminal** session also works if you prefer.
 
 ### Coming from Jupyter?
@@ -50,12 +50,11 @@ panel (**Ctrl/Cmd-J**) → **Terminal**. Use it for `astroai clone`, `pixi insta
 
 ### Open an existing project
 
-1. In the **terminal** (Ctrl-`): `astroai clone owner/repo` or `astroai init mylab`
-   (projects land under `$WORK`, and `pixi install` prepares their environment).
-2. **File → Open** to open any notebook or `.py` file inside the project folder — 
-   its `.pixi` / `.venv` environment and package imports are **auto-discovered automatically**!
-3. Or activate an environment explicitly using **Project environment** below
-   (or in Python: `from canfar_marimo import use_project; use_project("owner/repo")`).
+1. In the **terminal** (Ctrl-`): `canfar lab init mylab` or `canfar lab clone owner/repo`
+   (projects land under `$WORK`).
+2. Activate that project's env with **Project environment** below (or
+   `from canfar_marimo import use_project; use_project("…")`).
+3. **File → Open** to edit notebooks inside the project folder.
 """
     )
     return
@@ -97,7 +96,7 @@ def _(mo):
         f"- **home** (keep tiny): `{pathlib.Path.home()}`",
         f"- **XDG_CACHE_HOME**: `{os.environ.get('XDG_CACHE_HOME', '(unset)')}`",
         f"- **OpenRouter key**: "
-        f"{'set (`OPENROUTER_API_KEY` / `~/.astroai/lab/.env`)' if os.environ.get('OPENROUTER_API_KEY') or (pathlib.Path.home() / '.astroai' / 'lab' / '.env').is_file() else 'missing — once: `export OPENROUTER_API_KEY=…` then `astroai agent setup marimo`'}",
+        f"{'set (`OPENROUTER_API_KEY` / `~/.astroai/lab/.env`)' if os.environ.get('OPENROUTER_API_KEY') or (pathlib.Path.home() / '.astroai' / 'lab' / '.env').is_file() else 'missing — once: `export OPENROUTER_API_KEY=…` then `canfar agent setup marimo`'}",
     ]
 
     # Banner JSON shows session paths and save count.
@@ -134,7 +133,7 @@ def _(mo):
     else:
         lines.append(
             "- **projects**: none detected under work yet — "
-            "`astroai init mylab` or `astroai clone owner/repo` in the terminal (Ctrl-`)"
+            "`canfar lab init mylab` or `canfar lab clone owner/repo` in the terminal (Ctrl-`)"
         )
 
     if notes:
@@ -150,13 +149,10 @@ def _(mo):
         r"""
 ### Project environment
 
-Marimo notebooks opened from inside a project directory auto-discover that project's
-`.pixi` / `.venv` environment and imports automatically.
+Marimo has no Jupyter kernels — activate a cloned project's `.pixi` / `.venv`
+here so notebook imports use that stack.
 
-You can also activate a cloned project's environment manually below or switch between
-projects.
-
-**Packages sidebar:** after activation, installs go via **pixi** / **uv** into
+**Packages sidebar:** after Activate, installs go via **pixi** / **uv** into
 that project. Bare `pip` into the image Python fails (no root on CANFAR).
 """
     )
@@ -350,16 +346,16 @@ Read-only checks run in **Session status** above. Mutating work stays in the
 **First session / new project**
 
 ```bash
-astroai init mylab              # pixi (recommended)
-astroai init mylab --uv
-astroai clone owner/repo
-astroai clone owner/repo --from-env
+canfar lab init mylab              # pixi (recommended)
+canfar lab init mylab --uv
+canfar lab clone owner/repo
+canfar lab clone owner/repo --from-env
 ```
 
 **Persist before logout**
 
 ```bash
-astroai save
+canfar lab save
 # copy results to /arc/projects or vos: with canfar data / vcp
 ```
 
@@ -368,12 +364,12 @@ astroai save
 ```bash
 # once per user — stores key in ~/.astroai/lab/.env for marimo + agents
 export OPENROUTER_API_KEY=sk-or-v1-…
-astroai agent setup             # seeds marimo AI + agent configs
-astroai agent install kilo      # or goose, claude, opencode, codex, qoder
-astroai agent update
+canfar agent setup             # seeds marimo AI + agent configs
+canfar agent install kilo      # or goose, claude, opencode, codex, qoder
+canfar agent update
 ```
 
-Full reference: `astroai help` · [astroai docs](https://github.com/astroai/canfar-lab)
+Full reference: `canfar lab help` · [astroai docs](https://github.com/astroai/canfar-lab)
 """
     )
     return
@@ -389,7 +385,7 @@ Toolbar **AI** (or Cmd/Ctrl+Shift+E to refactor the current cell). Uses
 **OpenRouter**, same key as `astroai` agents (`~/.astroai/lab/.env` →
 `OPENROUTER_API_KEY`). You should not need to paste the key again into marimo.
 
-1. Once: `export OPENROUTER_API_KEY=…` then `astroai agent setup` (or `… marimo`).
+1. Once: `export OPENROUTER_API_KEY=…` then `canfar agent setup` (or `… marimo`).
 2. Open the AI sidebar; chat, agent mode, or generate cells from a prompt.
 3. Pass in-memory values with `@variable_name`. Models: `~/.marimo.toml`.
 """
@@ -403,7 +399,7 @@ def _(mo):
         r"""
 ## Next steps
 
-- Install packages into a **project** (`astroai init mylab`), not `$HOME`.
+- Install packages into a **project** (`canfar lab init mylab`), not `$HOME`.
 - Activate that env with **Project environment** above.
 - Or use a short-lived venv under `/scratch` if you must.
 """

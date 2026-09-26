@@ -11,8 +11,8 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Literal
 
-from astroai_workload.canfar_ops import CanfarOps
-from astroai_workload.cluster import (
+from canfar_workload.canfar_ops import CanfarOps
+from canfar_workload.cluster import (
     ClusterCreateRequest,
     clean_orphaned_workers,
     create_cluster,
@@ -21,13 +21,13 @@ from astroai_workload.cluster import (
     stop_cluster,
     validate_cluster_create,
 )
-from astroai_workload.preflight import run_preflight
-from astroai_workload.ray_cluster import count_live_nodes, list_ray_nodes, ray_address, ray_running
-from astroai_workload.reconcile import reconcile_cluster
-from astroai_workload.settings import ManagerSettings, manager_pod_ip
-from astroai_workload.state_store import ClusterState, StateStore
-from astroai_workload.worker_logs import archive_session_logs, read_worker_logs
-from astroai_workload.workers import destroy_all_workers, destroy_worker, launch_worker
+from canfar_workload.preflight import run_preflight
+from canfar_workload.ray_cluster import count_live_nodes, list_ray_nodes, ray_address, ray_running
+from canfar_workload.reconcile import reconcile_cluster
+from canfar_workload.settings import ManagerSettings, manager_pod_ip
+from canfar_workload.state_store import ClusterState, StateStore
+from canfar_workload.worker_logs import archive_session_logs, read_worker_logs
+from canfar_workload.workers import destroy_all_workers, destroy_worker, launch_worker
 from fastapi import FastAPI, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
 from pydantic import BaseModel, Field

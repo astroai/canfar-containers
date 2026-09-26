@@ -4,6 +4,5 @@
 # image bakes whatever `main` is at lock time (regenerate with
 # `make lock-canfar-lab` — never edit the lockfile by hand).
 #
-# This fork tracks sfabbro/canfar-lab until the lab commit lands on
-# astroai/canfar-lab; switch the URL back to astroai when opening an upstream PR.
-canfar-lab @ git+https://github.com/sfabbro/canfar-lab.git
+# Tracks astroai/canfar-lab main (unpinned).
+canfar-lab @ git+https://github.com/astroai/canfar-lab.git

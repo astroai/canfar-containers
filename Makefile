@@ -56,9 +56,9 @@ help:
 
 # Canonical starters live in canfar-lab / astroai-lab; containers copies are build artifacts.
 ASTROAI_LAB_DIR ?= $(shell test -d ../canfar-lab && echo ../canfar-lab || echo ../astroai-lab)
-ASTROAI_LAB_STARTER ?= $(ASTROAI_LAB_DIR)/src/astroai_lab/data/notebooks/starter.py
-ASTROAI_LAB_IPYNB ?= $(ASTROAI_LAB_DIR)/src/astroai_lab/data/notebooks/starter.ipynb
-ASTROAI_LAB_RAY_NB ?= $(ASTROAI_LAB_DIR)/src/astroai_lab/data/notebooks/ray_train.ipynb
+ASTROAI_LAB_STARTER ?= $(ASTROAI_LAB_DIR)/src/canfar_lab/data/notebooks/starter.py
+ASTROAI_LAB_IPYNB ?= $(ASTROAI_LAB_DIR)/src/canfar_lab/data/notebooks/starter.ipynb
+ASTROAI_LAB_RAY_NB ?= $(ASTROAI_LAB_DIR)/src/canfar_lab/data/notebooks/ray_train.ipynb
 
 sync-marimo-starter: ## copy marimo starter.py from sibling astroai-lab checkout
 	@test -f "$(ASTROAI_LAB_STARTER)" || { echo "missing $(ASTROAI_LAB_STARTER)"; exit 1; }

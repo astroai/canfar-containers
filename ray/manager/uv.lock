@@ -34,26 +34,12 @@ wheels = [
 ]
 
 [[package]]
-name = "astroai-lab"
-version = "0.5.0"
-source = { git = "https://github.com/astroai/canfar-lab.git#345a3cb0a52b4653ebb4daaa560b55b009fc0079" }
-dependencies = [
-    { name = "canfar" },
-    { name = "httpx" },
-    { name = "pydantic" },
-    { name = "pydantic-settings" },
-    { name = "pyyaml" },
-    { name = "rich" },
-    { name = "typer" },
-]
-
-[[package]]
 name = "astroai-ray-manager"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
-    { name = "astroai-lab" },
     { name = "canfar" },
+    { name = "canfar-lab" },
     { name = "fastapi" },
     { name = "httpx" },
     { name = "pydantic" },
@@ -71,8 +57,8 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "astroai-lab", git = "https://github.com/astroai/canfar-lab.git" },
     { name = "canfar", specifier = ">=1.4.1" },
+    { name = "canfar-lab", git = "https://github.com/astroai/canfar-lab.git?rev=main" },
     { name = "fastapi", specifier = ">=0.110" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "pydantic", specifier = ">=2.9" },
@@ -127,6 +113,20 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/24/d8/a457c57a8c83d6a6a4a96aa41fc46484489a83932bc5fe26180e1daef130/canfar-1.4.1.tar.gz", hash = "sha256:bbd7a37a21e6f9edf8790176797763187fe38a39758c21d652d77ad2fb76a3ee", size = 25743742, upload-time = "2026-06-11T20:39:05.07Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b0/33/2a4f9d8389e553e549c82d690f25558ff179bac9c6326adf05b182115f29/canfar-1.4.1-py3-none-any.whl", hash = "sha256:5047cff29499eb2231ab0186ae2034ac2df939597b0cebc77254e56c8c1ddf03", size = 129007, upload-time = "2026-06-11T20:39:03.398Z" },
+]
+
+[[package]]
+name = "canfar-lab"
+version = "0.6.0"
+source = { git = "https://github.com/astroai/canfar-lab.git?rev=main#0ee71675449c54a7988f4305c49022d3d05f8f8d" }
+dependencies = [
+    { name = "canfar" },
+    { name = "httpx" },
+    { name = "pydantic" },
+    { name = "pydantic-settings" },
+    { name = "pyyaml" },
+    { name = "rich" },
+    { name = "typer" },
 ]
 
 [[package]]

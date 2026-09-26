@@ -58,31 +58,31 @@ sys.modules.setdefault("ray", MagicMock(__version__="2.56.0"))
 MANAGER_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(MANAGER_DIR))
 
-from astroai_workload.canfar_ops import (  # noqa: E402
+from canfar_workload.canfar_ops import (  # noqa: E402
     CanfarOps,
     SessionLaunch,
     parse_probe_logs,
 )
-from astroai_workload.cluster import (  # noqa: E402
+from canfar_workload.cluster import (  # noqa: E402
     ClusterCreateRequest,
     gc_terminal_cluster_workers,
     retry_worker,
     stop_cluster,
     validate_cluster_create,
 )
-from astroai_workload.reconcile import (  # noqa: E402
+from canfar_workload.reconcile import (  # noqa: E402
     _apply_canfar_phase,
     _refresh_cluster_phase,
     enrich_worker_failure,
     reconcile_cluster,
 )
-from astroai_workload.settings import ManagerSettings  # noqa: E402
-from astroai_workload.state_store import (  # noqa: E402
+from canfar_workload.settings import ManagerSettings  # noqa: E402
+from canfar_workload.state_store import (  # noqa: E402
     ClusterState,
     StateStore,
     WorkerRecord,
 )
-from astroai_workload.workers import (  # noqa: E402
+from canfar_workload.workers import (  # noqa: E402
     build_worker_env,
     destroy_all_workers,
     destroy_worker,
@@ -195,7 +195,7 @@ class TestAuthStatus:
         ops = CanfarOps()
         with patch.object(ops, "_fresh_session") as mock_fresh:
             mock_fresh.return_value.fetch.return_value = [{"id": "s1"}]
-            with patch("astroai_workload.canfar_ops.Configuration") as MockConfig:
+            with patch("canfar_workload.canfar_ops.Configuration") as MockConfig:
                 cfg = MagicMock()
                 cfg.active.authentication = "cadc"
                 cfg.active.server = "https://example.com"
@@ -208,7 +208,7 @@ class TestAuthStatus:
 
     def test_no_authentication_configured(self, monkeypatch: pytest.MonkeyPatch) -> None:
         ops = CanfarOps()
-        with patch("astroai_workload.canfar_ops.Configuration") as MockConfig:
+        with patch("canfar_workload.canfar_ops.Configuration") as MockConfig:
             cfg = MagicMock()
             cfg.active.authentication = None
             cfg.active.server = None
@@ -220,7 +220,7 @@ class TestAuthStatus:
 
     def test_no_saved_credentials(self, monkeypatch: pytest.MonkeyPatch) -> None:
         ops = CanfarOps()
-        with patch("astroai_workload.canfar_ops.Configuration") as MockConfig:
+        with patch("canfar_workload.canfar_ops.Configuration") as MockConfig:
             cfg = MagicMock()
             cfg.active.authentication = "cadc"
             cfg.active.server = "https://example.com"
@@ -233,7 +233,7 @@ class TestAuthStatus:
 
     def test_session_fetch_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
         ops = CanfarOps()
-        with patch("astroai_workload.canfar_ops.Configuration") as MockConfig:
+        with patch("canfar_workload.canfar_ops.Configuration") as MockConfig:
             cfg = MagicMock()
             cfg.active.authentication = "cadc"
             cfg.active.server = "https://example.com"
@@ -249,8 +249,8 @@ class TestAuthStatus:
 class TestCanfarOpsCreateHeadless:
     def test_success_single_replica(self, monkeypatch: pytest.MonkeyPatch) -> None:
         ops = CanfarOps()
-        with patch("astroai_workload.canfar_ops._registry_configured", return_value=True):
-            with patch("astroai_workload.canfar_ops._registry_env", return_value={"REG": "val"}):
+        with patch("canfar_workload.canfar_ops._registry_configured", return_value=True):
+            with patch("canfar_workload.canfar_ops._registry_env", return_value={"REG": "val"}):
                 with patch.object(ops, "_fresh_session") as mock_new:
                     mock_sess = MagicMock()
                     mock_sess.config.registry = MagicMock(username="u", secret="s")
@@ -271,8 +271,8 @@ class TestCanfarOpsCreateHeadless:
 
     def test_multiple_replicas(self, monkeypatch: pytest.MonkeyPatch) -> None:
         ops = CanfarOps()
-        with patch("astroai_workload.canfar_ops._registry_configured", return_value=True):
-            with patch("astroai_workload.canfar_ops._registry_env", return_value={}):
+        with patch("canfar_workload.canfar_ops._registry_configured", return_value=True):
+            with patch("canfar_workload.canfar_ops._registry_env", return_value={}):
                 with patch.object(ops, "_fresh_session") as mock_new:
                     mock_sess = MagicMock()
                     mock_sess.create.return_value = ["sid-1", "sid-2", "sid-3"]
@@ -290,7 +290,7 @@ class TestCanfarOpsCreateHeadless:
 
     def test_no_registry_credentials(self, monkeypatch: pytest.MonkeyPatch) -> None:
         ops = CanfarOps()
-        with patch("astroai_workload.canfar_ops._registry_configured", return_value=False):
+        with patch("canfar_workload.canfar_ops._registry_configured", return_value=False):
             with pytest.raises(RuntimeError, match="Harbor registry credentials"):
                 ops.create_headless(
                     name="x",
@@ -299,8 +299,8 @@ class TestCanfarOpsCreateHeadless:
 
     def test_create_returns_empty(self, monkeypatch: pytest.MonkeyPatch) -> None:
         ops = CanfarOps()
-        with patch("astroai_workload.canfar_ops._registry_configured", return_value=True):
-            with patch("astroai_workload.canfar_ops._registry_env", return_value={}):
+        with patch("canfar_workload.canfar_ops._registry_configured", return_value=True):
+            with patch("canfar_workload.canfar_ops._registry_env", return_value={}):
                 with patch.object(ops, "_fresh_session") as mock_new:
                     mock_sess = MagicMock()
                     mock_sess.create.return_value = []
@@ -313,8 +313,8 @@ class TestCanfarOpsCreateHeadless:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         ops = CanfarOps()
-        with patch("astroai_workload.canfar_ops._registry_configured", return_value=True):
-            with patch("astroai_workload.canfar_ops._registry_env", return_value={}):
+        with patch("canfar_workload.canfar_ops._registry_configured", return_value=True):
+            with patch("canfar_workload.canfar_ops._registry_env", return_value={}):
                 with patch.object(ops, "_fresh_session") as mock_new:
                     mock_sess = MagicMock()
                     mock_sess.create.return_value = []
@@ -384,7 +384,7 @@ class TestCanfarOpsSessionHelpers:
 # ===============================================================
 class TestBuildWorkerEnv:
     def test_basic_env(self, settings: ManagerSettings, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("astroai_workload.workers.manager_pod_ip", lambda: "10.0.0.1")
+        monkeypatch.setattr("canfar_workload.workers.manager_pod_ip", lambda: "10.0.0.1")
         env = build_worker_env(settings, "/arc/home/u/heartbeat")
 
         assert env["RAY_CLUSTER_ID"] == "testcid"
@@ -398,7 +398,7 @@ class TestBuildWorkerEnv:
         assert env["RAY_MANAGER_HEARTBEAT_TIMEOUT_SECONDS"] == "120"
 
     def test_optional_ray_ports(self, settings: ManagerSettings, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("astroai_workload.workers.manager_pod_ip", lambda: "10.0.0.1")
+        monkeypatch.setattr("canfar_workload.workers.manager_pod_ip", lambda: "10.0.0.1")
         monkeypatch.setenv("RAY_NODE_MANAGER_PORT", "7000")
         monkeypatch.setenv("RAY_DASHBOARD_AGENT_GRPC_PORT", "7001")
 
@@ -420,7 +420,7 @@ class TestDestroyWorker:
                 workers=[WorkerRecord(session_id="w1", name="ray-w-1", phase="Ray Healthy")],
             )
         )
-        with patch("astroai_workload.workers.archive_session_logs") as mock_archive:
+        with patch("canfar_workload.workers.archive_session_logs") as mock_archive:
             result = destroy_worker(canfar=canfar, store=store, session_id="w1")
             mock_archive.assert_called_once()
         assert result["destroyed"] is True
@@ -437,7 +437,7 @@ class TestDestroyWorker:
                 workers=[WorkerRecord(session_id="w1", name="ray-w-1", phase="Ray Healthy")],
             )
         )
-        with patch("astroai_workload.workers.archive_session_logs"):
+        with patch("canfar_workload.workers.archive_session_logs"):
             destroy_worker(canfar=canfar, store=store, session_id="w1")
         state = store.load()
         assert state is not None
@@ -460,8 +460,8 @@ class TestDestroyAllWorkers:
                 ],
             )
         )
-        with patch("astroai_workload.workers.archive_session_logs"):
-            with patch("astroai_workload.workers.destroy_worker", wraps=destroy_worker) as mock_dw:
+        with patch("canfar_workload.workers.archive_session_logs"):
+            with patch("canfar_workload.workers.destroy_worker", wraps=destroy_worker) as mock_dw:
                 results = destroy_all_workers(canfar=canfar, store=store)
         destroyed_ids = {r["session_id"] for r in results}
         assert "active" in destroyed_ids
@@ -481,8 +481,8 @@ class TestDestroyAllWorkers:
                 ],
             )
         )
-        with patch("astroai_workload.workers.archive_session_logs"):
-            with patch("astroai_workload.workers.destroy_worker", wraps=destroy_worker) as mock_dw:
+        with patch("canfar_workload.workers.archive_session_logs"):
+            with patch("canfar_workload.workers.destroy_worker", wraps=destroy_worker) as mock_dw:
                 results = destroy_all_workers(
                     canfar=canfar, store=store, include_terminal=True
                 )
@@ -652,11 +652,11 @@ class TestReconcileCluster:
         canfar = MagicMock()
         _auth_ok(canfar)
         store.save(_state(phase="Running", manager_ip="10.0.0.99"))
-        monkeypatch.setattr("astroai_workload.reconcile.manager_pod_ip", lambda: "10.0.0.1")
-        monkeypatch.setattr("astroai_workload.reconcile.ray_address", lambda: "10.0.0.1:6379")
-        monkeypatch.setattr("astroai_workload.reconcile.list_ray_nodes", lambda *a, **k: [])
-        monkeypatch.setattr("astroai_workload.reconcile.live_worker_node_ips", lambda *a, **k: set())
-        monkeypatch.setattr("astroai_workload.reconcile.node_ip_to_id", lambda *a, **k: {})
+        monkeypatch.setattr("canfar_workload.reconcile.manager_pod_ip", lambda: "10.0.0.1")
+        monkeypatch.setattr("canfar_workload.reconcile.ray_address", lambda: "10.0.0.1:6379")
+        monkeypatch.setattr("canfar_workload.reconcile.list_ray_nodes", lambda *a, **k: [])
+        monkeypatch.setattr("canfar_workload.reconcile.live_worker_node_ips", lambda *a, **k: set())
+        monkeypatch.setattr("canfar_workload.reconcile.node_ip_to_id", lambda *a, **k: {})
 
         result = reconcile_cluster(canfar=canfar, store=store)
         assert result is not None
@@ -677,15 +677,15 @@ class TestReconcileCluster:
                 ],
             )
         )
-        monkeypatch.setattr("astroai_workload.reconcile.manager_pod_ip", lambda: "10.0.0.1")
-        monkeypatch.setattr("astroai_workload.reconcile.ray_address", lambda: "10.0.0.1:6379")
-        monkeypatch.setattr("astroai_workload.reconcile.list_ray_nodes", lambda *a, **k: [])
-        monkeypatch.setattr("astroai_workload.reconcile.live_worker_node_ips", lambda *a, **k: {"10.0.0.5"})
+        monkeypatch.setattr("canfar_workload.reconcile.manager_pod_ip", lambda: "10.0.0.1")
+        monkeypatch.setattr("canfar_workload.reconcile.ray_address", lambda: "10.0.0.1:6379")
+        monkeypatch.setattr("canfar_workload.reconcile.list_ray_nodes", lambda *a, **k: [])
+        monkeypatch.setattr("canfar_workload.reconcile.live_worker_node_ips", lambda *a, **k: {"10.0.0.5"})
         monkeypatch.setattr(
-            "astroai_workload.reconcile.node_ip_to_id", lambda *a, **k: {"10.0.0.5": "node-1"}
+            "canfar_workload.reconcile.node_ip_to_id", lambda *a, **k: {"10.0.0.5": "node-1"}
         )
 
-        with patch("astroai_workload.reconcile.archive_session_logs"):
+        with patch("canfar_workload.reconcile.archive_session_logs"):
             result = reconcile_cluster(canfar=canfar, store=store)
         assert result is not None
         w = result.workers[0]
@@ -702,11 +702,11 @@ class TestReconcileCluster:
                 preflight={"passed": True, "manager_ip": "10.0.0.88"},
             )
         )
-        monkeypatch.setattr("astroai_workload.reconcile.manager_pod_ip", lambda: "10.0.0.1")
-        monkeypatch.setattr("astroai_workload.reconcile.ray_address", lambda: "10.0.0.1:6379")
-        monkeypatch.setattr("astroai_workload.reconcile.list_ray_nodes", lambda *a, **k: [])
-        monkeypatch.setattr("astroai_workload.reconcile.live_worker_node_ips", lambda *a, **k: set())
-        monkeypatch.setattr("astroai_workload.reconcile.node_ip_to_id", lambda *a, **k: {})
+        monkeypatch.setattr("canfar_workload.reconcile.manager_pod_ip", lambda: "10.0.0.1")
+        monkeypatch.setattr("canfar_workload.reconcile.ray_address", lambda: "10.0.0.1:6379")
+        monkeypatch.setattr("canfar_workload.reconcile.list_ray_nodes", lambda *a, **k: [])
+        monkeypatch.setattr("canfar_workload.reconcile.live_worker_node_ips", lambda *a, **k: set())
+        monkeypatch.setattr("canfar_workload.reconcile.node_ip_to_id", lambda *a, **k: {})
 
         result = reconcile_cluster(canfar=canfar, store=store)
         assert result is not None
@@ -784,7 +784,7 @@ class TestValidateClusterCreate:
                 preflight={"passed": True, "manager_ip": "10.0.0.5"},
             )
         )
-        monkeypatch.setattr("astroai_workload.cluster.manager_pod_ip", lambda: "10.0.0.5")
+        monkeypatch.setattr("canfar_workload.cluster.manager_pod_ip", lambda: "10.0.0.5")
         req = ClusterCreateRequest(name="x", require_preflight=True)
         validate_cluster_create(canfar=canfar, store=store, req=req)
 
@@ -812,8 +812,8 @@ class TestStopCluster:
             )
         )
         with (
-            patch("astroai_workload.cluster.archive_session_logs"),
-            patch("astroai_workload.cluster.reconcile_cluster") as mock_reconcile,
+            patch("canfar_workload.cluster.archive_session_logs"),
+            patch("canfar_workload.cluster.reconcile_cluster") as mock_reconcile,
         ):
 
             def reconcile_side(canfar=None, store=None, state=None, nodes=None):
@@ -868,12 +868,12 @@ class TestRetryWorker:
         ]
         canfar.wait_for_status.return_value = "Running"
 
-        monkeypatch.setattr("astroai_workload.cluster.count_live_nodes", lambda *a, **k: 2)
-        monkeypatch.setattr("astroai_workload.cluster.wait_for_node_count", lambda *a, **k: 3)
+        monkeypatch.setattr("canfar_workload.cluster.count_live_nodes", lambda *a, **k: 2)
+        monkeypatch.setattr("canfar_workload.cluster.wait_for_node_count", lambda *a, **k: 3)
 
         with (
-            patch("astroai_workload.cluster.archive_session_logs"),
-            patch("astroai_workload.cluster.reconcile_cluster") as mock_reconcile,
+            patch("canfar_workload.cluster.archive_session_logs"),
+            patch("canfar_workload.cluster.reconcile_cluster") as mock_reconcile,
         ):
 
             def reconcile_side(canfar=None, store=None, state=None, nodes=None):
@@ -957,11 +957,11 @@ class TestGcTerminalClusterWorkers:
                 ],
             )
         )
-        monkeypatch.setattr("astroai_workload.cluster.clean_orphaned_workers", lambda *a, **k: [])
+        monkeypatch.setattr("canfar_workload.cluster.clean_orphaned_workers", lambda *a, **k: [])
 
         with (
-            patch("astroai_workload.cluster.archive_session_logs"),
-            patch("astroai_workload.cluster.reconcile_cluster", return_value=None),
+            patch("canfar_workload.cluster.archive_session_logs"),
+            patch("canfar_workload.cluster.reconcile_cluster", return_value=None),
         ):
             result = gc_terminal_cluster_workers(
                 settings=settings, canfar=canfar, store=store
@@ -985,9 +985,9 @@ class TestGcTerminalClusterWorkers:
                 ],
             )
         )
-        monkeypatch.setattr("astroai_workload.cluster.clean_orphaned_workers", lambda *a, **k: [])
+        monkeypatch.setattr("canfar_workload.cluster.clean_orphaned_workers", lambda *a, **k: [])
 
-        with patch("astroai_workload.cluster.reconcile_cluster", return_value=None):
+        with patch("canfar_workload.cluster.reconcile_cluster", return_value=None):
             result = gc_terminal_cluster_workers(
                 settings=settings, canfar=canfar, store=store
             )
@@ -1002,7 +1002,7 @@ class TestGcTerminalClusterWorkers:
         canfar = MagicMock()
         canfar.list_headless_sessions.return_value = []
         canfar.destroy.return_value = True
-        with patch("astroai_workload.cluster.reconcile_cluster", return_value=None):
+        with patch("canfar_workload.cluster.reconcile_cluster", return_value=None):
             result = gc_terminal_cluster_workers(
                 settings=settings, canfar=canfar, store=store
             )
@@ -1016,7 +1016,7 @@ class TestCreateClusterEdgeCases:
         """When min_joined is None, it defaults to worker_count."""
         canfar = MagicMock()
         _auth_ok(canfar)
-        monkeypatch.setattr("astroai_workload.cluster.manager_pod_ip", lambda: "10.0.0.1")
+        monkeypatch.setattr("canfar_workload.cluster.manager_pod_ip", lambda: "10.0.0.1")
         store.save(
             _state(
                 phase="Failed",
@@ -1028,18 +1028,18 @@ class TestCreateClusterEdgeCases:
             name="test", worker_count=3, min_joined=None, partial_policy="accept_partial"
         )
 
-        with patch("astroai_workload.cluster.prepare_cluster_create"):
-            with patch("astroai_workload.cluster.count_live_nodes", return_value=1):
+        with patch("canfar_workload.cluster.prepare_cluster_create"):
+            with patch("canfar_workload.cluster.count_live_nodes", return_value=1):
                 canfar.create_headless.return_value = [
                     SessionLaunch(session_id=f"sid-{i}", name=f"ray-w-{i}")
                     for i in range(3)
                 ]
                 canfar.wait_for_status.return_value = "Running"
-                monkeypatch.setattr("astroai_workload.cluster.count_live_nodes", lambda: 1)
+                monkeypatch.setattr("canfar_workload.cluster.count_live_nodes", lambda: 1)
 
                 with (
-                    patch("astroai_workload.cluster.reconcile_cluster") as mock_rec,
-                    patch("astroai_workload.cluster.wait_for_node_count", return_value=4),
+                    patch("canfar_workload.cluster.reconcile_cluster") as mock_rec,
+                    patch("canfar_workload.cluster.wait_for_node_count", return_value=4),
                 ):
 
                     def rec_side(**kw):
@@ -1054,7 +1054,7 @@ class TestCreateClusterEdgeCases:
 
                     mock_rec.side_effect = rec_side
 
-                    with patch("astroai_workload.cluster._archive_worker_logs"):
+                    with patch("canfar_workload.cluster._archive_worker_logs"):
                         result = create_cluster_body_test(
                             settings=settings, canfar=canfar, store=store, req=req
                         )
@@ -1067,7 +1067,7 @@ class TestCreateClusterEdgeCases:
 
 def create_cluster_body_test(settings, canfar, store, req):
     """Helper: call the internal create body (after validation)."""
-    from astroai_workload.cluster import _create_cluster_body
+    from canfar_workload.cluster import _create_cluster_body
 
     return _create_cluster_body(
         settings=settings,
