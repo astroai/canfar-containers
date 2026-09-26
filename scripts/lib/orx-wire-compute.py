@@ -1,7 +1,7 @@
 """Best-effort: default OpenResearch compute to CANFAR batch (Ray under the hood).
 
 Called from openresearch startup. Never fails the session.
-- If a manager Jobs URL is already known (ASTROAI_RAY_JOBS_ADDRESS), wire orx.
+- If a manager Jobs URL is already known (CANFAR_RAY_JOBS_ADDRESS), wire orx.
 - Else discover a Running/Pending ray-manager session via `canfar ps --json`
   and derive the Jobs URL from its connect URL (or a persisted connect URL).
 - Never set defaultBackend=ray without an address — orx would fall through to
@@ -162,7 +162,7 @@ def wire_orx(*, jobs_address: str, make_default: bool = True) -> dict[str, Any]:
         settings["defaultBackend"] = "ray"
         settings.pop("defaultFlavor", None)
     settings_path.write_text(json.dumps(settings, indent=2) + "\n", encoding="utf-8")
-    os.environ["ASTROAI_RAY_JOBS_ADDRESS"] = address
+    os.environ["CANFAR_RAY_JOBS_ADDRESS"] = address
     return {
         "ray_json": str(ray_path),
         "settings_json": str(settings_path),
@@ -173,7 +173,7 @@ def wire_orx(*, jobs_address: str, make_default: bool = True) -> dict[str, Any]:
 
 def main() -> int:
     try:
-        jobs = (os.environ.get("ASTROAI_RAY_JOBS_ADDRESS") or "").strip().rstrip("/")
+        jobs = (os.environ.get("CANFAR_RAY_JOBS_ADDRESS") or "").strip().rstrip("/")
         if not jobs:
             # Boot is discovery-only (persisted connect URL → canfar ps):
             # never create a manager as a side effect of starting a session.

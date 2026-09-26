@@ -15,15 +15,15 @@ a clean slate; use a new image release for fleet-wide updates.
 
 Examples:
   upgrade-cadc-tools.sh list
-  upgrade-cadc-tools.sh --upgrade astroai-lab
-  upgrade-cadc-tools.sh 'astroai-lab @ git+https://github.com/astroai/canfar-lab.git@main'
+  upgrade-cadc-tools.sh --upgrade canfar-lab
+  upgrade-cadc-tools.sh 'canfar-lab @ git+https://github.com/astroai/canfar-lab.git@main'
   upgrade-cadc-tools.sh --upgrade canfar cadcdata cadctap vos
 
 Build-time package list: `/opt/astroai/cadc-tools.txt` (unpinned; resolved when the image is built).
 
 Note: uv, pixi, and micromamba are installed from upstream installers at image
 build time (also unpinned). Project deps use pixi/uv under WORK; caches
-and agent CLIs use scratch paths from astroai-lab env export.
+and agent CLIs use scratch paths from canfar-lab env export.
 EOF
 }
 

@@ -26,9 +26,9 @@ fi
 astroai_boot_log "common-init:profile.d done"
 
 _cache_dirs=(
-    "${ASTROAI_LAB_BIN_DIR:-${SCRATCH:+${SCRATCH}/.local/bin}}"
-    "${ASTROAI_LAB_SAVE_DIR:-${HOME}/.astroai/lab/saves}"
-    "${ASTROAI_LAB_CONFIG_DIR:-${HOME}/.astroai/lab}"
+    "${CANFAR_LAB_BIN_DIR:-${SCRATCH:+${SCRATCH}/.local/bin}}"
+    "${CANFAR_LAB_SAVE_DIR:-${HOME}/.astroai/lab/saves}"
+    "${CANFAR_LAB_CONFIG_DIR:-${HOME}/.astroai/lab}"
     "${HOME}/.ssh"
     "${XDG_CONFIG_HOME:-${HOME}/.config}"
     ${XDG_CACHE_HOME:+"${XDG_CACHE_HOME}"}
@@ -69,7 +69,7 @@ cd "${_src_root}"
 astroai_boot_log "common-init:work=${PWD}"
 
 # Track session start time for astroai status; reset per-session auto-archive markers
-_state="${ASTROAI_LAB_CONFIG_DIR:-${HOME}/.astroai/lab}"
+_state="${CANFAR_LAB_CONFIG_DIR:-${HOME}/.astroai/lab}"
 mkdir -p "${_state}"
 date -u +%s > "${_state}/session-started"
 rm -f "${_state}/auto-archived" "${_state}"/auto-archived-*
@@ -177,6 +177,6 @@ if command -v astroai >/dev/null 2>&1; then
   esac
 fi
 
-unset ASTROAI_LAB_PROFILE_LOADED
+unset CANFAR_LAB_PROFILE_LOADED
 trap - ERR
 astroai_boot_log "common-init:done"

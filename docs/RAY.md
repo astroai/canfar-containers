@@ -13,7 +13,7 @@ flowchart TB
   Pref --> W1[ray-worker]
   Pref --> W2[ray-worker]
   Mgr --> Dash["/dashboard/ → Ray Dashboard :8265"]
-  Mgr --> Jobs["ASTROAI_RAY_JOBS_ADDRESS → Jobs API"]
+  Mgr --> Jobs["CANFAR_RAY_JOBS_ADDRESS → Jobs API"]
   Jobs --> Run["astroai run"]
 ```
 
@@ -118,7 +118,7 @@ Contributed **`ray-manager`** serves port **5000** under
 Always open the Dashboard **with a trailing slash**, using the session connect
 URL (`…/dashboard/`), not a bare workloads hostname.
 
-On the manager pod, Jobs clients use **`ASTROAI_RAY_JOBS_ADDRESS`**
+On the manager pod, Jobs clients use **`CANFAR_RAY_JOBS_ADDRESS`**
 (`http://127.0.0.1:8265`).
 
 ### OpenResearch (`orx`) on Ray
@@ -135,7 +135,7 @@ the hood). Preferred path:
 Manual (override discovery):
 
 ```bash
-export ASTROAI_RAY_JOBS_ADDRESS=http://127.0.0.1:8265   # on the manager
+export CANFAR_RAY_JOBS_ADDRESS=http://127.0.0.1:8265   # on the manager
 # or connectURL/dashboard from another session
 orx exp run <expId> --backend ray
 ```

@@ -46,7 +46,7 @@ docker run --rm --name "${NAME}" -d \
     -e SRCDIR=/srcdir \
     -e skaha_sessionid="${SESSION_ID}" \
     -e ASTROAI_SESSION_KIND=studio \
-    -e ASTROAI_LAB_WORK_ON_SCRATCH=0 \
+    -e CANFAR_LAB_WORK_ON_SCRATCH=0 \
     -p "${HOST_PORT}:5000" \
     -v "${FAKE_HOME}:/arc/home/testuser" \
     -v "${FAKE_SCRATCH}:/scratch" \

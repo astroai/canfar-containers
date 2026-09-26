@@ -10,7 +10,7 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "${TMP}"' EXIT
 
 export HOME="${TMP}"
-export ASTROAI_LAB_CONFIG_DIR="${TMP}/.astroai/lab"
+export CANFAR_LAB_CONFIG_DIR="${TMP}/.astroai/lab"
 export ASTROAI_SESSION_KIND=testkind
 export SKAHA_SESSIONID=sess-test-1
 
@@ -32,7 +32,7 @@ err="$(astroai_boot_log "unit-probe" 2>&1 >/dev/null)"
     exit 1
 }
 
-boot="${ASTROAI_LAB_CONFIG_DIR}/boot.log"
+boot="${CANFAR_LAB_CONFIG_DIR}/boot.log"
 [[ -f "${boot}" ]] || {
     echo "FAIL: boot.log not created" >&2
     exit 1

@@ -69,8 +69,8 @@ install_path_candidates() {
     local cmd path
     cmd="$(install_cmd_for "${tool}")"
     # Scratch-canonical: managed bin only. Do not treat ~/.local/bin as success.
-    if [[ -n "${ASTROAI_LAB_BIN_DIR:-}" ]]; then
-        printf '%s\n' "${ASTROAI_LAB_BIN_DIR}/${cmd}"
+    if [[ -n "${CANFAR_LAB_BIN_DIR:-}" ]]; then
+        printf '%s\n' "${CANFAR_LAB_BIN_DIR}/${cmd}"
     elif [[ -n "${SCRATCH:-}" && -d "${SCRATCH}" ]]; then
         printf '%s\n' "${SCRATCH}/.local/bin/${cmd}"
     fi
@@ -126,7 +126,7 @@ echo "=================================="
 # probes — on CANFAR /arc/home (NFS) some installed agents hang forever on
 # --version (seen: pi); that is agent-health noise, not a verb-surface failure.
 # Operators can still run `astroai agent verify` interactively with probes.
-export ASTROAI_LAB_PROBE_VERSION="${ASTROAI_LAB_PROBE_VERSION:-0}"
+export CANFAR_LAB_PROBE_VERSION="${CANFAR_LAB_PROBE_VERSION:-0}"
 
 check "agent setup" login_shell 'astroai --yes agent setup'
 check "agent verify" login_shell 'astroai agent verify'

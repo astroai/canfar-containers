@@ -45,7 +45,7 @@ if [[ -z "${RAY_CLUSTER_ID}" ]]; then
     fi
 fi
 # Jobs / Dashboard API is local to this pod — RayExecutor() reads this.
-export ASTROAI_RAY_JOBS_ADDRESS="${ASTROAI_RAY_JOBS_ADDRESS:-http://127.0.0.1:8265}"
+export CANFAR_RAY_JOBS_ADDRESS="${CANFAR_RAY_JOBS_ADDRESS:-http://127.0.0.1:8265}"
 # shellcheck disable=SC1091
 source /opt/astroai/lib/ray-version.sh
 export RAY_VERSION_EXPECTED="$(ray_version_expected)"
@@ -94,7 +94,7 @@ touch "${RAY_MANAGER_HEARTBEAT_PATH}"
 
 (while true; do touch "${RAY_MANAGER_HEARTBEAT_PATH}"; sleep 5; done) &
 
-astroai_boot_log "ray-manager:cluster=${RAY_CLUSTER_ID} jobs=${ASTROAI_RAY_JOBS_ADDRESS}"
+astroai_boot_log "ray-manager:cluster=${RAY_CLUSTER_ID} jobs=${CANFAR_RAY_JOBS_ADDRESS}"
 echo "CANFAR Ray Manager starting (cluster ${RAY_CLUSTER_ID})"
 trap - ERR
 astroai_boot_log "exec uvicorn :5000"

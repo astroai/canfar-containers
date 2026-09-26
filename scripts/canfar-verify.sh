@@ -85,7 +85,7 @@ for t in gh rg fd bat fzf hyperfine glow mdcat ov uv pixi micromamba mamba patch
 done
 
 # Env
-[[ -n "${ASTROAI_LAB_BIN_DIR:-}" ]] && echo "PASS:ASTROAI_LAB_BIN_DIR set" || echo "FAIL:ASTROAI_LAB_BIN_DIR set"
+[[ -n "${CANFAR_LAB_BIN_DIR:-}" ]] && echo "PASS:CANFAR_LAB_BIN_DIR set" || echo "FAIL:CANFAR_LAB_BIN_DIR set"
 echo "BATCH_END"
 CHECK_BATCH
 )
@@ -105,7 +105,7 @@ astroai agent list >/dev/null 2>&1 && echo "PASS:astroai agent list" || echo "FA
 # WORK relocate: /srcdir on the overlay (same device as /) + writable /scratch
 # on another volume → $SCRATCH/src. Bind-mounted /srcdir must stay put.
 # Mirrors astroai_lab.core.session_common.overlay_work_dir.
-flag="$(printf '%s' "${ASTROAI_LAB_WORK_ON_SCRATCH:-}" | tr '[:upper:]' '[:lower:]')"
+flag="$(printf '%s' "${CANFAR_LAB_WORK_ON_SCRATCH:-}" | tr '[:upper:]' '[:lower:]')"
 exported="$(astroai env export --json | python3 -c 'import json,sys; print(json.load(sys.stdin).get("WORK",""))' 2>/dev/null || true)"
 case "${flag}" in
     0|false|no|off)
@@ -206,11 +206,11 @@ if [[ -d "${SCRATCH}" && -w "${SCRATCH}" ]]; then
         [[ "${!var}" == "${root}" || "${!var}" == "${root}/"* ]] && echo "PASS:${var} under session cache root" || echo "FAIL:${var} under session cache root"
         [[ "${!var}" != "${HOME}" && "${!var}" != "${HOME}/"* ]] && echo "PASS:${var} off home" || echo "FAIL:${var} off home"
     done
-    [[ "${ASTROAI_LAB_BIN_DIR}" == "${SCRATCH}/.local/bin" ]] && echo "PASS:ASTROAI_LAB_BIN_DIR on scratch" || echo "FAIL:ASTROAI_LAB_BIN_DIR on scratch"
-    [[ "${ASTROAI_LAB_RUNTIME_ROOT}" == "${SCRATCH}/"* ]] && echo "PASS:ASTROAI_LAB_RUNTIME_ROOT on scratch" || echo "FAIL:ASTROAI_LAB_RUNTIME_ROOT on scratch"
+    [[ "${CANFAR_LAB_BIN_DIR}" == "${SCRATCH}/.local/bin" ]] && echo "PASS:CANFAR_LAB_BIN_DIR on scratch" || echo "FAIL:CANFAR_LAB_BIN_DIR on scratch"
+    [[ "${CANFAR_LAB_RUNTIME_ROOT}" == "${SCRATCH}/"* ]] && echo "PASS:CANFAR_LAB_RUNTIME_ROOT on scratch" || echo "FAIL:CANFAR_LAB_RUNTIME_ROOT on scratch"
     [[ "${UV_PYTHON_INSTALL_DIR}" != "${HOME}/"* ]] && echo "PASS:UV_PYTHON_INSTALL_DIR off home" || echo "FAIL:UV_PYTHON_INSTALL_DIR off home"
     [[ "${PIXI_HOME}" != "${HOME}/.pixi" ]] && echo "PASS:PIXI_HOME off home when scratch mounted" || echo "FAIL:PIXI_HOME off home when scratch mounted"
-    astroai env export --no-ensure | grep -q ASTROAI_LAB_BIN_DIR && echo "PASS:astroai env export" || echo "FAIL:astroai env export"
+    astroai env export --no-ensure | grep -q CANFAR_LAB_BIN_DIR && echo "PASS:astroai env export" || echo "FAIL:astroai env export"
 elif [[ -n "${WORK:-}" ]]; then
     for var in XDG_CACHE_HOME UV_CACHE_DIR PIXI_CACHE_DIR RATTLER_CACHE_DIR PIP_CACHE_DIR NPM_CONFIG_CACHE MAMBA_PKGS_DIRS CONDA_PKGS_DIRS; do
         [[ "${!var}" == "${WORK}" || "${!var}" == "${WORK}/"* ]] && echo "PASS:${var} under WORK" || echo "FAIL:${var} under WORK"

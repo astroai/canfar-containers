@@ -76,7 +76,7 @@ ok()   { echo "  ok: $*"; }
 # 0. bin dir prefers $SCRATCH/.local/bin (scratch-canonical). Never ~/.local/bin.
 #    Configs stay on $HOME; caches/runtimes already use scratch when mounted.
 ENV_JSON="$(astroai env export --json)"
-BIN_DIR="$(printf '%s' "${ENV_JSON}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["ASTROAI_LAB_BIN_DIR"])')"
+BIN_DIR="$(printf '%s' "${ENV_JSON}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["CANFAR_LAB_BIN_DIR"])')"
 if [[ -n "${SCRATCH}" && -d "${SCRATCH}" ]]; then
     case "${BIN_DIR}" in
         "${SCRATCH}/.local/bin") ok "bin dir scratch-canonical: ${BIN_DIR}";;

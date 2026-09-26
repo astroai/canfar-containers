@@ -179,7 +179,7 @@ def _ray_status() -> dict[str, Any]:
     running = [m for m in managers if wire._session_status(m) == "Running"]
     pending = [m for m in managers if wire._session_status(m) == "Pending"]
     connect = wire._session_connect_url(running[0]) if running else ""
-    jobs = (os.environ.get("ASTROAI_RAY_JOBS_ADDRESS") or "").strip().rstrip("/")
+    jobs = (os.environ.get("CANFAR_RAY_JOBS_ADDRESS") or "").strip().rstrip("/")
     if not jobs and connect:
         jobs = wire.jobs_url_from_connect(connect).rstrip("/")
 

@@ -80,8 +80,8 @@ check "overlay relocates WORK to /scratch/src" \
 check "overlay seeds /srcdir into /scratch/src" \
     grep -qx 'SEED=yes' <<<"${OUT}"
 
-OUT0="$(overlay_probe -e ASTROAI_LAB_WORK_ON_SCRATCH=0)"
-check "ASTROAI_LAB_WORK_ON_SCRATCH=0 keeps WORK=/srcdir" \
+OUT0="$(overlay_probe -e CANFAR_LAB_WORK_ON_SCRATCH=0)"
+check "CANFAR_LAB_WORK_ON_SCRATCH=0 keeps WORK=/srcdir" \
     grep -qx 'WORK=/srcdir' <<<"${OUT0}"
 
 rm -rf "${FAKE_ARC}/testuser"

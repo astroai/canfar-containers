@@ -21,7 +21,7 @@ astroai_boot_log() {
     kind="${ASTROAI_SESSION_KIND:-?}"
     line="${ts} sid=${sid} pid=$$ kind=${kind} $*"
     echo "[astroai-boot] ${line}" >&2 || true
-    dir="${ASTROAI_LAB_CONFIG_DIR:-${HOME}/.astroai/lab}"
+    dir="${CANFAR_LAB_CONFIG_DIR:-${HOME}/.astroai/lab}"
     mkdir -p "${dir}" 2>/dev/null || return 0
     echo "${line}" >> "${dir}/boot.log" 2>/dev/null || true
 }

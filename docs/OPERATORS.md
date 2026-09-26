@@ -261,7 +261,7 @@ session record ages out. Prefer grepping `[astroai-boot]` for `common-init:ERR`,
 ## Agents and quota (operator view)
 
 - Agents install on demand via `astroai agent install` into `$SCRATCH/.local/bin`
-  (`ASTROAI_LAB_BIN_DIR`) — prefer that over baking agent binaries into images
+  (`CANFAR_LAB_BIN_DIR`) — prefer that over baking agent binaries into images
   or installing onto `/arc` home (NFS is too slow). Skills:
   `npx skills add astroai/canfar-skills`.
 - **Plugins vs skills:** images bake `astroai-lab` from `config/astroai-lab.lock`. That package's plugins are **MCP / tools / rules only**. Skill packs (`SKILL.md`) install via `npx skills add astroai/canfar-skills` (skills.sh), not `astroai agent plugins`.

@@ -47,7 +47,7 @@ assert any(q[\"label\"] == \"mygroup\" for q in d[\"quotas\"]), d[\"quotas\"]
 print(\"STATUS_JSON_OK\")
 "
 astroai status 2>&1 | grep -F "Team project (cwd): /arc/projects/mygroup"
-upgrade-cadc-tools.sh list | grep -F astroai-lab
+upgrade-cadc-tools.sh list | grep -F canfar-lab
 test -w /opt/astroai/venv/cadc
 echo STATUS_HUMAN_OK
 '
