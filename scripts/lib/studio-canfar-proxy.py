@@ -782,19 +782,23 @@ class StudioProxyHandler(BaseHTTPRequestHandler):
                 _forward(self, TERMINAL_HOST, TERMINAL_PORT, rest, rewrite=False)
                 return
 
+        # JupyterLab / Marimo / VS Code serve under the full session base path
+        # (startup-studio.sh passes /session/contrib/<id>/<tool>), so re-add PREFIX.
+        prefixed = f"{PREFIX}{public}"
+
         # JupyterLab
         if route == "/jupyter" or route.startswith("/jupyter/"):
-            _forward(self, JUPYTER_HOST, JUPYTER_PORT, self.path, rewrite=True)
+            _forward(self, JUPYTER_HOST, JUPYTER_PORT, prefixed, rewrite=True)
             return
 
         # Marimo
         if route == "/marimo" or route.startswith("/marimo/"):
-            _forward(self, MARIMO_HOST, MARIMO_PORT, self.path, rewrite=True)
+            _forward(self, MARIMO_HOST, MARIMO_PORT, prefixed, rewrite=True)
             return
 
         # VS Code (OpenVSCode Server)
         if route == "/vscode" or route.startswith("/vscode/"):
-            _forward(self, VSCODE_HOST, VSCODE_PORT, self.path, rewrite=True)
+            _forward(self, VSCODE_HOST, VSCODE_PORT, prefixed, rewrite=True)
             return
 
         # Compute & Agent Wizard Hub

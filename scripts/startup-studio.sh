@@ -273,9 +273,9 @@ _start_marimo() {
     if command -v marimo >/dev/null 2>&1; then
         local _mbase=""
         if [[ -n "${skaha_sessionid:-}" ]]; then
-            _mbase="/session/contrib/${skaha_sessionid}/marimo/"
+            _mbase="/session/contrib/${skaha_sessionid}/marimo"
         else
-            _mbase="/marimo/"
+            _mbase="/marimo"
         fi
         local _mlog="${_studio_state}/logs/marimo.log"
         local _nbdir="${STUDIO_CWD}/notebooks"
@@ -373,6 +373,9 @@ while true; do
         python3 /opt/astroai/lib/agent-wizard.py >>"${_studio_state}/logs/wizard.log" 2>&1 &
         WIZARD_PID=$!
     fi
-    _extract_dsh_token || true
+    if _extract_dsh_token && [[ -z "${_token_logged:-}" ]]; then
+        astroai_boot_log "dsh web token captured for Skaha Connect redirect"
+        _token_logged=1
+    fi
     sleep 2
 done
