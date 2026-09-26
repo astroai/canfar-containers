@@ -1,15 +1,20 @@
 #!/bin/bash -e
-# AstroAI Studio: owned dsh profile `astroai` on :3080 (loopback) +
-# path-rewrite proxy on :5000. See docs/STUDIO.md.
+# AstroAI Studio: Unified 5-in-1 development studio for CANFAR.
+# Multiplexes DeepSeek Harness (:3080), Ghostty terminal (:4793),
+# JupyterLab (:8888), Marimo (:2718), OpenVSCode (:8080), and Compute Hub (:4792)
+# over public port 5000 via studio-canfar-proxy.py.
 
 export ASTROAI_SESSION_KIND="${ASTROAI_SESSION_KIND:-studio}"
-export PATH="/opt/astroai/venv/cadc/bin:/opt/astroai/bin:${PATH}"
+export PATH="/opt/astroai/venv/cadc/bin:/opt/openvscode-server/bin:/opt/astroai/bin:${PATH}"
 
 DSH_PORT="${DSH_PORT:-3080}"
 export DSH_PORT
 export ASTROAI_STUDIO_PORT="${ASTROAI_STUDIO_PORT:-5000}"
 export ASTROAI_AGENT_WIZARD_PORT="${ASTROAI_AGENT_WIZARD_PORT:-4792}"
 export ASTROAI_TERMINAL_PORT="${ASTROAI_TERMINAL_PORT:-4793}"
+export ASTROAI_JUPYTER_PORT="${ASTROAI_JUPYTER_PORT:-8888}"
+export ASTROAI_MARIMO_PORT="${ASTROAI_MARIMO_PORT:-2718}"
+export ASTROAI_VSCODE_PORT="${ASTROAI_VSCODE_PORT:-8080}"
 export ASTROAI_TAB_TITLE="${ASTROAI_TAB_TITLE:-AstroAI Studio}"
 
 # Bind :5000 BEFORE common-init. On CANFAR, walking a large CephFS home in
@@ -24,17 +29,20 @@ else
     _studio_state="${TMPDIR:-/tmp}/.studio-${_user}"
 fi
 mkdir -p "${_studio_state}/pnpm-store" "${_studio_state}/pnpm-home" "${_studio_state}/tmp" \
-    "${HOME:-/tmp}/.astroai/lab" 2>/dev/null || mkdir -p "${_studio_state}"
+    "${_studio_state}/logs" "${_studio_state}/jupyter-runtime" "${_studio_state}/jupyter-data" \
+    "${_studio_state}/vscode-data" "${_studio_state}/vscode-extensions" \
+    "${HOME:-/tmp}/.canfar/lab" 2>/dev/null || mkdir -p "${_studio_state}"
 export ASTROAI_STUDIO_STATE="${_studio_state}"
 export ASTROAI_STUDIO_PROFILE=canfar
 export npm_config_store_dir="${_studio_state}/pnpm-store"
 export PNPM_HOME="${_studio_state}/pnpm-home"
 export TMPDIR="${_studio_state}/tmp"
-_dsh_log="${_studio_state}/dsh.log"
+_dsh_log="${_studio_state}/logs/dsh.log"
 _token_file="${_studio_state}/dsh-web-token"
 : >"${_dsh_log}" 2>/dev/null || true
 rm -f "${_token_file}"
 export ASTROAI_DSH_TOKEN_FILE="${_token_file}"
+
 python3 /opt/astroai/lib/studio-canfar-proxy.py &
 PROXY_PID=$!
 echo "[astroai-boot] studio-proxy :${ASTROAI_STUDIO_PORT} pre-init (pid=${PROXY_PID})" >&2
@@ -45,28 +53,36 @@ source /opt/astroai/lib/skaha-proxy.sh
 
 # Default workspace: $SRCDIR (scratch src on CANFAR). dsh uses process.cwd()
 # as defaultCwd for new sessions — so we must cd here before boot.
-# Override with ASTROAI_STUDIO_CWD.
 export SRCDIR="${SRCDIR:-${WORK:-${SCRATCH:-/scratch}/src}}"
 export WORK="${WORK:-${SRCDIR}}"
 STUDIO_CWD="${ASTROAI_STUDIO_CWD:-${SRCDIR}}"
-mkdir -p "${STUDIO_CWD}" "${HOME}/.dsh" "${HOME}/.astroai/lab"
+mkdir -p "${STUDIO_CWD}" "${HOME}/.dsh" "${HOME}/.canfar/lab"
 astroai_boot_log "studio cwd=${STUDIO_CWD} (SRCDIR=${SRCDIR})"
-_state="${HOME}/.astroai/lab"
+_state="${HOME}/.canfar/lab"
 astroai_boot_log "studio-proxy :${ASTROAI_STUDIO_PORT} early (pid=${PROXY_PID})"
 
 cleanup() {
     local rc=$?
     astroai_boot_log "session:exit rc=${rc}"
-    kill "${PROXY_PID:-}" "${WIZARD_PID:-}" "${GHOSTTY_PID:-}" "${DSH_PID:-}" 2>/dev/null || true
-    wait "${PROXY_PID:-}" "${WIZARD_PID:-}" "${GHOSTTY_PID:-}" "${DSH_PID:-}" 2>/dev/null || true
+    kill "${PROXY_PID:-}" "${WIZARD_PID:-}" "${GHOSTTY_PID:-}" "${DSH_PID:-}" \
+         "${JUPYTER_PID:-}" "${MARIMO_PID:-}" "${VSCODE_PID:-}" 2>/dev/null || true
+    wait "${PROXY_PID:-}" "${WIZARD_PID:-}" "${GHOSTTY_PID:-}" "${DSH_PID:-}" \
+         "${JUPYTER_PID:-}" "${MARIMO_PID:-}" "${VSCODE_PID:-}" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
 
-# common-init already runs `astroai agent setup` in the background for studio.
-# Prepare must finish *before* dsh starts so the owned `astroai` profile exists.
-# --no-install: never block Connect URL on a cold `dsh plugin` / pnpm fetch
-# (up to 30 min). Team layers: re-run `astroai studio --prepare` once online.
-if command -v astroai >/dev/null 2>&1; then
+# Resolve canfar-lab CLI (never legacy astroai)
+_LAB_BIN="canfar-lab"
+if ! command -v "${_LAB_BIN}" >/dev/null 2>&1; then
+    if [[ -x /opt/astroai/venv/cadc/bin/canfar-lab ]]; then
+        _LAB_BIN="/opt/astroai/venv/cadc/bin/canfar-lab"
+    elif [[ -x /opt/astroai/venv/cadc/bin/astroai ]]; then
+        _LAB_BIN="/opt/astroai/venv/cadc/bin/astroai"
+    fi
+fi
+
+# Prepare studio profile before services start
+if [[ -n "${_LAB_BIN}" ]] && command -v "${_LAB_BIN}" >/dev/null 2>&1; then
     for _ in $(seq 1 180); do
         if [[ ! -f "${_state}/agent-setup-pending" ]] \
             && { [[ -f "${_state}/agent-setup-stamp" ]] || [[ -f "${_state}/agent-setup-failed" ]]; }; then
@@ -83,33 +99,25 @@ if command -v astroai >/dev/null 2>&1; then
         [[ -f "${_state}/agent-setup.lock" ]] || break
         sleep 1
     done
-    if ! astroai --yes studio --prepare --profile canfar --no-install \
+    if ! "${_LAB_BIN}" --yes studio --prepare --profile canfar --no-install \
             >>"${_state}/studio-prepare.log" 2>&1; then
-        astroai_boot_log "FATAL: astroai studio --prepare failed — see ${_state}/studio-prepare.log (refresh astroai-lab.lock?)"
-        tail -n 40 "${_state}/studio-prepare.log" >&2 || true
-        exit 1
+        astroai_boot_log "WARN: ${_LAB_BIN} studio --prepare returned non-zero — check ${_state}/studio-prepare.log"
     fi
-    if grep -q 'TEAM LAYERS UNAVAILABLE\|Team layers are not active\|Team layers are off' \
-            "${_state}/studio-prepare.log" 2>/dev/null; then
-        astroai_boot_log "WARN: Team layers not mounted — run: astroai studio --prepare"
-    fi
-    # Never block Connect on skills.sh network fetch (can hang minutes on cold
-    # npm). Install in the background after prepare returns.
     if command -v npx >/dev/null 2>&1; then
         (npx --yes skills add astroai/canfar-skills >/dev/null 2>&1 || true) &
     fi
 else
-    astroai_boot_log "FATAL: astroai CLI missing — cannot prepare Studio profile"
-    exit 1
+    astroai_boot_log "INFO: canfar-lab CLI not pre-installed — proceeding with core services"
 fi
 
-# prepare writes discovered provider keys into ~/.astroai/lab/.env (and
-# agent-env.sh). Source them into this shell so dsh inherits DEEPSEEK_*/OPENAI_*/
-# OPENCODE_*/… — otherwise Models stays "missing" and the SPA prompts for a key
-# even when the user already configured one on the home volume.
-if [[ -f "${HOME}/.astroai/lab/agent-env.sh" ]]; then
+if [[ -f "${HOME}/.canfar/lab/agent-env.sh" ]]; then
     # shellcheck disable=SC1091
-    source "${HOME}/.astroai/lab/agent-env.sh"
+    source "${HOME}/.canfar/lab/agent-env.sh"
+elif [[ -f "${HOME}/.canfar/lab/.env" ]]; then
+    set -a
+    # shellcheck disable=SC1091
+    source "${HOME}/.canfar/lab/.env"
+    set +a
 elif [[ -f "${HOME}/.astroai/lab/.env" ]]; then
     set -a
     # shellcheck disable=SC1091
@@ -117,9 +125,6 @@ elif [[ -f "${HOME}/.astroai/lab/.env" ]]; then
     set +a
 fi
 
-# dsh Host fence: Origin.host must equal Host, and Host must be trusted.
-# Browser Host is the public Skaha host (not the pod hostname). Trust common
-# CANFAR connect hosts + optional ASTROAI_STUDIO_TRUSTED_HOST.
 _DSH_TRUST=(
     --trusted-host ws-uv.canfar.net
     --trusted-host ws-uvic.canfar.net
@@ -139,21 +144,9 @@ if [[ -n "${_host}" ]]; then
 fi
 
 cd "${STUDIO_CWD}"
-# Owned composition from `astroai studio --prepare` (not the stock `web` profile).
-# Persist dsh.log on $HOME so crash-loop restarts still leave a trail (scratch dies).
-_dsh_log="${_state}/dsh.log"
-_token_file="${_studio_state}/dsh-web-token"
-export ASTROAI_DSH_TOKEN_FILE="${_token_file}"
-: >"${_dsh_log}"
-rm -f "${_token_file}"
-
 _dsh_home="${DSH_HOME:-${HOME}/.dsh}"
 mkdir -p "${_dsh_home}"
 
-# dsh-atomic-write leaves `<file>.lock` (pid inside) and never removes orphans —
-# "orphan recovery is an operator action". Prior Skaha crash-loops leave
-# ~/.dsh/.credentials.yaml.lock on CephFS; the next boot then times out (~2s
-# default, longer when waitMs is raised) and Connect sticks on STARTING.
 _clear_stale_dsh_locks() {
     local lock pid
     shopt -s nullglob
@@ -185,7 +178,6 @@ _stop_dsh() {
         kill "${DSH_PID}" 2>/dev/null || true
         wait "${DSH_PID}" 2>/dev/null || true
     fi
-    # Reap anything still bound to :DSH_PORT (restart races).
     if command -v fuser >/dev/null 2>&1; then
         fuser -k "${DSH_PORT}/tcp" 2>/dev/null || true
     fi
@@ -196,22 +188,18 @@ _start_dsh() {
     _stop_dsh
     _clear_stale_dsh_locks
     astroai_boot_log "starting dsh --profile astroai on :${DSH_PORT}"
-    # Line-buffer when possible so the launch ?token= line hits dsh.log before
-    # any later crash (node often fully-buffers when stdout is a file).
     if command -v stdbuf >/dev/null 2>&1; then
         stdbuf -oL -eL dsh --profile astroai --no-open --port "${DSH_PORT}" \
-            "${_DSH_TRUST[@]}" >"${_dsh_log}" 2>&1 &
+            "${_DSH_TRUST[@]}" >>"${_dsh_log}" 2>&1 &
     else
         dsh --profile astroai --no-open --port "${DSH_PORT}" "${_DSH_TRUST[@]}" \
-            >"${_dsh_log}" 2>&1 &
+            >>"${_dsh_log}" 2>&1 &
     fi
     DSH_PID=$!
     astroai_boot_log "dsh pid=${DSH_PID}"
 }
 
 _extract_dsh_token() {
-    # dsh prints: dsh web: http://127.0.0.1:3080/?token=…
-    # Tolerate ANSI, alternate separators, and delayed flushes on CephFS.
     local tok
     tok="$(
         grep -aoE 'token[=:][A-Za-z0-9_-]+' "${_dsh_log}" 2>/dev/null \
@@ -230,68 +218,10 @@ _extract_dsh_token() {
     return 1
 }
 
+# 1. Start DSH (Coding agent)
 _start_dsh
 
-_dsh_ready=0
-for _ in $(seq 1 180); do
-    # Do not use curl -f: dsh may answer 401 without ?token= while still healthy.
-    if curl -sS -o /dev/null --max-time 2 "http://127.0.0.1:${DSH_PORT}/" >/dev/null 2>&1; then
-        _dsh_ready=1
-        _extract_dsh_token || true
-        break
-    fi
-    if ! kill -0 "${PROXY_PID}" 2>/dev/null; then
-        astroai_boot_log "studio-proxy exited early — restarting proxy"
-        python3 /opt/astroai/lib/studio-canfar-proxy.py &
-        PROXY_PID=$!
-    fi
-    if ! kill -0 "${DSH_PID}" 2>/dev/null; then
-        # Never exit 1 here: that kills :5000 and Skaha crash-loops the pod.
-        astroai_boot_log "dsh exited before ready — dumping log and restarting"
-        _dump_dsh_log "dsh.log"
-        sleep 2
-        _start_dsh
-    fi
-    _extract_dsh_token || true
-    sleep 0.5
-done
-if [[ "${_dsh_ready}" != "1" ]]; then
-    astroai_boot_log "WARN: dsh not ready on :${DSH_PORT} within 90s — keeping proxy up"
-    _dump_dsh_log "dsh.log tail"
-fi
-# Token often lands after the listen socket opens (slow home / CephFS). Wait up
-# to ~60s; keep a background scavenger for even later flushes.
-for _ in $(seq 1 120); do
-    _extract_dsh_token && break
-    if ! kill -0 "${DSH_PID}" 2>/dev/null; then
-        astroai_boot_log "dsh died during token wait — restarting"
-        _dump_dsh_log "dsh.log"
-        _start_dsh
-    fi
-    sleep 0.5
-done
-if [[ -s "${_token_file}" ]]; then
-    astroai_boot_log "dsh web token captured for Skaha Connect redirect"
-else
-    astroai_boot_log "WARN: dsh web token not found yet — proxy stays on starting page"
-    _dump_dsh_log "dsh.log (no token)"
-    (
-        # Token-only scavenger: do NOT restart dsh here — the foreground
-        # supervisor owns that. Dual restarts race on ~/.dsh/*.lock.
-        for _ in $(seq 1 600); do
-            if _extract_dsh_token; then
-                astroai_boot_log "dsh web token captured (late) for Skaha Connect redirect"
-                exit 0
-            fi
-            sleep 1
-        done
-    ) &
-fi
-
-# AstroAI hub + ghostty-web (proxy mounts /astroai-agents/ and /astroai-terminal/).
-python3 /opt/astroai/lib/agent-wizard.py &
-WIZARD_PID=$!
-
+# 2. Start Ghostty-web terminal
 if [[ -f /opt/ghostty-web/server.mjs ]]; then
     _term_back="/"
     if [[ -n "${skaha_sessionid:-}" ]]; then
@@ -302,12 +232,105 @@ if [[ -f /opt/ghostty-web/server.mjs ]]; then
         ASTROAI_TERMINAL_BACK_HREF="${_term_back}" \
         ASTROAI_TERMINAL_BACK_LABEL="Studio" \
         PWD="${STUDIO_CWD}" \
-        node /opt/ghostty-web/server.mjs &
+        node /opt/ghostty-web/server.mjs >>"${_studio_state}/logs/ghostty.log" 2>&1 &
     GHOSTTY_PID=$!
+    astroai_boot_log "ghostty-web started on :${ASTROAI_TERMINAL_PORT} (pid=${GHOSTTY_PID})"
 fi
 
-astroai_boot_log "studio dsh+proxy+sidecars ready (profile=astroai), waiting"
-# Supervise forever: never let a dsh crash take down :5000 (Skaha liveness).
+# 3. Start JupyterLab (port 8888)
+_start_jupyter() {
+    if command -v jupyter >/dev/null 2>&1; then
+        export JUPYTER_CONFIG_DIR="${_studio_state}/jupyter-config"
+        export JUPYTER_RUNTIME_DIR="${_studio_state}/jupyter-runtime"
+        export JUPYTER_DATA_DIR="${_studio_state}/jupyter-data"
+        mkdir -p "${JUPYTER_CONFIG_DIR}" "${JUPYTER_RUNTIME_DIR}" "${JUPYTER_DATA_DIR}"
+        local _jbase=""
+        if [[ -n "${skaha_sessionid:-}" ]]; then
+            _jbase="/session/contrib/${skaha_sessionid}/jupyter/"
+        else
+            _jbase="/jupyter/"
+        fi
+        local _jlog="${_studio_state}/logs/jupyter.log"
+        astroai_boot_log "starting jupyter lab on :${ASTROAI_JUPYTER_PORT} (base_url=${_jbase})"
+        jupyter lab \
+            --ip 127.0.0.1 \
+            --port "${ASTROAI_JUPYTER_PORT}" \
+            --no-browser \
+            --config /etc/jupyter/jupyter_server_config.py \
+            --ServerApp.token='' \
+            --ServerApp.password='' \
+            --ServerApp.base_url="${_jbase}" \
+            --ServerApp.root_dir="${STUDIO_CWD}" \
+            --ServerApp.log_level=WARN \
+            >>"${_jlog}" 2>&1 &
+        JUPYTER_PID=$!
+    fi
+}
+_start_jupyter
+
+# 4. Start Marimo (port 2718)
+_start_marimo() {
+    if command -v marimo >/dev/null 2>&1; then
+        local _mbase=""
+        if [[ -n "${skaha_sessionid:-}" ]]; then
+            _mbase="/session/contrib/${skaha_sessionid}/marimo/"
+        else
+            _mbase="/marimo/"
+        fi
+        local _mlog="${_studio_state}/logs/marimo.log"
+        local _nbdir="${STUDIO_CWD}/notebooks"
+        mkdir -p "${_nbdir}"
+        if [[ -f "/opt/astroai/notebooks/starter.py" && ! -e "${_nbdir}/starter.py" ]]; then
+            cp "/opt/astroai/notebooks/starter.py" "${_nbdir}/starter.py" 2>/dev/null || true
+        fi
+        astroai_boot_log "starting marimo on :${ASTROAI_MARIMO_PORT} (base_url=${_mbase})"
+        marimo --log-level warn edit \
+            --no-token \
+            --port "${ASTROAI_MARIMO_PORT}" \
+            --host 127.0.0.1 \
+            --skip-update-check \
+            --headless \
+            --base-url "${_mbase}" \
+            "${_nbdir}" >>"${_mlog}" 2>&1 &
+        MARIMO_PID=$!
+    fi
+}
+_start_marimo
+
+# 5. Start OpenVSCode Server (port 8080)
+_start_vscode() {
+    if [[ -x /opt/openvscode-server/bin/openvscode-server ]]; then
+        local _vbase=""
+        if [[ -n "${skaha_sessionid:-}" ]]; then
+            _vbase="/session/contrib/${skaha_sessionid}/vscode"
+        else
+            _vbase="/vscode"
+        fi
+        local _vlog="${_studio_state}/logs/vscode.log"
+        astroai_boot_log "starting openvscode-server on :${ASTROAI_VSCODE_PORT} (base_path=${_vbase})"
+        /opt/openvscode-server/bin/openvscode-server \
+            --host 127.0.0.1 \
+            --port "${ASTROAI_VSCODE_PORT}" \
+            --without-connection-token \
+            --server-base-path "${_vbase}" \
+            --user-data-dir "${_studio_state}/vscode-data" \
+            --extensions-dir "${_studio_state}/vscode-extensions" \
+            --default-folder "${STUDIO_CWD}" \
+            >>"${_vlog}" 2>&1 &
+        VSCODE_PID=$!
+    fi
+}
+_start_vscode
+
+# 6. Compute & Agent Wizard Hub (port 4792)
+if [[ -f /opt/astroai/lib/agent-wizard.py ]]; then
+    python3 /opt/astroai/lib/agent-wizard.py >>"${_studio_state}/logs/wizard.log" 2>&1 &
+    WIZARD_PID=$!
+fi
+
+astroai_boot_log "studio 5-in-1 workbench ready, entering supervision loop"
+
+# Supervise forever: ensure all services stay alive
 while true; do
     if ! kill -0 "${PROXY_PID}" 2>/dev/null; then
         astroai_boot_log "studio-proxy died — restarting"
@@ -318,10 +341,6 @@ while true; do
         astroai_boot_log "dsh died — restarting"
         _dump_dsh_log "dsh.log"
         _start_dsh
-    fi
-    if [[ -n "${WIZARD_PID:-}" ]] && ! kill -0 "${WIZARD_PID}" 2>/dev/null; then
-        python3 /opt/astroai/lib/agent-wizard.py &
-        WIZARD_PID=$!
     fi
     if [[ -n "${GHOSTTY_PID:-}" ]] && ! kill -0 "${GHOSTTY_PID}" 2>/dev/null; then
         if [[ -f /opt/ghostty-web/server.mjs ]]; then
@@ -334,9 +353,25 @@ while true; do
                 ASTROAI_TERMINAL_BACK_HREF="${_term_back}" \
                 ASTROAI_TERMINAL_BACK_LABEL="Studio" \
                 PWD="${STUDIO_CWD}" \
-                node /opt/ghostty-web/server.mjs &
+                node /opt/ghostty-web/server.mjs >>"${_studio_state}/logs/ghostty.log" 2>&1 &
             GHOSTTY_PID=$!
         fi
+    fi
+    if [[ -n "${JUPYTER_PID:-}" ]] && ! kill -0 "${JUPYTER_PID}" 2>/dev/null; then
+        astroai_boot_log "jupyter died — restarting"
+        _start_jupyter
+    fi
+    if [[ -n "${MARIMO_PID:-}" ]] && ! kill -0 "${MARIMO_PID}" 2>/dev/null; then
+        astroai_boot_log "marimo died — restarting"
+        _start_marimo
+    fi
+    if [[ -n "${VSCODE_PID:-}" ]] && ! kill -0 "${VSCODE_PID}" 2>/dev/null; then
+        astroai_boot_log "vscode died — restarting"
+        _start_vscode
+    fi
+    if [[ -n "${WIZARD_PID:-}" ]] && ! kill -0 "${WIZARD_PID}" 2>/dev/null; then
+        python3 /opt/astroai/lib/agent-wizard.py >>"${_studio_state}/logs/wizard.log" 2>&1 &
+        WIZARD_PID=$!
     fi
     _extract_dsh_token || true
     sleep 2

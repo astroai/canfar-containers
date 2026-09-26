@@ -53,11 +53,16 @@ def test_injects_api_shim_and_chips() -> None:
     assert b"window.WebSocket" in out
     assert b"EventSource" in out
     assert b'id="astroai-terminal-chip"' in out
-    assert b'href="/session/contrib/abc/astroai-terminal/"' in out
+    assert b'href="/session/contrib/abc/terminal/"' in out
     assert b'id="astroai-agents-chip"' in out
-    assert b'href="/session/contrib/abc/astroai-agents/"' in out
+    assert b'id="astroai-jupyter-chip"' in out
+    assert b'href="/session/contrib/abc/jupyter/lab"' in out
+    assert b'id="astroai-marimo-chip"' in out
+    assert b'href="/session/contrib/abc/marimo/"' in out
+    assert b'id="astroai-vscode-chip"' in out
+    assert b'href="/session/contrib/abc/vscode/"' in out
     assert b"astroai-resource-banner" not in out
-    assert b'data-astroai-proxy-rev="9"' in out
+    assert b'data-astroai-proxy-rev="10"' in out
     assert b"data-astroai-tab" in out  # branded tab stick
 
 
@@ -165,6 +170,31 @@ def test_expire_dsh_auth_cookies() -> None:
 def test_starting_html_is_refreshable() -> None:
     assert b'meta http-equiv="refresh"' in proxy.STARTING_HTML
     assert b"AstroAI Studio is starting" in proxy.STARTING_HTML
+
+
+def test_get_studio_status() -> None:
+    status = proxy.get_studio_status()
+    assert "status" in status
+    assert "services" in status
+    assert "agent" in status["services"]
+    assert "terminal" in status["services"]
+    assert "jupyter" in status["services"]
+    assert "marimo" in status["services"]
+    assert "vscode" in status["services"]
+    assert "hub" in status["services"]
+    assert "resources" in status
+    assert "scratch_free_gb" in status["resources"]
+
+
+def test_command_dock_template() -> None:
+    proxy.PREFIX = "/session/contrib/test123"
+    dock = proxy.command_dock_html()
+    assert "data-astroai-dock" in dock
+    assert "/session/contrib/test123/jupyter/lab" in dock
+    assert "/session/contrib/test123/marimo/" in dock
+    assert "/session/contrib/test123/vscode/" in dock
+    assert "/session/contrib/test123/terminal/" in dock
+    assert "data-tool=\"agent\"" in dock
 
 
 if __name__ == "__main__":

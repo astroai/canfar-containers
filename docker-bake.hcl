@@ -16,6 +16,14 @@ variable "PYTHON_VERSION" {
   default = "3.13"
 }
 
+variable "DSH_VERSION" {
+  default = "latest"
+}
+
+variable "DSH_CACHEBUST" {
+  default = "1"
+}
+
 group "default" {
   targets = ["base", "terminal", "notebook", "vscode", "marimo", "openresearch", "studio"]
 }
@@ -92,6 +100,10 @@ target "studio" {
   inherits   = ["_interface"]
   dockerfile = "dockerfiles/studio/Dockerfile"
   tags       = ["${REGISTRY}/${OWNER}/studio:${TAG}"]
+  args = {
+    DSH_VERSION   = "${DSH_VERSION}"
+    DSH_CACHEBUST = "${DSH_CACHEBUST}"
+  }
 }
 
 # Ray cluster images
