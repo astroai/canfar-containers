@@ -10,7 +10,7 @@ cadcutils==1.6.2
     # via canfar
 canfar==1.4.1
     # via canfar-lab
-canfar-lab @ git+https://github.com/sfabbro/canfar-lab.git@4d9857f411dae71cdb9644d3293ee0a7263b8c74
+canfar-lab @ git+https://github.com/sfabbro/canfar-lab.git@d3eadd479c2cc8267af9490f98f2830be2e17e23
     # via -r config/astroai-lab.in
 certifi==2026.7.22
     # via
