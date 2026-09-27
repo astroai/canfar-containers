@@ -159,11 +159,23 @@ def _expiry_epoch(raw: object) -> float | None:
     return None
 
 
+def _cert_expiry(path: Path) -> float | None:
+    """notAfter of the first certificate in a PEM bundle (proxy cert + key)."""
+    import ssl
+
+    try:
+        info = ssl._ssl._test_decode_cert(str(path))  # type: ignore[attr-defined]
+        return float(ssl.cert_time_to_seconds(info["notAfter"]))
+    except (AttributeError, KeyError, OSError, ValueError, ssl.SSLError):
+        return None
+
+
 def _canfar_auth_line() -> tuple[bool, str]:
     """Logged in only with an active context whose credential has not expired.
 
-    ``canfar auth show`` reports ``active: true`` for the default context even
-    with no certificate at all (``expiry: null``), so presence alone is not auth.
+    ``canfar auth show`` reports ``expiry: null`` both for a context with no
+    certificate and for the proxy certificate Skaha writes to
+    ``~/.ssl/cadcproxy.pem`` at session start, so the certificate itself decides.
     """
     if shutil.which("canfar") is None:
         return False, "canfar CLI not on PATH"
@@ -171,17 +183,22 @@ def _canfar_auth_line() -> tuple[bool, str]:
     if rc == 124:
         return False, f"canfar auth show timed out after {PLATFORM_CANFAR_TIMEOUT}s"
     data = _parse_json_stdout(out)
-    if rc != 0 or not isinstance(data, dict):
-        return False, "not logged in — run `canfar login` in a terminal"
-    expiry = _expiry_epoch(data.get("expiry"))
+    data = data if rc == 0 and isinstance(data, dict) else {}
     who = str(data.get("name") or data.get("idp") or "CANFAR")
-    if not data.get("active") or expiry is None:
+    expiry = _expiry_epoch(data.get("expiry")) if data.get("active") else None
+    from_session = False
+    if expiry is None and data.get("mode", "x509") == "x509":
+        expiry = _cert_expiry(Path.home() / ".ssl" / "cadcproxy.pem")
+        from_session = expiry is not None and bool(os.environ.get("skaha_sessionid"))  # noqa: SIM112 — Skaha sets lowercase
+    if expiry is None:
         return False, "not logged in — run `canfar login` in a terminal"
     remaining = expiry - time.time()
     if remaining <= 0:
         return False, f"{who} login expired — run `canfar login` in a terminal"
     days = remaining / 86400
     left = f"{days:.0f} days" if days >= 1 else f"{remaining / 3600:.1f} hours"
+    if from_session:
+        return True, f"{who} · signed in by this CANFAR session ({left} left)"
     return True, f"{who} · {left} left"
 
 
@@ -225,7 +242,11 @@ def _ray_status() -> dict[str, Any]:
     if not jobs and connect:
         jobs = wire.jobs_url_from_connect(connect).rstrip("/")
 
-    orx = _orx_wire_state(wire) if WIRE_ORX else {"wired": False, "address": "", "default_backend": ""}
+    orx = (
+        _orx_wire_state(wire)
+        if WIRE_ORX
+        else {"wired": False, "address": "", "default_backend": ""}
+    )
     if WIRE_ORX and orx["address"] and not jobs:
         jobs = orx["address"]
     wired = bool(WIRE_ORX and orx["wired"] and jobs)
@@ -263,9 +284,7 @@ def _platform_payload() -> dict[str, Any]:
     return {
         "ok": bool(ray.get("manager_running")),
         "session_kind": SESSION_KIND,
-        "image_tag": os.environ.get("RAY_IMAGE_TAG")
-        or os.environ.get("BUILD_TAG")
-        or "latest",
+        "image_tag": os.environ.get("RAY_IMAGE_TAG") or os.environ.get("BUILD_TAG") or "latest",
         "canfar": {
             "available": shutil.which("canfar") is not None,
             "auth_ok": auth_ok,
@@ -528,9 +547,7 @@ def _start_compute_ensure() -> dict[str, Any]:
     with _ENSURE_LOCK:
         if _ENSURE_STATE["running"]:
             return {"ok": True, "running": True, "summary": "already starting"}
-        _ENSURE_STATE.update(
-            running=True, steps=[], result=None, started=time.time(), finished=0.0
-        )
+        _ENSURE_STATE.update(running=True, steps=[], result=None, started=time.time(), finished=0.0)
 
     def _worker() -> None:
         try:
@@ -632,8 +649,7 @@ def _compute_ensure() -> dict[str, Any]:
                 "ok": False,
                 "summary": "manager present but cluster start failed",
                 "user_message": (
-                    f"astroai cluster start failed: "
-                    f"{(ensure_err or ensure_out or 'unknown')[:600]}"
+                    f"astroai cluster start failed: {(ensure_err or ensure_out or 'unknown')[:600]}"
                 ),
                 "error": (ensure_err or ensure_out or "")[:800],
                 "steps": steps,
@@ -790,7 +806,8 @@ def _install_plugins_by_tag(tag: str) -> tuple[int, dict]:
     }
 
 
-INDEX_HTML = """<!DOCTYPE html>
+INDEX_HTML = (
+    """<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8"/>
@@ -1265,9 +1282,11 @@ loadAgents();
 </script>
 </body>
 </html>
-""".replace("__BACK_LABEL__", BACK_UI_LABEL).replace(
-    "__BACK_LABEL_JSON__", json.dumps(BACK_UI_LABEL)
-).replace("__HUB_TITLE_SUFFIX__", HUB_TITLE_SUFFIX).replace("__HUB_TITLE__", HUB_TITLE)
+""".replace("__BACK_LABEL__", BACK_UI_LABEL)
+    .replace("__BACK_LABEL_JSON__", json.dumps(BACK_UI_LABEL))
+    .replace("__HUB_TITLE_SUFFIX__", HUB_TITLE_SUFFIX)
+    .replace("__HUB_TITLE__", HUB_TITLE)
+)
 
 
 class WizardHandler(BaseHTTPRequestHandler):

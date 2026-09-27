@@ -6,6 +6,7 @@ import importlib.util
 import json
 import tempfile
 import threading
+import time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -42,8 +43,7 @@ def test_addons_and_catalog_use_list_config() -> None:
         if args[-1] == "list":
             return (
                 0,
-                '{"ok":true,"agents":[{"id":"kilo","agent":"kilo",'
-                '"binary":true,"summary":"cli"}]}',
+                '{"ok":true,"agents":[{"id":"kilo","agent":"kilo","binary":true,"summary":"cli"}]}',
                 "",
             )
         return 0, "{}", ""
@@ -75,8 +75,7 @@ def test_install_by_tag_loops_plugins_install() -> None:
             pid = args[-1]
             return (
                 0,
-                f'{{"ok":true,"plugin":"{pid}",'
-                f'"actions":[{{"id":"{pid}","status":"ok"}}]}}',
+                f'{{"ok":true,"plugin":"{pid}","actions":[{{"id":"{pid}","status":"ok"}}]}}',
                 "",
             )
         return 1, "", "unexpected"
@@ -253,7 +252,7 @@ def test_index_html_hub_sections() -> None:
     assert 'type="password"' in html and 'autocomplete="off"' in html
     assert "More agents" not in html  # every agent is listed in one grid
     assert "/astroai-' + 'agents" in html
-    assert "id=\"back-link\"" in html
+    assert 'id="back-link"' in html
     assert "npx skills add astroai/canfar-skills" in html
     assert "__" not in html.split("<script>")[0].replace("__proto__", "")
 
@@ -279,8 +278,9 @@ def test_agent_report_returns_full_list() -> None:
         assert args[-1] == "list"
         return 0, json.dumps(payload), ""
 
-    with patch.object(wiz, "_run_lab", side_effect=fake), patch.object(
-        wiz, "_log_tail", return_value=""
+    with (
+        patch.object(wiz, "_run_lab", side_effect=fake),
+        patch.object(wiz, "_log_tail", return_value=""),
     ):
         code, data = wiz._agent_report()
     assert code == 200
@@ -362,9 +362,7 @@ def test_keys_change_validates_and_surfaces_cli_error() -> None:
     assert code == 400 and data["error"] == "Not an API key. Paste it again."
 
     calls = []
-    with patch.object(
-        wiz, "_run_lab", side_effect=lambda a, **k: calls.append(a) or (0, "{}", "")
-    ):
+    with patch.object(wiz, "_run_lab", side_effect=lambda a, **k: calls.append(a) or (0, "{}", "")):
         assert wiz._keys_change("OPENAI_API_KEY", None)[1]["present"] is False
     assert calls == [["--json", "agent", "keys", "unset", "OPENAI_API_KEY"]]
 
@@ -375,7 +373,10 @@ def test_canfar_auth_requires_unexpired_credential() -> None:
     def show(payload):
         return patch.object(wiz, "_run_cmd", return_value=(0, json.dumps(payload), ""))
 
-    with patch.object(wiz.shutil, "which", return_value="/usr/bin/canfar"):
+    with (
+        patch.object(wiz.shutil, "which", return_value="/usr/bin/canfar"),
+        patch.object(wiz, "_cert_expiry", return_value=None),
+    ):
         with show({"active": True, "expiry": None, "name": "CADC"}):
             ok, line = wiz._canfar_auth_line()
             assert ok is False and "canfar login" in line
@@ -391,6 +392,70 @@ def test_canfar_auth_requires_unexpired_credential() -> None:
             assert wiz._canfar_auth_line()[0] is False
 
 
+def _make_proxy_pem(path: Path, days: int) -> None:
+    import subprocess as sp
+
+    key, cert = path.with_suffix(".key"), path.with_suffix(".crt")
+    sp.run(
+        [
+            "openssl",
+            "req",
+            "-x509",
+            "-newkey",
+            "rsa:2048",
+            "-nodes",
+            "-subj",
+            "/CN=probe",
+            "-days",
+            str(days),
+            "-keyout",
+            str(key),
+            "-out",
+            str(cert),
+        ],
+        check=True,
+        capture_output=True,
+    )
+    path.write_text(cert.read_text() + key.read_text())
+
+
+def test_canfar_session_proxy_cert_counts_as_login(tmp_path: Path, monkeypatch) -> None:
+    """Inside a Skaha session `canfar auth show` gives expiry null for the
+    session-issued ~/.ssl/cadcproxy.pem; the certificate itself is the login."""
+    ssl_dir = tmp_path / ".ssl"
+    ssl_dir.mkdir()
+    pem = ssl_dir / "cadcproxy.pem"
+    _make_proxy_pem(pem, days=7)
+    exp = wiz._cert_expiry(pem)
+    assert exp is not None and 6 * 86400 < exp - time.time() <= 7 * 86400
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("skaha_sessionid", "ao1z1qsf")
+    show = {
+        "active": True,
+        "expiry": None,
+        "idp": "cadc",
+        "mode": "x509",
+        "name": "Canadian Astronomy Data Centre",
+        "server": "canfar",
+    }
+    with (
+        patch.object(wiz.shutil, "which", return_value="/usr/bin/canfar"),
+        patch.object(wiz, "_run_cmd", return_value=(0, json.dumps(show), "")),
+    ):
+        ok, line = wiz._canfar_auth_line()
+        assert ok is True, line
+        assert "signed in by this CANFAR session" in line and "7 days left" in line
+        monkeypatch.delenv("skaha_sessionid")
+        ok, line = wiz._canfar_auth_line()
+        assert ok is True and line.endswith("days left") and "session" not in line
+        pem.unlink()
+        assert wiz._canfar_auth_line()[0] is False
+        with patch.object(wiz, "_cert_expiry", return_value=time.time() - 60):
+            ok, line = wiz._canfar_auth_line()
+        assert ok is False and "expired" in line
+
+
 def test_http_post_requires_hub_header_and_json() -> None:
     import http.client
 
@@ -398,6 +463,7 @@ def test_http_post_requires_hub_header_and_json() -> None:
     port = server.server_address[1]
     threading.Thread(target=server.serve_forever, daemon=True).start()
     try:
+
         def post(path, body, headers):
             conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
             conn.request("POST", path, body=body, headers=headers)
