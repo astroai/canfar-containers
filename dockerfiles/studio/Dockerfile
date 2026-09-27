@@ -56,8 +56,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends tmux \
         'set -g mouse on' \
         'set -g history-limit 50000' \
         'set -g status-position top' \
-        'set -g status-left "#[fg=colour117,bold]AstroAI Studio "' \
-        'set -g status-right "#[fg=colour245]#{host_short}"' \
+        'set -g status-style "bg=colour234,fg=colour246"' \
+        'set -g status-left-length 20' \
+        'set -g status-left "#[fg=colour117,bold] AstroAI Studio #[default] "' \
+        'set -g window-status-current-style "fg=colour189,bold"' \
+        'set -g status-right ""' \
         'set -s escape-time 10' \
         > /etc/tmux.conf
 

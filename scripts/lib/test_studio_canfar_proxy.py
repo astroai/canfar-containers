@@ -50,6 +50,7 @@ def test_injects_api_shim_and_chips() -> None:
     assert b"ownsHost" in out  # Settings→Models needs isLoopback / ownsHost
     assert b"window.WebSocket" in out
     assert b"EventSource" in out
+    assert b'"/open-in-app/"' in out  # dsh open-in-app plugin fetches outside /api
     assert b'id="astroai-terminal-chip"' in out
     assert b'href="/session/contrib/abc/terminal/"' in out
     assert b'id="astroai-agents-chip"' in out
@@ -60,8 +61,10 @@ def test_injects_api_shim_and_chips() -> None:
     assert b'id="astroai-vscode-chip"' in out
     assert b'href="/session/contrib/abc/vscode/"' in out
     assert b"astroai-resource-banner" not in out
-    assert b'data-astroai-proxy-rev="11"' in out
+    assert b'data-astroai-proxy-rev="12"' in out
     assert b"data-astroai-tab" in out  # branded tab stick
+    assert b"data-astroai-brand" in out  # boot splash wordmark
+    assert out.index(b"data-astroai-brand") < out.index(b"</head>")
 
 
 def test_rewrites_base_href_to_session_prefix() -> None:
@@ -187,8 +190,57 @@ def test_command_dock_template() -> None:
     assert "/session/contrib/test123/vscode/" in dock
     assert "/session/contrib/test123/terminal/" in dock
     assert 'data-tool="agent"' in dock
-    assert "classList.add('bar')" in dock
+    assert 'data-mode="bar"' in dock
     assert "{prefix" not in dock and "{mode}" not in dock
+    assert 'href="/session/contrib/test123/hub/#agents"' in dock
+    assert 'href="/session/contrib/test123/hub/#compute"' in dock
+    assert ">Assistant<" in dock and ">Agents<" in dock and ">Compute<" in dock
+    # VS Code's CSP blocks inline scripts: the only script is the same-origin dock.js.
+    import re as _re
+
+    scripts = _re.findall(r"<script[^>]*>", dock)
+    assert scripts == ['<script src="/session/contrib/test123/__studio/dock.js" defer>']
+    assert not any(ch in dock for ch in "🤖💻🪐⚡📝🚀")
+
+
+def test_studio_assets_are_branded() -> None:
+    body, ctype = proxy.STUDIO_ASSETS["/__studio/dock.js"]
+    assert ctype.startswith("text/javascript") and b"attachShadow" in body
+    assert b"<svg" in proxy.STUDIO_ASSETS["/favicon.svg"][0]
+    manifest = proxy.json.loads(proxy.STUDIO_ASSETS["/manifest.webmanifest"][0])
+    assert manifest["name"] == "AstroAI Studio"
+
+
+def test_vscode_gets_configuration_defaults(tmp_path: Path, monkeypatch) -> None:
+    import html as _html
+
+    settings = tmp_path / "settings.json"
+    settings.write_text(
+        '{"security.workspace.trust.enabled": false, "workbench.startupEditor": "none"}',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(proxy, "VSCODE_SETTINGS", str(settings))
+    proxy.PREFIX = "/session/contrib/abc"
+    cfg = {"serverBasePath": "/session/contrib/abc/vscode", "enableWorkspaceTrust": True}
+    page = (
+        '<html><head><meta id="vscode-workbench-web-configuration" data-settings="'
+        + _html.escape(proxy.json.dumps(cfg), quote=True)
+        + '"></head><body></body></html>'
+    ).encode()
+    out = proxy.inject_vscode(page, "text/html").decode()
+    raw = proxy._VSCODE_WEB_CONFIG_RE.search(out).group(2)
+    got = proxy.json.loads(_html.unescape(raw))
+    assert got["enableWorkspaceTrust"] is False
+    assert got["configurationDefaults"]["workbench.startupEditor"] == "none"
+    assert got["serverBasePath"] == cfg["serverBasePath"]
+    assert 'data-mode="mini"' in out
+    assert proxy.inject_vscode(b"x", "text/javascript") == b"x"
+
+
+def test_terminal_gets_corner_dock() -> None:
+    proxy.PREFIX = "/session/contrib/abc"
+    out = proxy.inject_corner_dock(b"<html><head></head><body></body></html>", "text/html")
+    assert b'data-mode="corner"' in out
 
 
 def test_inject_dock_leaves_tool_urls_alone() -> None:
@@ -202,7 +254,7 @@ def test_inject_dock_leaves_tool_urls_alone() -> None:
     assert b'fetch("/api/home/recent_files")' in out
     assert b"data-astroai-api-shim" not in out
     assert b"data-astroai-dock" in out
-    assert b"classList.add('mini')" in out
+    assert b'data-mode="mini"' in out
     assert out.index(b"data-astroai-dock") < out.index(b"</body>")
     js = b'fetch("/api/x")'
     assert proxy.inject_dock(js, "application/javascript") == js

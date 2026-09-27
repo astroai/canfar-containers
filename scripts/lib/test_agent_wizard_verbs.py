@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import importlib.util
 import json
-import threading
 import tempfile
+import threading
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -86,7 +86,7 @@ def test_install_by_tag_loops_plugins_install() -> None:
     assert rc == 0
     assert data["ok"]
     assert any(c[-2:] == ["install", "ponytail-rule"] for c in calls)
-    assert not any("other" == c[-1] for c in calls if "install" in c)
+    assert not any(c[-1] == "other" for c in calls if "install" in c)
     _assert_lean(calls)
 
 
@@ -103,7 +103,7 @@ def test_compute_ensure_idempotent_and_wires() -> None:
     ensure_cmds: list[list[str]] = []
 
     def fake_cmd(cmd: list[str], *, timeout: int) -> tuple[int, str, str]:
-        if cmd[:2] == ["astroai", "cluster"]:
+        if cmd[:2] == ["/usr/bin/canfar-lab", "cluster"]:
             ensure_cmds.append(cmd)
             return (
                 0,
@@ -127,9 +127,10 @@ def test_compute_ensure_idempotent_and_wires() -> None:
             patch.object(wiz, "WIRE_OPENRESEARCH", True),
             patch.object(wiz, "shutil") as sh,
             patch.object(wiz, "_run_cmd", side_effect=fake_cmd),
+            patch.object(wiz, "_lab_bin", return_value="/usr/bin/canfar-lab"),
             patch.object(wiz.Path, "home", return_value=home),
         ):
-            sh.which.return_value = "/usr/bin/astroai"
+            sh.which.return_value = "/usr/bin/canfar-lab"
             data = wiz._compute_ensure()
 
         env = (home / ".config" / "canfar" / "lab" / "ray-manager.env").read_text()
@@ -141,7 +142,7 @@ def test_compute_ensure_idempotent_and_wires() -> None:
     wire.wire_orx.assert_called_once()
     assert "create" not in data["steps"]
     assert "manager-exists" in data["steps"]
-    assert "astroai" in ensure_cmds[0] and "cluster" in ensure_cmds[0]
+    assert "/usr/bin/canfar-lab" in ensure_cmds[0] and "cluster" in ensure_cmds[0]
     assert "start" in ensure_cmds[0] and "--json" in ensure_cmds[0]
     assert "--autoscaling" not in ensure_cmds[0]
     assert "RAY_AUTOSCALING_ENABLED=1" in env
@@ -159,7 +160,7 @@ def test_compute_ensure_studio_skips_orx_wire() -> None:
     wire.jobs_url_from_connect.return_value = "https://mgr/dashboard"
 
     def fake_cmd(cmd: list[str], *, timeout: int) -> tuple[int, str, str]:
-        if cmd[:2] == ["astroai", "cluster"]:
+        if cmd[:2] == ["/usr/bin/canfar-lab", "cluster"]:
             return (
                 0,
                 json.dumps(
@@ -182,9 +183,10 @@ def test_compute_ensure_studio_skips_orx_wire() -> None:
             patch.object(wiz, "WIRE_OPENRESEARCH", False),
             patch.object(wiz, "shutil") as sh,
             patch.object(wiz, "_run_cmd", side_effect=fake_cmd),
+            patch.object(wiz, "_lab_bin", return_value="/usr/bin/canfar-lab"),
             patch.object(wiz.Path, "home", return_value=home),
         ):
-            sh.which.return_value = "/usr/bin/astroai"
+            sh.which.return_value = "/usr/bin/canfar-lab"
             data = wiz._compute_ensure()
 
     assert data["ok"] is True
@@ -240,28 +242,19 @@ def test_back_link_prefers_saved_referrer_over_marker() -> None:
     assert "if (i > 0)" in html
 
 
-def test_index_html_agent_table() -> None:
+def test_index_html_hub_sections() -> None:
     html = wiz.INDEX_HTML
     assert "Start batch compute" in html
-    assert "Setup agents" not in html
-    assert "btn-setup" not in html
-    assert "<th>Agent</th>" in html
-    assert "<th>Bin</th>" in html
-    assert "<th>Cfg</th>" in html
-    assert "<th>Where</th>" in html
-    assert "<th>Ver</th>" in html
-    assert "api/setup?agent=" in html
-    assert "api/install?tool=" in html
-    assert "Install Kilo" not in html
-    assert "kilo" not in html.lower()
-    assert "Advanced" not in html
-    assert "cheat sheet" not in html.lower()
-    assert "Install lean addons" not in html
-    assert "api/catalog" not in html
+    assert "Model access" in html and "Coding agents" in html
+    assert "api/keys" in html and "api/jobs" in html
+    assert "'X-AstroAI-Hub': '1'" in html
+    assert "api/install?tool=" not in html and "api/setup?agent=" not in html
+    assert "fonts.googleapis.com" not in html
+    assert 'type="password"' in html and 'autocomplete="off"' in html
     assert "/astroai-' + 'agents" in html
     assert "id=\"back-link\"" in html
     assert "npx skills add astroai/canfar-skills" in html
-    assert "skills, and default plugins" not in html
+    assert "__" not in html.split("<script>")[0].replace("__proto__", "")
 
 
 def test_agent_report_returns_full_list() -> None:
@@ -294,20 +287,132 @@ def test_agent_report_returns_full_list() -> None:
     assert data["cli_exit"] == 0
 
 
-def test_setup_is_scoped_to_agent_id() -> None:
-    calls: list[list[str]] = []
+def _wait_job() -> dict:
+    import time as _time
 
-    def fake(args: list[str], *, timeout: int | None = None) -> tuple[int, str, str]:
-        calls.append(args)
-        return 0, '{"ok":true,"actions":["created config"],"errors":[]}', ""
+    for _ in range(200):
+        job = wiz._job_snapshot()
+        if not job["running"]:
+            return job
+        _time.sleep(0.02)
+    raise AssertionError("job did not finish")
+
+
+def test_job_runs_lab_verb_streams_log_and_serializes() -> None:
+    script = Path(tempfile.mkdtemp()) / "fake-lab"
+    script.write_text(
+        "#!/bin/sh\nprintf '\\033[32mstep one\\033[0m\\n'\necho \"args: $*\"\nsleep 0.3\n"
+    )
+    script.chmod(0o755)
+    with patch.object(wiz, "_lab_bin", return_value=str(script)):
+        code, job = wiz._start_job("setup", "kilo")
+        assert code == 202 and job["running"] is True
+        busy, payload = wiz._start_job("install", "codex")
+        assert busy == 409 and "still running" in payload["error"]
+        done = _wait_job()
+    assert done["ok"] is True and done["exit"] == 0
+    assert done["log"] == ["step one", "args: --yes agent setup kilo"]
+    assert done["summary"] == "kilo set up"
+
+
+def test_job_failure_reports_exit_and_rejects_unknown_action() -> None:
+    script = Path(tempfile.mkdtemp()) / "fake-lab"
+    script.write_text("#!/bin/sh\necho boom >&2\nexit 3\n")
+    script.chmod(0o755)
+    with patch.object(wiz, "_lab_bin", return_value=str(script)):
+        assert wiz._start_job("rm-rf", "kilo")[0] == 400
+        wiz._start_job("install", "kilo")
+        done = _wait_job()
+    assert done["ok"] is False and done["exit"] == 3
+    assert done["log"] == ["boom"]
+    assert "failed (exit 3)" in done["summary"]
+
+
+def test_keys_set_passes_value_on_stdin_only() -> None:
+    seen: dict = {}
+
+    def fake(args, *, timeout=None, input_text=None):
+        seen["args"], seen["input"] = args, input_text
+        return 0, '{"key":"OPENROUTER_API_KEY","present":true}', ""
 
     with patch.object(wiz, "_run_lab", side_effect=fake):
-        data = wiz._setup_payload("kilo")
-    assert data["ok"] is True
-    assert data["summary"] == "setup kilo ok"
-    assert any(c[-2:] == ["setup", "kilo"] for c in calls)
-    assert not any(c[-1] == "setup" for c in calls)
-    _assert_lean(calls)
+        code, data = wiz._keys_change("OPENROUTER_API_KEY", "  sk-or-secret-123  ")
+    assert code == 200 and data == {"ok": True, "key": "OPENROUTER_API_KEY", "present": True}
+    assert seen["args"] == ["--json", "agent", "keys", "set", "OPENROUTER_API_KEY"]
+    assert "sk-or-secret-123" not in " ".join(seen["args"])
+    assert seen["input"] == "sk-or-secret-123\n"
+    assert "sk-or-secret" not in json.dumps(data)
+
+
+def test_keys_change_validates_and_surfaces_cli_error() -> None:
+    assert wiz._keys_change("bad name", "x")[0] == 400
+    assert wiz._keys_change("OPENAI_API_KEY", "a\nb")[0] == 400
+
+    def fake(args, *, timeout=None, input_text=None):
+        return 1, "", "Error: That does not look like an API key.\n  hint: paste it again\n"
+
+    with patch.object(wiz, "_run_lab", side_effect=fake):
+        code, data = wiz._keys_change("OPENAI_API_KEY", "short")
+    assert code == 400 and data["error"] == "Error: That does not look like an API key."
+
+    cli_json = json.dumps({"ok": False, "error": "Not an API key.", "hint": "Paste it again."})
+    with patch.object(wiz, "_run_lab", return_value=(1, cli_json, "")):
+        code, data = wiz._keys_change("OPENAI_API_KEY", "short")
+    assert code == 400 and data["error"] == "Not an API key. Paste it again."
+
+    calls = []
+    with patch.object(
+        wiz, "_run_lab", side_effect=lambda a, **k: calls.append(a) or (0, "{}", "")
+    ):
+        assert wiz._keys_change("OPENAI_API_KEY", None)[1]["present"] is False
+    assert calls == [["--json", "agent", "keys", "unset", "OPENAI_API_KEY"]]
+
+
+def test_canfar_auth_requires_unexpired_credential() -> None:
+    import time as _time
+
+    def show(payload):
+        return patch.object(wiz, "_run_cmd", return_value=(0, json.dumps(payload), ""))
+
+    with patch.object(wiz.shutil, "which", return_value="/usr/bin/canfar"):
+        with show({"active": True, "expiry": None, "name": "CADC"}):
+            ok, line = wiz._canfar_auth_line()
+            assert ok is False and "canfar login" in line
+        with show({"active": True, "expiry": _time.time() - 60, "name": "CADC"}):
+            ok, line = wiz._canfar_auth_line()
+            assert ok is False and "expired" in line
+        with show({"active": True, "expiry": _time.time() + 5 * 86400, "name": "CADC"}):
+            ok, line = wiz._canfar_auth_line()
+            assert ok is True and line.startswith("CADC") and "days left" in line
+        with show({"active": True, "expiry": "2999-01-01T00:00:00Z", "name": "CADC"}):
+            assert wiz._canfar_auth_line()[0] is True
+        with patch.object(wiz, "_run_cmd", return_value=(1, "", "boom")):
+            assert wiz._canfar_auth_line()[0] is False
+
+
+def test_http_post_requires_hub_header_and_json() -> None:
+    import http.client
+
+    server = wiz.ThreadingHTTPServer(("127.0.0.1", 0), wiz.WizardHandler)
+    port = server.server_address[1]
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        def post(path, body, headers):
+            conn = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+            conn.request("POST", path, body=body, headers=headers)
+            resp = conn.getresponse()
+            return resp.status, json.loads(resp.read() or b"{}")
+
+        status, _ = post("/api/keys", '{"key":"OPENAI_API_KEY","value":"x"}', {})
+        assert status == 403
+        status, _ = post("/api/keys", "not json", {"X-AstroAI-Hub": "1"})
+        assert status == 400
+        status, data = post(
+            "/api/jobs", '{"action":"install","agent":"../x"}', {"X-AstroAI-Hub": "1"}
+        )
+        assert status == 400 and "agent" in data["error"]
+    finally:
+        server.shutdown()
 
 
 def test_safe_agent_id_rejects_junk() -> None:
@@ -326,9 +431,8 @@ if __name__ == "__main__":
     test_compute_ensure_studio_skips_orx_wire()
     test_compute_ensure_runs_in_background_and_status_polls()
     test_back_link_prefers_saved_referrer_over_marker()
-    test_index_html_agent_table()
+    test_index_html_hub_sections()
     test_agent_report_returns_full_list()
-    test_setup_is_scoped_to_agent_id()
     test_safe_agent_id_rejects_junk()
     print("ok")
 

@@ -111,20 +111,17 @@ else
     astroai_boot_log "INFO: canfar-lab CLI not pre-installed — proceeding with core services"
 fi
 
-if [[ -f "${HOME}/.canfar/lab/agent-env.sh" ]]; then
-    # shellcheck disable=SC1091
-    source "${HOME}/.canfar/lab/agent-env.sh"
-elif [[ -f "${HOME}/.canfar/lab/.env" ]]; then
-    set -a
-    # shellcheck disable=SC1091
-    source "${HOME}/.canfar/lab/.env"
-    set +a
-elif [[ -f "${HOME}/.astroai/lab/.env" ]]; then
+if [[ -r "${HOME}/.astroai/lab/.env" ]]; then
     set -a
     # shellcheck disable=SC1091
     source "${HOME}/.astroai/lab/.env"
     set +a
 fi
+# dsh reads these from ~/.dsh/.credentials.yaml (synced by studio --prepare and
+# the Agents page). Inherited env would shadow that file: dsh then ignores key
+# changes and refuses edits in Settings → Models.
+_DSH_UNSET_ENV=(-u OPENCODE_API_KEY -u DEEPSEEK_API_KEY -u GEMINI_API_KEY
+    -u OPENAI_API_KEY -u ANTHROPIC_API_KEY)
 
 _DSH_TRUST=(
     --trusted-host ws-uv.canfar.net
@@ -188,13 +185,16 @@ _stop_dsh() {
 _start_dsh() {
     _stop_dsh
     _clear_stale_dsh_locks
+    # Every dsh start mints a new launch token; the old one would 401 forever.
+    rm -f "${_token_file}"
+    _token_logged=""
     astroai_boot_log "starting dsh --profile astroai on :${DSH_PORT}"
     if command -v stdbuf >/dev/null 2>&1; then
-        stdbuf -oL -eL dsh --profile astroai --no-open --port "${DSH_PORT}" \
-            "${_DSH_TRUST[@]}" >>"${_dsh_log}" 2>&1 &
+        env "${_DSH_UNSET_ENV[@]}" stdbuf -oL -eL dsh --profile astroai --no-open \
+            --port "${DSH_PORT}" "${_DSH_TRUST[@]}" >>"${_dsh_log}" 2>&1 &
     else
-        dsh --profile astroai --no-open --port "${DSH_PORT}" "${_DSH_TRUST[@]}" \
-            >>"${_dsh_log}" 2>&1 &
+        env "${_DSH_UNSET_ENV[@]}" dsh --profile astroai --no-open --port "${DSH_PORT}" \
+            "${_DSH_TRUST[@]}" >>"${_dsh_log}" 2>&1 &
     fi
     DSH_PID=$!
     astroai_boot_log "dsh pid=${DSH_PID}"
@@ -204,12 +204,12 @@ _extract_dsh_token() {
     local tok
     tok="$(
         grep -aoE 'token[=:][A-Za-z0-9_-]+' "${_dsh_log}" 2>/dev/null \
-            | head -1 | sed -E 's/^token[=:]//' || true
+            | tail -1 | sed -E 's/^token[=:]//' || true
     )"
     if [[ -z "${tok}" ]]; then
         tok="$(
             sed -nE 's/.*[?&]token=([A-Za-z0-9_-]+).*/\1/p' "${_dsh_log}" 2>/dev/null \
-                | head -1 || true
+                | tail -1 || true
         )"
     fi
     if [[ -n "${tok}" ]]; then
@@ -222,20 +222,17 @@ _extract_dsh_token() {
 # 1. Start DSH (Coding agent)
 _start_dsh
 
-# 2. Start Ghostty-web terminal
-if [[ -f /opt/ghostty-web/server.mjs ]]; then
-    _term_back="/"
-    if [[ -n "${skaha_sessionid:-}" ]]; then
-        _term_back="/session/contrib/${skaha_sessionid}/"
-    fi
+# 2. Start Ghostty-web terminal (navigation comes from the proxy's corner dock)
+_start_ghostty() {
     HOST=127.0.0.1 PORT="${ASTROAI_TERMINAL_PORT}" \
         ASTROAI_TAB_TITLE="${ASTROAI_TAB_TITLE:-AstroAI Studio}" \
-        ASTROAI_TERMINAL_BACK_HREF="${_term_back}" \
-        ASTROAI_TERMINAL_BACK_LABEL="Studio" \
         PWD="${STUDIO_CWD}" \
         node /opt/ghostty-web/server.mjs >>"${_studio_state}/logs/ghostty.log" 2>&1 &
     GHOSTTY_PID=$!
     astroai_boot_log "ghostty-web started on :${ASTROAI_TERMINAL_PORT} (pid=${GHOSTTY_PID})"
+}
+if [[ -f /opt/ghostty-web/server.mjs ]]; then
+    _start_ghostty
 fi
 
 # 3. Start JupyterLab (port 8888)
@@ -313,6 +310,10 @@ _start_vscode() {
             _vbase="/vscode"
         fi
         local _vlog="${_studio_state}/logs/vscode.log"
+        # Machine settings are read from <user-data-dir>/Machine, not the install dir.
+        mkdir -p "${_studio_state}/vscode-data/Machine"
+        cp -f /opt/openvscode-server/data/Machine/settings.json \
+            "${_studio_state}/vscode-data/Machine/settings.json" 2>/dev/null || true
         astroai_boot_log "starting openvscode-server on :${ASTROAI_VSCODE_PORT} (base_path=${_vbase})"
         /opt/openvscode-server/bin/openvscode-server \
             --host 127.0.0.1 \
@@ -349,19 +350,8 @@ while true; do
         _start_dsh
     fi
     if [[ -n "${GHOSTTY_PID:-}" ]] && ! kill -0 "${GHOSTTY_PID}" 2>/dev/null; then
-        if [[ -f /opt/ghostty-web/server.mjs ]]; then
-            _term_back="/"
-            if [[ -n "${skaha_sessionid:-}" ]]; then
-                _term_back="/session/contrib/${skaha_sessionid}/"
-            fi
-            HOST=127.0.0.1 PORT="${ASTROAI_TERMINAL_PORT}" \
-                ASTROAI_TAB_TITLE="${ASTROAI_TAB_TITLE:-AstroAI Studio}" \
-                ASTROAI_TERMINAL_BACK_HREF="${_term_back}" \
-                ASTROAI_TERMINAL_BACK_LABEL="Studio" \
-                PWD="${STUDIO_CWD}" \
-                node /opt/ghostty-web/server.mjs >>"${_studio_state}/logs/ghostty.log" 2>&1 &
-            GHOSTTY_PID=$!
-        fi
+        astroai_boot_log "ghostty-web died — restarting"
+        _start_ghostty
     fi
     if [[ -n "${JUPYTER_PID:-}" ]] && ! kill -0 "${JUPYTER_PID}" 2>/dev/null; then
         astroai_boot_log "jupyter died — restarting"

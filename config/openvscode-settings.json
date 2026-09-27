@@ -10,8 +10,20 @@
   "editor.fontSize": 14,
   "terminal.integrated.fontSize": 14,
   "workbench.startupEditor": "none",
+  "workbench.welcomePage.walkthroughs.openOnInstall": false,
+  "workbench.tips.enabled": false,
   "security.workspace.trust.enabled": false,
-  "window.title": "AstroAI VS Code",
+  "window.title": "${rootName}${separator}AstroAI Studio",
+  "chat.disableAIFeatures": true,
+  "chat.commandCenter.enabled": false,
+  "telemetry.telemetryLevel": "off",
+  "update.mode": "none",
+  "extensions.ignoreRecommendations": true,
+  "files.exclude": {
+    "**/.cache-*": true,
+    "**/.runtime-*": true,
+    "**/__pycache__": true
+  },
   "files.watcherExclude": {
     "**/.pixi/**": true,
     "**/.venv/**": true,
