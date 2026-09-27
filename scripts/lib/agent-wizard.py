@@ -868,8 +868,6 @@ INDEX_HTML = """<!DOCTYPE html>
   .card-foot .acts { margin-left: auto; display: flex; gap: .35rem; }
   code { font: .82em var(--mono); background: rgba(0,0,0,.3); border: 1px solid var(--line);
          border-radius: 5px; padding: .05rem .35rem; }
-  details.more { margin-top: .9rem; }
-  details.more summary { cursor: pointer; color: var(--muted); font-weight: 600; margin-bottom: .75rem; }
   #job { position: sticky; top: .5rem; z-index: 5; border: 1px solid var(--indigo); border-radius: 12px;
          background: rgba(15,23,52,.97); padding: .7rem .9rem; margin-bottom: 1.25rem;
          box-shadow: 0 10px 30px rgba(0,0,0,.35); }
@@ -1142,13 +1140,9 @@ async function loadAgents() {
     el.innerHTML = `<p class="bad">${esc((data && (data.error || data.summary)) || 'agent list failed')}</p>`;
     return;
   }
-  const rec = (data.supported || []).map(String);
-  const byId = Object.fromEntries(agents.map(a => [String(a.id || a.agent), a]));
-  const top = rec.filter(id => byId[id]).map(id => byId[id]);
-  const rest = agents.filter(a => !rec.includes(String(a.id || a.agent)));
-  el.innerHTML = `<div class="grid">${top.map(agentCard).join('')}</div>` +
-    (rest.length ? `<details class="more"><summary>More agents (${rest.length})</summary>` +
-      `<div class="grid">${rest.map(agentCard).join('')}</div></details>` : '');
+  const label = a => String(a.id || a.agent) === 'dsh' ? '' : String(a.name || a.id || a.agent).toLowerCase();
+  const sorted = agents.slice().sort((a, b) => label(a).localeCompare(label(b)));
+  el.innerHTML = `<div class="grid">${sorted.map(agentCard).join('')}</div>`;
   el.querySelectorAll('button[data-act]').forEach(b => { b.disabled = jobRunning; });
 }
 document.getElementById('agents').addEventListener('click', async (ev) => {

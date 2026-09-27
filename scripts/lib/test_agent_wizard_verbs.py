@@ -251,6 +251,7 @@ def test_index_html_hub_sections() -> None:
     assert "api/install?tool=" not in html and "api/setup?agent=" not in html
     assert "fonts.googleapis.com" not in html
     assert 'type="password"' in html and 'autocomplete="off"' in html
+    assert "More agents" not in html  # every agent is listed in one grid
     assert "/astroai-' + 'agents" in html
     assert "id=\"back-link\"" in html
     assert "npx skills add astroai/canfar-skills" in html
