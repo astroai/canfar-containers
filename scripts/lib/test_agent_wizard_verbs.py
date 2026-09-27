@@ -331,3 +331,17 @@ if __name__ == "__main__":
     test_setup_is_scoped_to_agent_id()
     test_safe_agent_id_rejects_junk()
     print("ok")
+
+
+def test_create_manager_records_steps() -> None:
+    wire = MagicMock()
+    wire.find_manager_sessions.return_value = []
+    with patch.object(wiz, "_run_cmd", return_value=(0, "raymgr created", "")):
+        assert wiz._create_manager_if_needed(wire) == (
+            True,
+            "ray-manager session created",
+            ["create"],
+        )
+    with patch.object(wiz, "_run_cmd", return_value=(1, "", "session already exists")):
+        ok, _, steps = wiz._create_manager_if_needed(wire)
+        assert ok and steps == ["create-exists"]

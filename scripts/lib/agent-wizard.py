@@ -313,11 +313,11 @@ def _create_manager_if_needed(wire: ModuleType) -> tuple[bool, str, list[str]]:
     )
     text = f"{err or ''}\n{out or ''}".lower()
     if rc == 0:
-        _step("create")
+        steps.append("create")
         return True, "ray-manager session created", steps
     # Name collision / already exists → treat as ok and continue ensure.
     if any(tok in text for tok in ("already", "conflict", "exists", "duplicate")):
-        _step("create-exists")
+        steps.append("create-exists")
         return True, "ray-manager name already exists — continuing", steps
     return False, (err or out or "canfar create failed")[:800], steps
 

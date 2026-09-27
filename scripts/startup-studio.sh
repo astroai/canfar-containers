@@ -57,6 +57,7 @@ export SRCDIR="${SRCDIR:-${WORK:-${SCRATCH:-/scratch}/src}}"
 export WORK="${WORK:-${SRCDIR}}"
 STUDIO_CWD="${ASTROAI_STUDIO_CWD:-${SRCDIR}}"
 mkdir -p "${STUDIO_CWD}" "${HOME}/.dsh" "${HOME}/.canfar/lab"
+printf '%s\n' "${STUDIO_CWD}" >"${_studio_state}/studio-cwd"
 astroai_boot_log "studio cwd=${STUDIO_CWD} (SRCDIR=${SRCDIR})"
 _state="${HOME}/.canfar/lab"
 astroai_boot_log "studio-proxy :${ASTROAI_STUDIO_PORT} early (pid=${PROXY_PID})"
@@ -260,7 +261,8 @@ _start_jupyter() {
             --ServerApp.token='' \
             --ServerApp.password='' \
             --ServerApp.base_url="${_jbase}" \
-            --ServerApp.root_dir="${STUDIO_CWD}" \
+            --ServerApp.root_dir=/ \
+            --ServerApp.preferred_dir="${STUDIO_CWD}" \
             --ServerApp.log_level=WARN \
             >>"${_jlog}" 2>&1 &
         JUPYTER_PID=$!
@@ -283,6 +285,10 @@ _start_marimo() {
         if [[ -f "/opt/astroai/notebooks/starter.py" && ! -e "${_nbdir}/starter.py" ]]; then
             cp "/opt/astroai/notebooks/starter.py" "${_nbdir}/starter.py" 2>/dev/null || true
         fi
+        # marimo's file browser is confined to _nbdir; these reach the rest.
+        ln -sfn "${SCRATCH:-/scratch}" "${_nbdir}/📁_scratch" 2>/dev/null || true
+        ln -sfn "${STUDIO_CWD}" "${_nbdir}/📁_work" 2>/dev/null || true
+        ln -sfn /arc "${_nbdir}/📁_arc" 2>/dev/null || true
         astroai_boot_log "starting marimo on :${ASTROAI_MARIMO_PORT} (base_url=${_mbase})"
         marimo --log-level warn edit \
             --no-token \

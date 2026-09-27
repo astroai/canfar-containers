@@ -27,6 +27,7 @@ import select
 import shutil
 import socket
 import sys
+from collections.abc import Callable
 from http.client import HTTPConnection
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -58,7 +59,7 @@ WIZARD_MOUNT = "/astroai-agents"
 TERMINAL_MOUNT = "/astroai-terminal"
 COOKIE_PREFIX = "dsh-auth-"
 BRAND_TITLE = "AstroAI Studio"
-PROXY_REVISION = "10"
+PROXY_REVISION = "11"
 
 
 def _token_file_path() -> str:
@@ -155,175 +156,245 @@ def api_shim_html() -> str:
     return API_SHIM.replace("{prefix}", json.dumps(PREFIX))
 
 
+# Rendered in a shadow root so host-page CSS and document-level link
+# interceptors (dsh opens anchors in new tabs) cannot reach the dock.
 COMMAND_DOCK_TEMPLATE = """
-<div id="astroai-studio-dock" data-astroai-dock>
+<div id="astroai-studio-dock" data-astroai-dock></div>
+<template id="astroai-studio-dock-tpl">
   <style>
-    #astroai-studio-dock {
-      position: fixed;
-      top: 10px;
-      left: 50%;
-      transform: translateX(-50%);
-      z-index: 2147483647;
+    :host { all: initial; }
+    * { box-sizing: border-box; }
+    .root {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
       font-size: 13px;
-      line-height: 1.2;
+      line-height: 1.3;
+      color: #cdd6f4;
+    }
+    .dock {
+      position: fixed;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 2147483646;
       user-select: none;
       -webkit-user-select: none;
-      transition: opacity 0.2s ease, transform 0.2s ease;
     }
-    #astroai-studio-dock.hidden {
-      opacity: 0;
-      pointer-events: none;
-      transform: translateX(-50%) translateY(-20px);
-    }
-    #astroai-studio-dock .dock-pill {
+    .bar .dock { top: 10px; }
+    .mini .dock { bottom: 28px; display: flex; flex-direction: column-reverse; align-items: center; gap: 6px; }
+    .pill {
       display: flex;
       align-items: center;
-      gap: 4px;
-      background: rgba(22, 25, 37, 0.92);
+      gap: 3px;
+      background: rgba(22, 25, 37, 0.94);
       backdrop-filter: blur(16px);
       -webkit-backdrop-filter: blur(16px);
       border: 1px solid rgba(255, 255, 255, 0.16);
       border-radius: 9999px;
-      padding: 3px 6px 3px 12px;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.25);
+      padding: 3px 5px 3px 12px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.2);
     }
-    #astroai-studio-dock .dock-brand {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      font-weight: 700;
-      color: #89b4fa;
-      margin-right: 6px;
-      letter-spacing: 0.2px;
-      font-size: 12px;
-    }
-    #astroai-studio-dock .dock-brand span.spark {
-      color: #f5c2e7;
-    }
-    #astroai-studio-dock .dock-nav {
-      display: flex;
-      align-items: center;
-      gap: 3px;
-    }
-    #astroai-studio-dock .dock-link {
+    .mini .pill { display: none; }
+    .mini.open .pill { display: flex; }
+    .brand { font-weight: 700; color: #89b4fa; margin-right: 6px; font-size: 12px; }
+    .spark { color: #f5c2e7; }
+    a.link {
       display: flex;
       align-items: center;
       gap: 5px;
       padding: 5px 9px;
+      border: 1px solid transparent;
       border-radius: 9999px;
       color: #cdd6f4;
       text-decoration: none;
       font-weight: 500;
-      transition: background 0.15s ease, color 0.15s ease;
       white-space: nowrap;
     }
-    #astroai-studio-dock .dock-link:hover {
-      background: rgba(255, 255, 255, 0.12);
-      color: #ffffff;
-    }
-    #astroai-studio-dock .dock-link.active {
-      background: rgba(137, 180, 250, 0.22);
-      color: #89b4fa;
-      border: 1px solid rgba(137, 180, 250, 0.4);
-    }
-    #astroai-studio-dock .dock-sep {
-      width: 1px;
-      height: 14px;
-      background: rgba(255, 255, 255, 0.12);
-      margin: 0 4px;
-    }
-    #astroai-studio-dock .dock-status-dot {
-      width: 7px;
-      height: 7px;
-      border-radius: 50%;
-      background: #a6da95;
-      box-shadow: 0 0 6px #a6da95;
-      margin: 0 4px;
-    }
-    #astroai-studio-dock .dock-toggle {
+    a.link:hover { background: rgba(255, 255, 255, 0.12); color: #fff; }
+    a.link.active { background: rgba(137, 180, 250, 0.22); color: #89b4fa; border-color: rgba(137, 180, 250, 0.4); }
+    .sep { width: 1px; height: 14px; background: rgba(255, 255, 255, 0.12); margin: 0 4px; }
+    button {
+      font: inherit;
+      color: #a6adc8;
       background: none;
       border: none;
-      color: #a6adc8;
       cursor: pointer;
-      padding: 4px;
-      display: flex;
+      border-radius: 9999px;
+    }
+    button:hover { color: #fff; background: rgba(255, 255, 255, 0.1); }
+    .help-btn { width: 26px; height: 26px; font-weight: 700; }
+    .handle {
+      display: none;
+      padding: 4px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #cdd6f4;
+      background: rgba(22, 25, 37, 0.85);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+    }
+    .handle:hover { background: rgba(22, 25, 37, 0.97); }
+    .mini .handle { display: block; }
+    .overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 2147483647;
+      display: none;
       align-items: center;
       justify-content: center;
-      border-radius: 50%;
-      transition: color 0.15s, background 0.15s;
+      background: rgba(10, 12, 20, 0.55);
     }
-    #astroai-studio-dock .dock-toggle:hover {
-      color: #ffffff;
-      background: rgba(255, 255, 255, 0.1);
+    .overlay.show { display: flex; }
+    .card {
+      width: min(560px, calc(100vw - 32px));
+      max-height: calc(100vh - 48px);
+      overflow: auto;
+      background: #1e2030;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 14px;
+      padding: 22px 24px 18px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
     }
+    h2 { margin: 0 0 4px; font-size: 18px; color: #fff; }
+    .lead { margin: 0 0 14px; color: #a6adc8; }
+    .tools { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+    .tools a {
+      display: grid;
+      grid-template-columns: 26px 96px 1fr;
+      align-items: baseline;
+      padding: 7px 8px;
+      border-radius: 8px;
+      color: #cdd6f4;
+      text-decoration: none;
+    }
+    .tools a:hover { background: rgba(255, 255, 255, 0.07); }
+    .tools b { color: #fff; font-weight: 600; }
+    .tools span.d { color: #a6adc8; }
+    .files {
+      margin: 14px 0 0;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: rgba(245, 169, 127, 0.1);
+      border: 1px solid rgba(245, 169, 127, 0.3);
+      color: #f4dbd6;
+    }
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12px;
+      color: #f5e0dc;
+      background: rgba(255, 255, 255, 0.08);
+      padding: 1px 5px;
+      border-radius: 4px;
+    }
+    .actions { display: flex; justify-content: flex-end; margin-top: 16px; }
+    .ok { padding: 7px 16px; color: #1e2030; background: #89b4fa; font-weight: 600; }
+    .ok:hover { color: #1e2030; background: #b4cefb; }
   </style>
-  <div class="dock-pill">
-    <div class="dock-brand">
-      <span class="spark">✦</span> Studio
+  <div class="root">
+    <div class="dock">
+      <div class="pill">
+        <div class="brand"><span class="spark">✦</span> Studio</div>
+        <a href="{prefix}/" id="astroai-agents-chip" class="link" data-tool="agent" title="AI coding agent"><span>🤖</span><span>Agents</span></a>
+        <a href="{prefix}/terminal/" id="astroai-terminal-chip" class="link" data-tool="terminal" title="Shell in this session"><span>💻</span><span>Terminal</span></a>
+        <a href="{prefix}/jupyter/lab" id="astroai-jupyter-chip" class="link" data-tool="jupyter" title="JupyterLab notebooks"><span>🪐</span><span>JupyterLab</span></a>
+        <a href="{prefix}/marimo/" id="astroai-marimo-chip" class="link" data-tool="marimo" title="Reactive Python notebooks"><span>⚡</span><span>Marimo</span></a>
+        <a href="{prefix}/vscode/" id="astroai-vscode-chip" class="link" data-tool="vscode" title="Code editor"><span>📝</span><span>VS Code</span></a>
+        <div class="sep"></div>
+        <a href="{prefix}/hub/" id="astroai-hub-chip" class="link" data-tool="hub" title="Batch jobs and Ray clusters"><span>🚀</span><span>Compute</span></a>
+        <button class="help-btn" data-help title="What can I do here?">?</button>
+      </div>
+      <button class="handle" title="Switch Studio tool">✦ Studio</button>
     </div>
-    <nav class="dock-nav">
-      <a id="astroai-agents-chip" href="{prefix}/" class="dock-link" data-tool="agent" title="Coding Agent (DeepSeek Harness)">
-        <span>🤖</span><span>Agents</span>
-      </a>
-      <a id="astroai-terminal-chip" href="{prefix}/terminal/" class="dock-link" data-tool="terminal" title="Web Terminal (Ghostty)">
-        <span>💻</span><span>Terminal</span>
-      </a>
-      <a id="astroai-jupyter-chip" href="{prefix}/jupyter/lab" class="dock-link" data-tool="jupyter" title="JupyterLab 4">
-        <span>🪐</span><span>JupyterLab</span>
-      </a>
-      <a id="astroai-marimo-chip" href="{prefix}/marimo/" class="dock-link" data-tool="marimo" title="Marimo Reactive Notebooks">
-        <span>⚡</span><span>Marimo</span>
-      </a>
-      <a id="astroai-vscode-chip" href="{prefix}/vscode/" class="dock-link" data-tool="vscode" title="VS Code Web IDE">
-        <span>📝</span><span>VS Code</span>
-      </a>
-      <div class="dock-sep"></div>
-      <a id="astroai-hub-chip" href="{prefix}/hub/" class="dock-link" data-tool="hub" title="Cluster & Batch Compute">
-        <span>🚀</span><span>Compute</span>
-      </a>
-    </nav>
-    <div class="dock-status-dot" title="Studio active"></div>
-    <button class="dock-toggle" id="astroai-dock-close" title="Hide Dock (Ctrl/Cmd+K to show)">✕</button>
+    <div class="overlay" role="dialog" aria-modal="true" aria-label="Welcome to AstroAI Studio">
+      <div class="card">
+        <h2>Welcome to AstroAI Studio</h2>
+        <p class="lead">One CANFAR session, several tools sharing the same files. Switch tools from the Studio bar.</p>
+        <ul class="tools">
+          <li><a href="{prefix}/"><span>🤖</span><b>Agents</b><span class="d">Click <i>Choose workspace</i>, pick a folder, then describe a task in plain words.</span></a></li>
+          <li><a href="{prefix}/terminal/"><span>💻</span><b>Terminal</b><span class="d">Bash shell. Try <code>canfar-lab status</code> or <code>canfar-lab clone &lt;repo&gt;</code>.</span></a></li>
+          <li><a href="{prefix}/jupyter/lab"><span>🪐</span><b>JupyterLab</b><span class="d">Notebooks with a Python 3 kernel; browse <code>/arc</code> for your stored data.</span></a></li>
+          <li><a href="{prefix}/marimo/"><span>⚡</span><b>Marimo</b><span class="d">Reactive Python notebooks; open <code>notebooks/starter.py</code> to begin.</span></a></li>
+          <li><a href="{prefix}/vscode/"><span>📝</span><b>VS Code</b><span class="d">Full editor in the browser.</span></a></li>
+          <li><a href="{prefix}/hub/"><span>🚀</span><b>Compute</b><span class="d">Run headless batch jobs and Ray clusters beyond this session.</span></a></li>
+        </ul>
+        <div class="files">
+          Working folder: <code data-workdir>…</code><span data-scratch-note hidden> is <b>temporary</b> and is deleted when the session ends.</span><br>
+          Keep results in <code data-home>/arc/home/$USER</code> or <code>/arc/projects/&lt;project&gt;</code>, or run <code>canfar-lab save</code>.
+        </div>
+        <div class="actions"><button class="ok" data-close>Got it</button></div>
+      </div>
+    </div>
   </div>
-  <script>
-  (function () {
-    var p = window.location.pathname;
-    var links = document.querySelectorAll('#astroai-studio-dock .dock-link');
-    links.forEach(function (a) {
-      var href = a.getAttribute('href');
-      if (href && (p === href || (href !== '/' && href !== '{prefix}/' && p.indexOf(href) === 0))) {
-        a.classList.add('active');
-      }
-      a.addEventListener('click', function (e) {
-        if (e.metaKey || e.ctrlKey || e.button === 1) {
-          a.setAttribute('target', '_blank');
-        } else {
-          a.removeAttribute('target');
-        }
-      });
-    });
-    var dock = document.getElementById('astroai-studio-dock');
-    var closeBtn = document.getElementById('astroai-dock-close');
-    if (closeBtn && dock) {
-      closeBtn.addEventListener('click', function () {
-        dock.classList.add('hidden');
-      });
+</template>
+<script>
+(function () {
+  var host = document.getElementById('astroai-studio-dock');
+  var tpl = document.getElementById('astroai-studio-dock-tpl');
+  if (!host || !tpl || host.shadowRoot) return;
+  var root = host.attachShadow({ mode: 'open' });
+  root.appendChild(tpl.content.cloneNode(true));
+  var shell = root.querySelector('.root');
+  shell.classList.add('{mode}');
+  var P = {prefix_json};
+  var here = location.pathname;
+  root.querySelectorAll('a.link').forEach(function (a) {
+    var href = a.getAttribute('href');
+    var home = href === P + '/';
+    if (home ? (here === href || here === P) : here.indexOf(href.replace(/lab$/, '')) === 0) {
+      a.classList.add('active');
     }
-    window.addEventListener('keydown', function (e) {
-      if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
-        e.preventDefault();
-        if (dock) dock.classList.toggle('hidden');
-      }
-    });
-  })();
-  </script>
-</div>
+  });
+  root.addEventListener('click', function (e) {
+    var a = e.target.closest && e.target.closest('a[href]');
+    if (a && !(e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0)) {
+      e.preventDefault();
+      e.stopPropagation();
+      location.assign(a.getAttribute('href'));
+    }
+  });
+  var overlay = root.querySelector('.overlay');
+  var KEY = 'astroai-studio-welcome-v1';
+  var filled = false;
+  function fillPaths() {
+    if (filled) return;
+    filled = true;
+    fetch(P + '/api/studio/status', { credentials: 'same-origin' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (s) {
+        if (!s) return;
+        if (s.workdir) root.querySelector('[data-workdir]').textContent = s.workdir;
+        if (s.home && s.home.indexOf('/arc/') === 0) root.querySelector('[data-home]').textContent = s.home;
+        root.querySelector('[data-scratch-note]').hidden = !s.workdir_ephemeral;
+      })
+      .catch(function () {});
+  }
+  function openHelp() { fillPaths(); overlay.classList.add('show'); }
+  function closeHelp() {
+    overlay.classList.remove('show');
+    try { localStorage.setItem(KEY, '1'); } catch (err) {}
+  }
+  root.querySelector('[data-help]').addEventListener('click', openHelp);
+  root.querySelector('[data-close]').addEventListener('click', closeHelp);
+  overlay.addEventListener('click', function (e) { if (e.target === overlay) closeHelp(); });
+  root.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeHelp(); });
+  var handle = root.querySelector('.handle');
+  handle.addEventListener('click', function () { shell.classList.toggle('open'); });
+  document.addEventListener('click', function (e) {
+    if (e.target !== host) shell.classList.remove('open');
+  });
+  var seen = false;
+  try { seen = localStorage.getItem(KEY) === '1'; } catch (err) {}
+  if ('{mode}' === 'bar' && !seen) openHelp();
+})();
+</script>
 """
 
 
-def command_dock_html() -> str:
-    return COMMAND_DOCK_TEMPLATE.replace("{prefix}", PREFIX)
+def command_dock_html(mode: str = "bar") -> str:
+    """``bar``: full top bar (agent page). ``mini``: bottom handle over embedded tools."""
+    return (
+        COMMAND_DOCK_TEMPLATE.replace("{prefix_json}", json.dumps(PREFIX))
+        .replace("{prefix}", PREFIX)
+        .replace("{mode}", mode)
+    )
 
 
 def read_launch_token() -> str | None:
@@ -428,20 +499,33 @@ def rewrite_body(data: bytes, content_type: str) -> bytes:
                 text = text[: gt + 1] + shim + text[gt + 1 :] if gt >= 0 else shim + text
             else:
                 text = shim + text
-        # Fingerprint which proxy build is serving
-        if 'data-astroai-proxy-rev="' not in text:
-            text = text.replace(
-                "<head>",
-                f'<head><meta data-astroai-proxy-rev="{PROXY_REVISION}" />',
-                1,
-            )
-        # Inject the unified Command Dock
-        if "data-astroai-dock" not in text:
-            dock = command_dock_html()
-            lower = text.lower()
-            idx = lower.rfind("</body>")
-            text = text[:idx] + dock + text[idx:] if idx >= 0 else text + dock
+        text = _add_dock(text, "bar")
     return text.encode("utf-8")
+
+
+def _add_dock(text: str, mode: str) -> str:
+    if 'data-astroai-proxy-rev="' not in text:
+        text = text.replace(
+            "<head>",
+            f'<head><meta data-astroai-proxy-rev="{PROXY_REVISION}" />',
+            1,
+        )
+    if "data-astroai-dock" not in text:
+        dock = command_dock_html(mode)
+        idx = text.lower().rfind("</body>")
+        text = text[:idx] + dock + text[idx:] if idx >= 0 else text + dock
+    return text
+
+
+def inject_dock(data: bytes, content_type: str) -> bytes:
+    """Tools already served under the session base path: add the dock, rewrite nothing."""
+    if content_type.split(";", 1)[0].strip().lower() != "text/html":
+        return data
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        return data
+    return _add_dock(text, "mini").encode("utf-8")
 
 
 def rewrite_location(value: str) -> str:
@@ -582,15 +666,57 @@ def _check_port_open(host: str, port: int) -> bool:
         return False
 
 
+def _studio_workdir() -> str | None:
+    """Working folder written by startup-studio.sh (resolved after the proxy starts)."""
+    state = os.environ.get("ASTROAI_STUDIO_STATE", "").strip().rstrip("/")
+    if not state:
+        return None
+    try:
+        return Path(f"{state}/studio-cwd").read_text(encoding="utf-8").strip() or None
+    except OSError:
+        return None
+
+
+def _is_ephemeral(path: str) -> bool:
+    """Only /arc (home and projects) outlives the session; /srcdir and scratch do not."""
+    home = os.path.expanduser("~").rstrip("/")
+    persistent = ("/arc/", f"{home}/") if home.startswith("/arc/") else ("/arc/",)
+    return not (path.rstrip("/") + "/").startswith(persistent)
+
+
 def get_studio_status() -> dict[str, Any]:
     """Collect real-time health and system telemetry for the Studio session."""
     services = {
-        "agent": {"name": "Agents (DSH)", "port": DSH_PORT, "up": _check_port_open(DSH_HOST, DSH_PORT)},
-        "terminal": {"name": "Terminal (Ghostty)", "port": TERMINAL_PORT, "up": _check_port_open(TERMINAL_HOST, TERMINAL_PORT)},
-        "jupyter": {"name": "JupyterLab", "port": JUPYTER_PORT, "up": _check_port_open(JUPYTER_HOST, JUPYTER_PORT)},
-        "marimo": {"name": "Marimo", "port": MARIMO_PORT, "up": _check_port_open(MARIMO_HOST, MARIMO_PORT)},
-        "vscode": {"name": "VS Code", "port": VSCODE_PORT, "up": _check_port_open(VSCODE_HOST, VSCODE_PORT)},
-        "hub": {"name": "Compute & Hub", "port": WIZARD_PORT, "up": _check_port_open(WIZARD_HOST, WIZARD_PORT)},
+        "agent": {
+            "name": "Agents (DSH)",
+            "port": DSH_PORT,
+            "up": _check_port_open(DSH_HOST, DSH_PORT),
+        },
+        "terminal": {
+            "name": "Terminal (Ghostty)",
+            "port": TERMINAL_PORT,
+            "up": _check_port_open(TERMINAL_HOST, TERMINAL_PORT),
+        },
+        "jupyter": {
+            "name": "JupyterLab",
+            "port": JUPYTER_PORT,
+            "up": _check_port_open(JUPYTER_HOST, JUPYTER_PORT),
+        },
+        "marimo": {
+            "name": "Marimo",
+            "port": MARIMO_PORT,
+            "up": _check_port_open(MARIMO_HOST, MARIMO_PORT),
+        },
+        "vscode": {
+            "name": "VS Code",
+            "port": VSCODE_PORT,
+            "up": _check_port_open(VSCODE_HOST, VSCODE_PORT),
+        },
+        "hub": {
+            "name": "Compute & Hub",
+            "port": WIZARD_PORT,
+            "up": _check_port_open(WIZARD_HOST, WIZARD_PORT),
+        },
     }
     scratch_dir = os.environ.get("SCRATCH", "/scratch")
     scratch_free_gb = 0.0
@@ -602,10 +728,14 @@ def get_studio_status() -> dict[str, Any]:
     cpu_count = os.cpu_count() or 1
     load_avg = [round(x, 2) for x in os.getloadavg()] if hasattr(os, "getloadavg") else []
 
+    workdir = _studio_workdir()
     return {
         "status": "ready" if any(s["up"] for s in services.values()) else "starting",
         "session_id": SESSION_ID or None,
         "prefix": PREFIX or None,
+        "workdir": workdir,
+        "workdir_ephemeral": bool(workdir) and _is_ephemeral(workdir),
+        "home": os.path.expanduser("~"),
         "services": services,
         "resources": {
             "cpus": cpu_count,
@@ -616,7 +746,12 @@ def get_studio_status() -> dict[str, Any]:
 
 
 def _forward(
-    handler: BaseHTTPRequestHandler, host: str, port: int, path: str, *, rewrite: bool = True
+    handler: BaseHTTPRequestHandler,
+    host: str,
+    port: int,
+    path: str,
+    *,
+    body_filter: Callable[[bytes, str], bytes] | None = rewrite_body,
 ) -> None:
     if is_websocket_request(handler):
         forward_websocket(handler, host, port, path)
@@ -685,8 +820,8 @@ def _forward(
             conn.close()
             return
 
-    if not streaming and rewrite:
-        raw = rewrite_body(raw, content_type)
+    if not streaming and body_filter is not None:
+        raw = body_filter(raw, content_type)
 
     handler.send_response(upstream.status, upstream.reason)
     for key, value in upstream.getheaders():
@@ -779,7 +914,7 @@ class StudioProxyHandler(BaseHTTPRequestHandler):
                 qs = urlparse(public).query
                 if qs:
                     rest = f"{rest}?{qs}" if "?" not in rest else f"{rest}&{qs}"
-                _forward(self, TERMINAL_HOST, TERMINAL_PORT, rest, rewrite=False)
+                _forward(self, TERMINAL_HOST, TERMINAL_PORT, rest, body_filter=None)
                 return
 
         # JupyterLab / Marimo / VS Code serve under the full session base path
@@ -788,17 +923,17 @@ class StudioProxyHandler(BaseHTTPRequestHandler):
 
         # JupyterLab
         if route == "/jupyter" or route.startswith("/jupyter/"):
-            _forward(self, JUPYTER_HOST, JUPYTER_PORT, prefixed, rewrite=True)
+            _forward(self, JUPYTER_HOST, JUPYTER_PORT, prefixed, body_filter=inject_dock)
             return
 
         # Marimo
         if route == "/marimo" or route.startswith("/marimo/"):
-            _forward(self, MARIMO_HOST, MARIMO_PORT, prefixed, rewrite=True)
+            _forward(self, MARIMO_HOST, MARIMO_PORT, prefixed, body_filter=inject_dock)
             return
 
         # VS Code (OpenVSCode Server)
         if route == "/vscode" or route.startswith("/vscode/"):
-            _forward(self, VSCODE_HOST, VSCODE_PORT, prefixed, rewrite=True)
+            _forward(self, VSCODE_HOST, VSCODE_PORT, prefixed, body_filter=inject_dock)
             return
 
         # Compute & Agent Wizard Hub
@@ -808,7 +943,7 @@ class StudioProxyHandler(BaseHTTPRequestHandler):
                 qs = urlparse(public).query
                 if qs:
                     rest = f"{rest}?{qs}" if "?" not in rest else f"{rest}&{qs}"
-                _forward(self, WIZARD_HOST, WIZARD_PORT, rest, rewrite=False)
+                _forward(self, WIZARD_HOST, WIZARD_PORT, rest, body_filter=None)
                 return
 
         # Default: Forward to DSH

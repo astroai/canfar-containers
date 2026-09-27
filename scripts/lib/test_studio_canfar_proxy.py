@@ -24,13 +24,9 @@ def test_keeps_bare_api_channel_string() -> None:
 
 
 def test_rewrites_quoted_api_slash_paths() -> None:
-    """"/api/…" (file, present, mux) must get the session prefix for img/href."""
+    """ "/api/…" (file, present, mux) must get the session prefix for img/href."""
     proxy.PREFIX = "/session/contrib/abc"
-    js = (
-        b'const FILE = "/api/file";'
-        b'const MUX = "/api/remote.mux";'
-        b'const OPEN = "/api/present.open";'
-    )
+    js = b'const FILE = "/api/file";const MUX = "/api/remote.mux";const OPEN = "/api/present.open";'
     out = proxy.rewrite_body(js, "text/javascript")
     assert b'"/session/contrib/abc/api/file"' in out
     assert b'"/session/contrib/abc/api/remote.mux"' in out
@@ -64,7 +60,7 @@ def test_injects_api_shim_and_chips() -> None:
     assert b'id="astroai-vscode-chip"' in out
     assert b'href="/session/contrib/abc/vscode/"' in out
     assert b"astroai-resource-banner" not in out
-    assert b'data-astroai-proxy-rev="10"' in out
+    assert b'data-astroai-proxy-rev="11"' in out
     assert b"data-astroai-tab" in out  # branded tab stick
 
 
@@ -147,10 +143,7 @@ def test_is_index_path() -> None:
 
 
 def test_rewrite_set_cookie_relaxes_samesite() -> None:
-    raw = (
-        "dsh-auth-X=v1.abc; Max-Age=2592000; Path=/; "
-        "HttpOnly; SameSite=Strict"
-    )
+    raw = "dsh-auth-X=v1.abc; Max-Age=2592000; Path=/; HttpOnly; SameSite=Strict"
     out = proxy.rewrite_set_cookie(raw)
     assert "SameSite=Lax" in out
     assert "SameSite=Strict" not in out
@@ -158,13 +151,10 @@ def test_rewrite_set_cookie_relaxes_samesite() -> None:
 
 def test_expire_dsh_auth_cookies() -> None:
     proxy.PREFIX = "/session/contrib/abc"
-    headers = proxy.expire_dsh_auth_cookies(
-        "dsh-auth-dead=v1.x; other=1; dsh-auth-dead=v1.x"
-    )
+    headers = proxy.expire_dsh_auth_cookies("dsh-auth-dead=v1.x; other=1; dsh-auth-dead=v1.x")
     assert any(h.startswith("dsh-auth-dead=; Max-Age=0; Path=/") for h in headers)
     assert any(
-        h.startswith("dsh-auth-dead=; Max-Age=0; Path=/session/contrib/abc/")
-        for h in headers
+        h.startswith("dsh-auth-dead=; Max-Age=0; Path=/session/contrib/abc/") for h in headers
     )
     assert len(headers) == 2  # deduped name, two paths
 
@@ -196,7 +186,38 @@ def test_command_dock_template() -> None:
     assert "/session/contrib/test123/marimo/" in dock
     assert "/session/contrib/test123/vscode/" in dock
     assert "/session/contrib/test123/terminal/" in dock
-    assert "data-tool=\"agent\"" in dock
+    assert 'data-tool="agent"' in dock
+    assert "classList.add('bar')" in dock
+    assert "{prefix" not in dock and "{mode}" not in dock
+
+
+def test_inject_dock_leaves_tool_urls_alone() -> None:
+    """Jupyter/marimo/vscode already serve under PREFIX: no rewrite, no dsh shim."""
+    proxy.PREFIX = "/session/contrib/abc"
+    html = (
+        b'<html><head><base href="/session/contrib/abc/marimo/"></head>'
+        b'<body><script>fetch("/api/home/recent_files")</script></body></html>'
+    )
+    out = proxy.inject_dock(html, "text/html; charset=utf-8")
+    assert b'fetch("/api/home/recent_files")' in out
+    assert b"data-astroai-api-shim" not in out
+    assert b"data-astroai-dock" in out
+    assert b"classList.add('mini')" in out
+    assert out.index(b"data-astroai-dock") < out.index(b"</body>")
+    js = b'fetch("/api/x")'
+    assert proxy.inject_dock(js, "application/javascript") == js
+
+
+def test_status_reports_workdir(tmp_path: Path, monkeypatch) -> None:
+    (tmp_path / "studio-cwd").write_text("/scratch/src\n", encoding="utf-8")
+    monkeypatch.setenv("ASTROAI_STUDIO_STATE", str(tmp_path))
+    status = proxy.get_studio_status()
+    assert status["workdir"] == "/scratch/src"
+    assert status["workdir_ephemeral"] is True
+    assert proxy._is_ephemeral("/srcdir")
+    assert proxy._is_ephemeral("/arcade/x")
+    assert not proxy._is_ephemeral("/arc/home/u/work")
+    assert not proxy._is_ephemeral("/arc/projects/p")
 
 
 if __name__ == "__main__":

@@ -29,8 +29,8 @@ Welcome. Marimo notebooks are plain **`.py` files** — easy to git and review.
 
 ### Terminal (right here)
 
-Built-in shell: press **Ctrl-`** (backtick), or open the footer **Developer**
-panel (**Ctrl/Cmd-J**) → **Terminal**. Use it for `canfar lab clone`, `pixi install`,
+Built-in shell: press **Ctrl + backtick**, or open the footer **Developer**
+panel (**Ctrl/Cmd-J**) → **Terminal**. Use it for `canfar-lab clone`, `pixi install`,
 `canfar login`, `git`, … A separate **terminal** session also works if you prefer.
 
 ### Coming from Jupyter?
@@ -50,7 +50,7 @@ panel (**Ctrl/Cmd-J**) → **Terminal**. Use it for `canfar lab clone`, `pixi in
 
 ### Open an existing project
 
-1. In the **terminal** (Ctrl-`): `canfar lab init mylab` or `canfar lab clone owner/repo`
+1. In the **terminal** (Ctrl + backtick): `canfar-lab init mylab` or `canfar-lab clone owner/repo`
    (projects land under `$WORK`).
 2. Activate that project's env with **Project environment** below (or
    `from canfar_marimo import use_project; use_project("…")`).
@@ -133,7 +133,7 @@ def _(mo):
     else:
         lines.append(
             "- **projects**: none detected under work yet — "
-            "`canfar lab init mylab` or `canfar lab clone owner/repo` in the terminal (Ctrl-`)"
+            "`canfar-lab init mylab` or `canfar-lab clone owner/repo` in the terminal (Ctrl + backtick)"
         )
 
     if notes:
@@ -279,7 +279,7 @@ def _(mo):
         r"""
 ### CANFAR Vault (VOSpace)
 
-Authenticate first: `canfar login` in the terminal (**Ctrl-`**), then list or
+Authenticate first: `canfar login` in the terminal (**Ctrl + backtick**), then list or
 download below. Shell alternatives: `vls` / `vcp`.
 
 (Marimo **Remote Storage** for Vault waits on a PyPI `canfar` release with
@@ -341,21 +341,21 @@ def _(mo):
 ### astroai (terminal)
 
 Read-only checks run in **Session status** above. Mutating work stays in the
-**built-in terminal** (Ctrl-`):
+**built-in terminal** (Ctrl + backtick):
 
 **First session / new project**
 
 ```bash
-canfar lab init mylab              # pixi (recommended)
-canfar lab init mylab --uv
-canfar lab clone owner/repo
-canfar lab clone owner/repo --from-env
+canfar-lab init mylab              # pixi (recommended)
+canfar-lab init mylab --uv
+canfar-lab clone owner/repo
+canfar-lab clone owner/repo --from-env
 ```
 
 **Persist before logout**
 
 ```bash
-canfar lab save
+canfar-lab save
 # copy results to /arc/projects or vos: with canfar data / vcp
 ```
 
@@ -369,7 +369,7 @@ canfar agent install kilo      # or goose, claude, opencode, codex, qoder
 canfar agent update
 ```
 
-Full reference: `canfar lab help` · [astroai docs](https://github.com/astroai/canfar-lab)
+Full reference: `canfar-lab help` · [astroai docs](https://github.com/astroai/canfar-lab)
 """
     )
     return
@@ -399,7 +399,7 @@ def _(mo):
         r"""
 ## Next steps
 
-- Install packages into a **project** (`canfar lab init mylab`), not `$HOME`.
+- Install packages into a **project** (`canfar-lab init mylab`), not `$HOME`.
 - Activate that env with **Project environment** above.
 - Or use a short-lived venv under `/scratch` if you must.
 """
