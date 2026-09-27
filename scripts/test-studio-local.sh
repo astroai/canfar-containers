@@ -145,4 +145,25 @@ if ! grep -q 'data-astroai-proxy-rev=' /tmp/studio-local-page.$$; then
 fi
 rm -f /tmp/studio-local-page.$$
 
-echo "OK: studio stamp+dangling .dsh boot → token → 200 (${IMAGE})"
+# Tools bound to 127.0.0.1 must still accept the public Host the proxy forwards
+# (Jupyter's local-host check answered 403 to every CANFAR request).
+for tool in jupyter/lab jupyter/api/status marimo/ vscode/ terminal/ hub/; do
+    code=000
+    for _ in $(seq 1 45); do
+        code="$(
+            curl -sS -o /dev/null -w '%{http_code}' --max-time 5 \
+                -H 'Host: workloads.canfar.net' \
+                "http://127.0.0.1:${HOST_PORT}/session/contrib/${SESSION_ID}/${tool}" \
+                2>/dev/null || echo 000
+        )"
+        [[ "${code}" == "200" || "${code}" == "403" ]] && break
+        sleep 2
+    done
+    if [[ "${code}" != "200" ]]; then
+        echo "FAIL: /${tool} via public Host returned ${code}" >&2
+        docker exec "${NAME}" sh -c 'tail -n 5 /tmp/.studio-*/logs/*.log' >&2 || true
+        exit 1
+    fi
+done
+
+echo "OK: studio stamp+dangling .dsh boot → token → 200, tools reachable via public Host (${IMAGE})"

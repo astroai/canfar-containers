@@ -257,6 +257,7 @@ _start_jupyter() {
             --config /etc/jupyter/jupyter_server_config.py \
             --ServerApp.token='' \
             --ServerApp.password='' \
+            --ServerApp.allow_remote_access=True \
             --ServerApp.base_url="${_jbase}" \
             --ServerApp.root_dir=/ \
             --ServerApp.preferred_dir="${STUDIO_CWD}" \
