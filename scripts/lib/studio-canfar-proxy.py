@@ -5,8 +5,6 @@ Multiplexes the unified 5-in-1 workbench over port 5000:
   * ``/terminal/*`` & ``/astroai-terminal/*`` → ghostty-web terminal (127.0.0.1:TERMINAL_PORT, default 4793)
   * ``/jupyter/*`` → JupyterLab 4 (127.0.0.1:JUPYTER_PORT, default 8888)
   * ``/marimo/*`` → Marimo reactive notebooks (127.0.0.1:MARIMO_PORT, default 2718)
-  * ``/openscience/*`` → OpenScience research workspace (127.0.0.1:4796, started on
-    first visit; the proxy adds its bearer token and a loopback Host/Origin)
   * ``/vscode/*`` → OpenVSCode Server (127.0.0.1:VSCODE_PORT, default 8080)
   * ``/hub/*`` & ``/astroai-agents/*`` → Compute & Agent Wizard hub (127.0.0.1:WIZARD_PORT, default 4792)
   * ``/api/studio/status`` → Real-time JSON health and system metrics
@@ -30,12 +28,12 @@ import select
 import shutil
 import socket
 import sys
-from collections.abc import Callable, Iterable
+from collections.abc import Callable
 from http.client import HTTPConnection
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qs, parse_qsl, urlencode, urlparse, urlunparse
+from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 _LIB = Path(__file__).resolve().parent
 if str(_LIB) not in sys.path:
@@ -55,9 +53,6 @@ MARIMO_HOST = os.environ.get("ASTROAI_MARIMO_HOST", "127.0.0.1")
 MARIMO_PORT = int(os.environ.get("ASTROAI_MARIMO_PORT", "2718"))
 VSCODE_HOST = os.environ.get("ASTROAI_VSCODE_HOST", "127.0.0.1")
 VSCODE_PORT = int(os.environ.get("ASTROAI_VSCODE_PORT", "8080"))
-OPENSCIENCE_HOST = os.environ.get("ASTROAI_OPENSCIENCE_HOST", "127.0.0.1")
-OPENSCIENCE_PORT = int(os.environ.get("ASTROAI_OPENSCIENCE_PORT", "4796"))
-OPENSCIENCE_MOUNT = "/openscience"
 VSCODE_SETTINGS = os.environ.get(
     "ASTROAI_VSCODE_SETTINGS", "/opt/openvscode-server/data/Machine/settings.json"
 )
@@ -68,7 +63,7 @@ WIZARD_MOUNT = "/astroai-agents"
 TERMINAL_MOUNT = "/astroai-terminal"
 COOKIE_PREFIX = "dsh-auth-"
 BRAND_TITLE = "AstroAI Studio"
-PROXY_REVISION = "14"
+PROXY_REVISION = "15"
 
 
 def _token_file_path() -> str:
@@ -213,8 +208,6 @@ _ICONS = {
     "agents": '<rect x="3" y="5" width="10" height="8" rx="2"/><path d="M8 2.5V5M6.2 9h.01M9.8 9h.01"/>',
     "compute": '<rect x="2" y="2.5" width="12" height="4.5" rx="1"/><rect x="2" y="9" width="12" height="4.5" rx="1"/>'
     '<path d="M4.5 4.75h.01M4.5 11.25h.01"/>',
-    "science": '<path d="M6 1.8h4M6.8 1.8v4.1L2.9 12.5a1.2 1.2 0 0 0 1 1.8h8.2a1.2 1.2 0 0 0 1-1.8L9.2 5.9V1.8'
-    'M4.6 9.6h6.8"/>',
 }
 
 
@@ -230,10 +223,6 @@ DOCK_TOOLS = (
     ("astroai-agents-chip", "agent", "/", "assistant", "Assistant", "AI assistant (chat)",
      "Chat with an AI assistant that reads and edits your files. Your working folder "
      "is already open: describe a task in plain words."),
-    ("astroai-openscience-chip", "openscience", "/openscience/", "science", "OpenScience",
-     "Research agent: notebooks, astronomy skills, CADC and VO data",
-     "Research workspace with an AI scientist: notebooks, figures and write-ups, with CADC/VO "
-     "archive tools and CANFAR compute. Uses the model keys saved under Agents."),
     ("astroai-terminal-chip", "terminal", "/terminal/", "terminal", "Terminal", "Shell in this session",
      "Bash shell. Try <code>canfar-lab status</code>, or run an installed agent like <code>opencode</code>."),
     ("astroai-jupyter-chip", "jupyter", "/jupyter/lab", "jupyter", "JupyterLab", "JupyterLab notebooks",
@@ -700,103 +689,6 @@ def inject_corner_dock(data: bytes, content_type: str) -> bytes:
     return inject_dock(data, content_type, "corner")
 
 
-OPENSCIENCE_BOOT = "/__astroai/boot.js"
-
-
-def openscience_base() -> str:
-    return f"{PREFIX}{OPENSCIENCE_MOUNT}"
-
-
-def openscience_boot_js() -> bytes:
-    return (
-        f"window.__OPENSCIENCE_BASE_URL__={json.dumps(openscience_base())};"
-        "window.__OPENSCIENCE_TRUSTED_PROXY__=true;\n"
-    ).encode()
-
-
-def inject_openscience(data: bytes, content_type: str) -> bytes:
-    """Point the workspace at its mount: absolute asset URLs (index.html is also
-    served for deep links, where ``./`` would resolve under the route) and the
-    base path the patched router and API client read. OpenScience's CSP allows
-    only same-origin scripts, so the base path comes from a proxy-served file
-    that runs before the (deferred) module bundle."""
-    if content_type.split(";", 1)[0].strip().lower() != "text/html":
-        return data
-    try:
-        text = data.decode("utf-8")
-    except UnicodeDecodeError:
-        return data
-    base = openscience_base()
-    text = text.replace('="./', f'="{base}/')
-    boot = f'<script data-astroai-openscience src="{base}{OPENSCIENCE_BOOT}"></script>'
-    head = text.lower().find("<head")
-    gt = text.find(">", head) if head >= 0 else -1
-    text = text[: gt + 1] + boot + text[gt + 1 :] if gt >= 0 else boot + text
-    return _add_dock(text, "mini").encode("utf-8")
-
-
-def rewrite_openscience_location(value: str) -> str:
-    """Absolute upstream redirects stay under ``/openscience``."""
-    if value.startswith("/") and not value.startswith("//"):
-        return openscience_base() + value
-    return value
-
-
-def _studio_state_file(name: str) -> Path | None:
-    state = os.environ.get("ASTROAI_STUDIO_STATE", "").strip().rstrip("/")
-    return Path(state) / name if state else None
-
-
-def read_openscience_token() -> str | None:
-    path = _studio_state_file("openscience-token")
-    try:
-        return (path.read_text(encoding="utf-8").strip() or None) if path else None
-    except OSError:
-        return None
-
-
-def request_openscience(*, retry: bool = False) -> bool:
-    """Ask startup-studio.sh to start OpenScience; False when it gave up after crashes."""
-    failed = _studio_state_file("openscience.failed")
-    want = _studio_state_file("openscience.want")
-    if failed is None or want is None:
-        return True
-    if failed.exists():
-        if not retry:
-            return False
-        failed.unlink(missing_ok=True)
-    with contextlib.suppress(OSError):
-        want.touch()
-    return True
-
-
-_DROP_FOR_OPENSCIENCE = ("host", "authorization", "cookie", "referer", "x-real-ip", "forwarded")
-
-
-def openscience_headers(
-    items: Iterable[tuple[str, str]], token: str | None, *, websocket: bool = False
-) -> list[tuple[str, str]]:
-    """Requests as the loopback client OpenScience expects: its Host/Origin guard
-    admits only loopback, and every route needs the bearer token. CANFAR cookies
-    and forwarding headers stay behind."""
-    out: list[tuple[str, str]] = []
-    for key, value in items:
-        lk = key.lower()
-        if lk in _DROP_FOR_OPENSCIENCE or lk.startswith("x-forwarded-"):
-            continue
-        if not websocket and (lk in HOP_BY_HOP or lk == "accept-encoding"):
-            continue
-        if lk == "origin":
-            value = f"http://{OPENSCIENCE_HOST}:{OPENSCIENCE_PORT}"
-        out.append((key, value))
-    out.append(("Host", f"{OPENSCIENCE_HOST}:{OPENSCIENCE_PORT}"))
-    if not websocket:
-        out.append(("Accept-Encoding", "identity"))
-    if token:
-        out.append(("Authorization", f"Bearer {token}"))
-    return out
-
-
 def rewrite_location(value: str) -> str:
     """Keep absolute Locations under the Skaha session path."""
     if not PREFIX or not value.startswith("/"):
@@ -854,20 +746,14 @@ def _splice_sockets(client: socket.socket, upstream: socket.socket) -> None:
         return
 
 
-def forward_websocket(
-    handler: BaseHTTPRequestHandler,
-    host: str,
-    port: int,
-    path: str,
-    headers: list[tuple[str, str]] | None = None,
-) -> None:
+def forward_websocket(handler: BaseHTTPRequestHandler, host: str, port: int, path: str) -> None:
     try:
         upstream = socket.create_connection((host, port), timeout=30)
     except OSError as exc:
         handler.send_error(502, f"upstream unreachable: {exc}")
         return
     lines = [f"{handler.command} {path} HTTP/1.1"]
-    for key, value in headers if headers is not None else handler.headers.items():
+    for key, value in handler.headers.items():
         lines.append(f"{key}: {value}")
     payload = ("\r\n".join(lines) + "\r\n\r\n").encode("iso-8859-1")
     try:
@@ -903,40 +789,6 @@ STARTING_HTML = (
     b"<p>Preparing the coding workbench and tools &mdash; this page refreshes automatically.</p>"
     b"</body></html>"
 )
-
-
-def _openscience_page(title: str, body: str, *, refresh: str | None = None) -> bytes:
-    meta = f'<meta http-equiv="refresh" content="2;url={html.escape(refresh)}"/>' if refresh else ""
-    page = (
-        '<!DOCTYPE html><html><head><meta charset="utf-8"/>'
-        f"{meta}<title>OpenScience · {BRAND_TITLE}</title></head>"
-        "<body style='font-family:system-ui,-apple-system,sans-serif;padding:2rem;"
-        "line-height:1.5;background:#181926;color:#cad3f5;max-width:44rem'>"
-        f"<h1>{title}</h1>{body}</body></html>"
-    )
-    return inject_dock(page.encode("utf-8"), "text/html")
-
-
-def openscience_starting_html(target: str) -> bytes:
-    return _openscience_page(
-        "OpenScience is starting",
-        "<p>The research workspace starts on first use; this takes 10–30 seconds and the "
-        "page reloads by itself.</p><p>Models come from the API keys saved under "
-        "<b>Agents</b>.</p>",
-        refresh=target,
-    )
-
-
-def openscience_failed_html(target: str) -> bytes:
-    state = os.environ.get("ASTROAI_STUDIO_STATE", "$SCRATCH/.studio-$USER")
-    retry = target + ("&" if "?" in target else "?") + "astroai-retry=1"
-    return _openscience_page(
-        "OpenScience could not start",
-        "<p>It exited several times in a row. See the log in a Terminal:</p>"
-        f"<pre style='background:#24273a;padding:.75rem;border-radius:6px'>"
-        f"tail -50 {html.escape(state)}/logs/openscience.log</pre>"
-        f"<p><a href='{html.escape(retry)}' style='color:#8aadf4'>Try again</a></p>",
-    )
 
 
 def _is_index_path(path: str) -> bool:
@@ -1026,12 +878,6 @@ def get_studio_status() -> dict[str, Any]:
             "port": WIZARD_PORT,
             "up": _check_port_open(WIZARD_HOST, WIZARD_PORT),
         },
-        "openscience": {
-            "name": "OpenScience",
-            "port": OPENSCIENCE_PORT,
-            "up": _check_port_open(OPENSCIENCE_HOST, OPENSCIENCE_PORT),
-            "on_demand": True,
-        },
     }
     scratch_dir = os.environ.get("SCRATCH", "/scratch")
     scratch_free_gb = 0.0
@@ -1067,27 +913,15 @@ def _forward(
     path: str,
     *,
     body_filter: Callable[[bytes, str], bytes] | None = rewrite_body,
-    openscience: bool = False,
-    location: Callable[[str], str] = rewrite_location,
 ) -> None:
-    token = read_openscience_token() if openscience else None
     if is_websocket_request(handler):
-        ws_headers = (
-            openscience_headers(handler.headers.items(), token, websocket=True)
-            if openscience
-            else None
-        )
-        forward_websocket(handler, host, port, path, ws_headers)
+        forward_websocket(handler, host, port, path)
         return
 
     accept = handler.headers.get("Accept", "")
     streaming = "text/event-stream" in accept or path.startswith("/api/events")
 
-    headers = (
-        dict(openscience_headers(handler.headers.items(), token))
-        if openscience
-        else _forward_headers(handler)
-    )
+    headers = _forward_headers(handler)
     length = int(handler.headers.get("Content-Length", "0") or "0")
     body = handler.rfile.read(length) if length > 0 else None
 
@@ -1107,8 +941,6 @@ def _forward(
             service_name = "VS Code"
         elif host == WIZARD_HOST and port == WIZARD_PORT:
             service_name = "Compute Hub"
-        elif host == OPENSCIENCE_HOST and port == OPENSCIENCE_PORT:
-            service_name = "OpenScience"
 
         if host == DSH_HOST and port == DSH_PORT and _is_index_path(path):
             _send_html(handler, 200, STARTING_HTML)
@@ -1126,8 +958,6 @@ def _forward(
         return
 
     content_type = upstream.getheader("Content-Type") or ""
-    if content_type.split(";", 1)[0].strip().lower() == "text/event-stream":
-        streaming = True
     raw = b"" if streaming else upstream.read()
 
     if (
@@ -1160,7 +990,7 @@ def _forward(
         if lk in HOP_BY_HOP or lk == "host":
             continue
         if lk == "location":
-            value = location(value)
+            value = rewrite_location(value)
         if lk == "set-cookie":
             value = rewrite_set_cookie(value)
         if lk == "content-length" and not streaming:
@@ -1168,8 +998,6 @@ def _forward(
         handler.send_header(key, value)
     if not streaming:
         handler.send_header("Content-Length", str(len(raw)))
-    else:
-        handler.send_header("X-Accel-Buffering", "no")
     handler.send_header("Connection", "close")
     handler.end_headers()
 
@@ -1180,8 +1008,7 @@ def _forward(
     if streaming:
         try:
             while True:
-                # read1: return what has arrived; read(n) waits for n bytes and stalls events.
-                chunk = upstream.read1(8192)
+                chunk = upstream.read(8192)
                 if not chunk:
                     break
                 handler.wfile.write(chunk)
@@ -1233,7 +1060,7 @@ class StudioProxyHandler(BaseHTTPRequestHandler):
             return
 
         # Trailing slash redirects for subservices
-        for bare in ("/terminal", "/jupyter", "/marimo", "/vscode", "/hub", OPENSCIENCE_MOUNT):
+        for bare in ("/terminal", "/jupyter", "/marimo", "/vscode", "/hub"):
             if route == bare:
                 target = f"{PREFIX}{bare}/" if PREFIX else f"{bare}/"
                 qs = urlparse(public).query
@@ -1254,11 +1081,6 @@ class StudioProxyHandler(BaseHTTPRequestHandler):
                     rest = f"{rest}?{qs}" if "?" not in rest else f"{rest}&{qs}"
                 _forward(self, TERMINAL_HOST, TERMINAL_PORT, rest, body_filter=inject_corner_dock)
                 return
-
-        # OpenScience: started by startup-studio.sh on the first request
-        if route == OPENSCIENCE_MOUNT or route.startswith(OPENSCIENCE_MOUNT + "/"):
-            self._openscience(route, urlparse(public).query)
-            return
 
         # JupyterLab / Marimo / VS Code serve under the full session base path
         # (startup-studio.sh passes /session/contrib/<id>/<tool>), so re-add PREFIX.
@@ -1291,35 +1113,6 @@ class StudioProxyHandler(BaseHTTPRequestHandler):
 
         # Default: Forward to DSH
         _forward(self, DSH_HOST, DSH_PORT, public)
-
-    def _openscience(self, route: str, query: str) -> None:
-        params = [(k, v) for k, v in parse_qsl(query, keep_blank_values=True) if k != "astroai-retry"]
-        retry = len(params) != len(parse_qsl(query, keep_blank_values=True))
-        rest = route[len(OPENSCIENCE_MOUNT) :] or "/"
-        if rest == OPENSCIENCE_BOOT and self.command in ("GET", "HEAD"):
-            _send_asset(self, openscience_boot_js(), "text/javascript; charset=utf-8")
-            return
-        if not _check_port_open(OPENSCIENCE_HOST, OPENSCIENCE_PORT):
-            started = request_openscience(retry=retry)
-            navigation = self.command == "GET" and "text/html" in self.headers.get("Accept", "")
-            if navigation:
-                target = f"{openscience_base()}{rest}" + (f"?{urlencode(params)}" if params else "")
-                page = openscience_starting_html(target) if started else openscience_failed_html(target)
-                _send_html(self, 200 if started else 503, page)
-            else:
-                _send_json(self, 503, {"error": "starting" if started else "failed"})
-            return
-        if query:
-            rest = f"{rest}?{query}"
-        _forward(
-            self,
-            OPENSCIENCE_HOST,
-            OPENSCIENCE_PORT,
-            rest,
-            body_filter=inject_openscience,
-            openscience=True,
-            location=rewrite_openscience_location,
-        )
 
     def do_GET(self) -> None:
         self._proxy()

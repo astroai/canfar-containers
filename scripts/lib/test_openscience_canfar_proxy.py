@@ -1,4 +1,4 @@
-"""/openscience/ route of the Studio proxy: HTML rewrite, loopback headers, lazy start."""
+"""openscience-canfar-proxy.py: HTML rewrite, loopback headers, hub route, restarts."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parent
 SPEC = importlib.util.spec_from_file_location(
-    "studio_canfar_proxy_os", ROOT / "studio-canfar-proxy.py"
+    "openscience_canfar_proxy", ROOT / "openscience-canfar-proxy.py"
 )
 assert SPEC and SPEC.loader
 proxy = importlib.util.module_from_spec(SPEC)
@@ -38,32 +38,37 @@ def _prefix(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(proxy, "PREFIX", PREFIX)
 
 
-def test_index_gets_absolute_assets_base_and_dock() -> None:
-    out = proxy.inject_openscience(INDEX, "text/html; charset=utf-8").decode()
-    assert f'src="{PREFIX}/openscience/assets/index-X.js"' in out
-    assert f'href="{PREFIX}/openscience/assets/index-X.css"' in out
-    assert f'src="{PREFIX}/openscience/openscience-theme-preload.js"' in out
+def test_index_gets_absolute_assets_boot_script_and_hub_chip() -> None:
+    out = proxy.inject_html(INDEX, "text/html; charset=utf-8").decode()
+    assert f'src="{PREFIX}/assets/index-X.js"' in out
+    assert f'href="{PREFIX}/assets/index-X.css"' in out
+    assert f'src="{PREFIX}/openscience-theme-preload.js"' in out
     assert '="./' not in out
     # OpenScience's CSP is script-src 'self': the base path must come from a file.
-    boot = f'<script data-astroai-openscience src="{PREFIX}/openscience/__astroai/boot.js">'
+    boot = f'<script data-astroai-openscience src="{PREFIX}/__astroai/boot.js">'
     assert boot in out
     assert out.index(boot) < out.index("openscience-theme-preload.js")
     assert "window.__OPENSCIENCE" not in out
-    assert 'data-mode="mini"' in out
-    assert b"./assets" in proxy.inject_openscience(b'import("./assets/a.js")', "text/javascript")
+    assert f'id="astroai-agents-chip" href="{PREFIX}/astroai-agents/" rel="external"' in out
+    assert out.index("astroai-agents-chip") < out.index("</body>")
+    assert b"./assets" in proxy.inject_html(b'import("./assets/a.js")', "text/javascript")
 
 
-def test_dock_links_to_openscience() -> None:
-    dock = proxy.command_dock_html("bar")
-    assert 'id="astroai-openscience-chip"' in dock
-    assert f'href="{PREFIX}/openscience/"' in dock
+def test_index_without_session_prefix(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(proxy, "PREFIX", "")
+    out = proxy.inject_html(INDEX, "text/html").decode()
+    assert 'src="/assets/index-X.js"' in out
+    assert 'src="/__astroai/boot.js"' in out
+    assert proxy.boot_js() == (
+        b'window.__OPENSCIENCE_BASE_URL__="";window.__OPENSCIENCE_TRUSTED_PROXY__=true;\n'
+    )
 
 
 def test_headers_become_loopback_with_token() -> None:
     items = [
         ("Host", "ws-uv.canfar.net"),
         ("Origin", "https://ws-uv.canfar.net"),
-        ("Referer", f"https://ws-uv.canfar.net{PREFIX}/openscience/"),
+        ("Referer", f"https://ws-uv.canfar.net{PREFIX}/"),
         ("Cookie", "CADC_SSO=secret"),
         ("Authorization", "Bearer from-browser"),
         ("X-Forwarded-For", "1.2.3.4"),
@@ -93,25 +98,28 @@ def test_headers_become_loopback_with_token() -> None:
     assert ws["Authorization"] == f"Bearer {TOKEN}"
 
 
-def test_redirects_stay_under_mount() -> None:
-    assert proxy.rewrite_openscience_location("/x?y=1") == f"{PREFIX}/openscience/x?y=1"
-    assert proxy.rewrite_openscience_location("https://e.org/a") == "https://e.org/a"
-    assert proxy.rewrite_openscience_location("//e.org/a") == "//e.org/a"
+def test_redirects_stay_in_the_session() -> None:
+    assert proxy.rewrite_location("/x?y=1") == f"{PREFIX}/x?y=1"
+    assert proxy.rewrite_location(f"{PREFIX}/x") == f"{PREFIX}/x"
+    assert proxy.rewrite_location("https://e.org/a") == "https://e.org/a"
+    assert proxy.rewrite_location("//e.org/a") == "//e.org/a"
 
 
-class FakeOpenScience(BaseHTTPRequestHandler):
+class FakeUpstream(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     seen: list[dict[str, str]] = []
+    guarded = True
 
     def log_message(self, *args: object) -> None:
         pass
 
     def do_GET(self) -> None:  # noqa: N802
-        FakeOpenScience.seen.append({"path": self.path, **dict(self.headers.items())})
-        if self.headers.get("Host") != "127.0.0.1:" + str(self.server.server_port):
-            return self._send(403, b'{"error":"Forbidden host"}', "application/json")
-        if self.headers.get("Authorization") != f"Bearer {TOKEN}":
-            return self._send(401, b"{}", "application/json")
+        FakeUpstream.seen.append({"path": self.path, **dict(self.headers.items())})
+        if self.guarded:
+            if self.headers.get("Host") != "127.0.0.1:" + str(self.server.server_port):
+                return self._send(403, b'{"error":"Forbidden host"}', "application/json")
+            if self.headers.get("Authorization") != f"Bearer {TOKEN}":
+                return self._send(401, b"{}", "application/json")
         if self.path == "/global/event":
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream")
@@ -140,25 +148,36 @@ class FakeOpenScience(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
 
+class FakeHub(FakeUpstream):
+    guarded = False
+
+
 def _serve(handler: type[BaseHTTPRequestHandler]) -> ThreadingHTTPServer:
     server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     return server
 
 
+def _stop(server: ThreadingHTTPServer) -> None:
+    server.shutdown()
+    server.server_close()
+
+
 @pytest.fixture
-def studio(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[dict]:
+def session(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[dict]:
     state = tmp_path / "state"
     state.mkdir()
     (state / "openscience-token").write_text(TOKEN + "\n")
-    monkeypatch.setenv("ASTROAI_STUDIO_STATE", str(state))
-    upstream = _serve(FakeOpenScience)
+    monkeypatch.setenv("ASTROAI_OPENSCIENCE_STATE", str(state))
+    upstream = _serve(FakeUpstream)
+    hub = _serve(FakeHub)
     monkeypatch.setattr(proxy, "OPENSCIENCE_PORT", upstream.server_port)
-    front = _serve(proxy.StudioProxyHandler)
-    FakeOpenScience.seen.clear()
-    yield {"state": state, "upstream": upstream, "port": front.server_port}
-    front.shutdown()
-    upstream.shutdown()
+    monkeypatch.setattr(proxy, "WIZARD_PORT", hub.server_port)
+    front = _serve(proxy.OpenScienceProxyHandler)
+    FakeUpstream.seen.clear()
+    yield {"state": state, "upstream": upstream, "hub": hub, "port": front.server_port}
+    for server in (front, upstream, hub):
+        _stop(server)
 
 
 def _get(port: int, path: str, **headers: str) -> tuple[int, dict[str, str], bytes]:
@@ -170,46 +189,55 @@ def _get(port: int, path: str, **headers: str) -> tuple[int, dict[str, str], byt
     return resp.status, {k.lower(): v for k, v in resp.getheaders()}, body
 
 
-def test_deep_link_is_proxied_with_token_and_rewritten(studio: dict) -> None:
+@pytest.mark.parametrize("path", ["/project/abc/files?x=1", f"{PREFIX}/project/abc/files?x=1"])
+def test_deep_link_is_proxied_with_token_and_rewritten(session: dict, path: str) -> None:
     status, _, body = _get(
-        studio["port"],
-        f"{PREFIX}/openscience/project/abc/files?x=1",
-        Origin="https://ws-uv.canfar.net",
-        Cookie="CADC_SSO=secret",
+        session["port"], path, Origin="https://ws-uv.canfar.net", Cookie="CADC_SSO=secret"
     )
     assert status == 200
-    assert f'src="{PREFIX}/openscience/assets/index-X.js"'.encode() in body
-    seen = FakeOpenScience.seen[-1]
+    assert f'src="{PREFIX}/assets/index-X.js"'.encode() in body
+    seen = FakeUpstream.seen[-1]
     assert seen["path"] == "/project/abc/files?x=1"
-    assert seen["Origin"] == f"http://127.0.0.1:{studio['upstream'].server_port}"
+    assert seen["Origin"] == f"http://127.0.0.1:{session['upstream'].server_port}"
     assert "Cookie" not in seen
 
 
-def test_boot_script_is_served_even_before_upstream_starts(studio: dict) -> None:
-    studio["upstream"].shutdown()
-    studio["upstream"].server_close()
-    status, headers, body = _get(studio["port"], f"{PREFIX}/openscience/__astroai/boot.js")
+def test_hub_route_is_passed_through_untouched(session: dict) -> None:
+    status, headers, _ = _get(session["port"], "/astroai-agents")
+    assert status == 302
+    assert headers["location"] == f"{PREFIX}/astroai-agents/"
+    status, _, body = _get(session["port"], "/astroai-agents/keys?x=1", Cookie="c=1")
+    assert status == 200
+    assert body == INDEX
+    seen = FakeUpstream.seen[-1]
+    assert seen["path"] == "/keys?x=1"
+    assert seen["Cookie"] == "c=1"
+    assert "Authorization" not in seen
+
+
+def test_boot_script_and_health_are_served_while_upstream_is_down(session: dict) -> None:
+    _stop(session["upstream"])
+    status, headers, body = _get(session["port"], "/__astroai/boot.js")
     assert status == 200
     assert headers["content-type"].startswith("text/javascript")
     assert body.decode() == (
-        f'window.__OPENSCIENCE_BASE_URL__="{PREFIX}/openscience";'
-        "window.__OPENSCIENCE_TRUSTED_PROXY__=true;\n"
+        f'window.__OPENSCIENCE_BASE_URL__="{PREFIX}";window.__OPENSCIENCE_TRUSTED_PROXY__=true;\n'
     )
+    status, _, body = _get(session["port"], "/__astroai/health")
+    assert status == 200
+    assert json.loads(body) == {"proxy": "ok", "openscience": False, "failed": False}
 
 
-def test_upstream_redirect_and_bare_mount(studio: dict) -> None:
-    status, headers, _ = _get(studio["port"], f"{PREFIX}/openscience/moved")
+def test_upstream_redirect_stays_in_the_session(session: dict) -> None:
+    status, headers, _ = _get(session["port"], "/moved")
     assert status == 302
-    assert headers["location"] == f"{PREFIX}/openscience/session/xyz"
-    status, headers, _ = _get(studio["port"], f"{PREFIX}/openscience")
-    assert status == 302
-    assert headers["location"] == f"{PREFIX}/openscience/"
+    assert headers["location"] == f"{PREFIX}/session/xyz"
 
 
-def test_event_stream_is_not_buffered(studio: dict) -> None:
-    conn = HTTPConnection("127.0.0.1", studio["port"], timeout=10)
+def test_event_stream_is_not_buffered(session: dict) -> None:
+    conn = HTTPConnection("127.0.0.1", session["port"], timeout=10)
     start = time.monotonic()
-    conn.request("GET", f"{PREFIX}/openscience/global/event", headers={"Accept": "*/*"})
+    conn.request("GET", "/global/event", headers={"Accept": "*/*"})
     resp = conn.getresponse()
     assert resp.getheader("X-Accel-Buffering") == "no"
     first = resp.read1(64)
@@ -219,60 +247,50 @@ def test_event_stream_is_not_buffered(studio: dict) -> None:
     assert elapsed < 0.8, f"first event after {elapsed:.2f}s: buffered until the next one"
 
 
-def test_lazy_start_page_then_failure_and_retry(studio: dict) -> None:
-    studio["upstream"].shutdown()
-    studio["upstream"].server_close()
-    state: Path = studio["state"]
-    status, _, body = _get(studio["port"], f"{PREFIX}/openscience/a?b=1", Accept="text/html")
+def test_starting_page_then_failure_and_retry(session: dict) -> None:
+    _stop(session["upstream"])
+    state: Path = session["state"]
+    status, _, body = _get(session["port"], "/a?b=1", Accept="text/html")
     assert status == 200
     assert b"OpenScience is starting" in body
-    assert f'url={PREFIX}/openscience/a?b=1"'.encode() in body
-    assert (state / "openscience.want").exists()
-    status, _, body = _get(studio["port"], f"{PREFIX}/openscience/global/health")
+    assert f'url={PREFIX}/a?b=1"'.encode() in body
+    status, _, body = _get(session["port"], "/global/health")
     assert status == 503
     assert json.loads(body) == {"error": "starting"}
 
-    (state / "openscience.want").unlink()
     (state / "openscience.failed").touch()
-    status, _, body = _get(studio["port"], f"{PREFIX}/openscience/", Accept="text/html")
+    status, _, body = _get(session["port"], "/", Accept="text/html")
     assert status == 503
     assert b"could not start" in body
+    assert f"{state}/openscience.log".encode() in body
     assert b"astroai-retry=1" in body
-    assert not (state / "openscience.want").exists()
-    status, _, body = _get(
-        studio["port"], f"{PREFIX}/openscience/?astroai-retry=1", Accept="text/html"
-    )
+    assert json.loads(_get(session["port"], "/x")[2]) == {"error": "failed"}
+    status, _, body = _get(session["port"], "/?astroai-retry=1", Accept="text/html")
     assert status == 200
     assert not (state / "openscience.failed").exists()
-    assert (state / "openscience.want").exists()
-    assert b"astroai-retry" not in body.split(b"<body", 1)[0]
+    assert b"astroai-retry" not in body
 
 
-def test_websocket_handshake_carries_loopback_headers(studio: dict, monkeypatch) -> None:
+def test_websocket_handshake_carries_loopback_headers(session: dict, monkeypatch) -> None:
     captured: dict[str, bytes] = {}
     listener = socket.socket()
     listener.bind(("127.0.0.1", 0))
     listener.listen(1)
 
     def accept() -> None:
-        # The proxy's port probe connects first and sends nothing.
-        while "request" not in captured:
-            conn, _ = listener.accept()
-            data = conn.recv(65536)
-            if data:
-                captured["request"] = data
-                conn.sendall(
-                    b"HTTP/1.1 101 Switching Protocols\r\n"
-                    b"Upgrade: websocket\r\nConnection: Upgrade\r\n\r\n"
-                )
-            conn.close()
+        conn, _ = listener.accept()
+        captured["request"] = conn.recv(65536)
+        conn.sendall(
+            b"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n"
+        )
+        conn.close()
 
     threading.Thread(target=accept, daemon=True).start()
     monkeypatch.setattr(proxy, "OPENSCIENCE_PORT", listener.getsockname()[1])
-    client = socket.create_connection(("127.0.0.1", studio["port"]), timeout=5)
+    client = socket.create_connection(("127.0.0.1", session["port"]), timeout=5)
     client.sendall(
         (
-            f"GET {PREFIX}/openscience/pty/p1/connect?cursor=0 HTTP/1.1\r\n"
+            f"GET {PREFIX}/pty/p1/connect?cursor=0 HTTP/1.1\r\n"
             "Host: ws-uv.canfar.net\r\nOrigin: https://ws-uv.canfar.net\r\n"
             "Cookie: CADC_SSO=secret\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n"
             "Sec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n"
@@ -289,9 +307,3 @@ def test_websocket_handshake_carries_loopback_headers(studio: dict, monkeypatch)
     assert f"Authorization: Bearer {TOKEN}" in req
     assert "Upgrade: websocket" in req
     assert "CADC_SSO" not in req
-
-
-def test_status_lists_openscience_on_demand() -> None:
-    svc = proxy.get_studio_status()["services"]["openscience"]
-    assert svc["on_demand"] is True
-    assert svc["port"] == proxy.OPENSCIENCE_PORT

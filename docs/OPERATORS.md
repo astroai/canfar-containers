@@ -31,6 +31,7 @@ flowchart LR
 | `notebook` | `…/astroai/notebook:<tag>` | Notebook | 8888 | Yes |
 | `marimo` | `…/astroai/marimo:<tag>` | Contributed | 5000 | Yes |
 | `openresearch` | `…/astroai/openresearch:<tag>` | Contributed | 5000 | Yes |
+| `openscience` | `…/astroai/openscience:<tag>` | Contributed | 5000 | Yes |
 | `studio` | `…/astroai/studio:<tag>` | Contributed | 5000 | Yes |
 | `ray-manager` | `…/astroai/ray-manager:<tag>` | Contributed | 5000 | Yes |
 | `ray-worker` | `…/astroai/ray-worker:<tag>` | Headless | — | No — manager launches |
@@ -95,6 +96,7 @@ Session UIs listen at `/` on port **5000**.
 | `marimo` | Listen `/` — **no** `--base-url`; HTML proxy on :5000 sticks session name in tab |
 | `notebook` | Ingress keeps path; Jupyter `base_url=session/notebook/<id>`; `appName` = session name |
 | `openresearch` | Path-rewrite proxy on :5000 + HTML title stick; ghostty at `/astroai-terminal/` |
+| `openscience` | Loopback proxy on :5000 (bearer token, loopback Host/Origin, base path via `/__astroai/boot.js`); hub at `/astroai-agents/` |
 | `studio` | dsh `astroai` profile loopback + path-rewrite proxy on :5000 + HTML title stick |
 | `ray-manager` | Server-rendered HTML `<title>` = session name |
 
@@ -124,11 +126,11 @@ entrypoint, ask the science-platform team for a per-image override that sets
 ## Science Portal checklist
 
 1. Push `images.canfar.net/astroai/*:<tag>` (sessions + Ray + improc stack).
-2. Register Contributed: `terminal`, `vscode`, `marimo`, `openresearch`, `studio`, `ray-manager`, `improc-terminal` → port **5000**.
+2. Register Contributed: `terminal`, `vscode`, `marimo`, `openresearch`, `openscience`, `studio`, `ray-manager`, `improc-terminal` → port **5000**.
 3. Register Notebook: `notebook`, `improc-notebook` → port **8888**.
 4. Leave `base`, `ray-worker`, and `improc` (headless) off the interactive catalog (or list `improc` under headless only). `python` and `ray-base` are bake-only, never Harbor images.
 5. Document the published tag for users (`YY.MM`).
-6. Smoke: `make test-canfar-session IMAGE=terminal TAG=…`, `IMAGE=studio`, `IMAGE=openresearch`, `IMAGE=improc-terminal`, and `make test-canfar-ray TAG=…`.
+6. Smoke: `make test-canfar-session IMAGE=terminal TAG=…`, `IMAGE=studio`, `IMAGE=openresearch`, `IMAGE=openscience`, `IMAGE=improc-terminal`, and `make test-canfar-ray TAG=…`.
 7. **Agent verbs:** `make test-canfar-agents TAG=…` (lightweight in-session probe of the full agent verb surface — required after every image push; see below).
 
 ## Local smoke
@@ -171,10 +173,13 @@ make test-canfar-session IMAGE=vscode TAG=26.09
 make test-canfar-session IMAGE=marimo TAG=26.09
 make test-canfar-session IMAGE=notebook TAG=26.09
 make test-canfar-session IMAGE=openresearch TAG=26.09
+make test-canfar-session IMAGE=openscience TAG=26.09
 ```
 
 
 **OpenResearch notes:** Image installs the pinned upstream [alphaXiv OpenResearch](https://github.com/alphaXiv/OpenResearch) musl release (`ORX_VERSION` + `ORX_SHA256` in the Dockerfile; currently **v0.2.4**; the Ray Jobs backend ships upstream since v0.1.88). Startup defaults compute to Ray when a manager Jobs URL is already known; the AstroAI hub **Start batch compute** button ensures an autoscaling ray-manager and wires OpenResearch. Bump `ORX_VERSION`/`ORX_SHA256` together on upstream releases. See [USAGE.md](USAGE.md).
+
+**OpenScience notes:** Built from source at `OPENSCIENCE_VERSION` (bake variable) with `patches/openscience/*.patch`, so the web workspace works under the session path; re-check the patch applies when bumping. Startup runs `canfar-lab agent setup openscience` (astroai MCP with CADC/VO tools, CANFAR instructions, skills, approval gates for cluster/job tools, sandbox off because the image has no bubblewrap) and restarts the server when model keys are saved in the hub. `~/.openscience` is leased to one live session; a second concurrent session uses `$SCRATCH/.openscience`. Session state and logs: `$SCRATCH/.openscience-$USER/`.
 
 **Agent auto-setup:** UI kinds (`openresearch`, `vscode`, `studio`) default `ASTROAI_LAB_AGENT_SETUP=bg` when unset. **Marimo** stays opt-in for full setup (startup still runs `agent setup marimo` only). Terminal stays opt-in. Failures never block the main UI; see `~/.astroai/lab/agent-setup.log`.
 

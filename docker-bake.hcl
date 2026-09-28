@@ -29,7 +29,7 @@ variable "OPENSCIENCE_VERSION" {
 }
 
 group "default" {
-  targets = ["base", "terminal", "notebook", "vscode", "marimo", "openresearch", "studio"]
+  targets = ["base", "terminal", "notebook", "vscode", "marimo", "openresearch", "openscience", "studio"]
 }
 
 group "improc" {
@@ -100,14 +100,22 @@ target "openresearch" {
   tags       = ["${REGISTRY}/${OWNER}/openresearch:${TAG}"]
 }
 
+target "openscience" {
+  inherits   = ["_interface"]
+  dockerfile = "dockerfiles/openscience/Dockerfile"
+  tags       = ["${REGISTRY}/${OWNER}/openscience:${TAG}"]
+  args = {
+    OPENSCIENCE_VERSION = "${OPENSCIENCE_VERSION}"
+  }
+}
+
 target "studio" {
   inherits   = ["_interface"]
   dockerfile = "dockerfiles/studio/Dockerfile"
   tags       = ["${REGISTRY}/${OWNER}/studio:${TAG}"]
   args = {
-    DSH_VERSION         = "${DSH_VERSION}"
-    DSH_CACHEBUST       = "${DSH_CACHEBUST}"
-    OPENSCIENCE_VERSION = "${OPENSCIENCE_VERSION}"
+    DSH_VERSION   = "${DSH_VERSION}"
+    DSH_CACHEBUST = "${DSH_CACHEBUST}"
   }
 }
 

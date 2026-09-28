@@ -16,7 +16,7 @@
 # Environment:
 #   REGISTRY, OWNER, CANFAR_TEST_TIMEOUT (default 900)
 
-IMAGE="${1:?image name required (terminal|notebook|vscode|marimo|openresearch|studio|ray-manager|improc-terminal|improc-notebook)}"
+IMAGE="${1:?image name required (terminal|notebook|vscode|marimo|openresearch|openscience|studio|ray-manager|improc-terminal|improc-notebook)}"
 TAG="${2:-${TAG:-latest}}"
 OWNER="${OWNER:-astroai}"
 REGISTRY="${REGISTRY:-images.canfar.net}"
@@ -374,6 +374,38 @@ if [[ "${FAILURES}" -eq 0 && "${IMAGE}" == "openresearch" ]]; then
         FAILURES=$((FAILURES + 1))
     fi
     rm -f "${HUB_HTML}" "${HUB_JSON}"
+fi
+
+# openscience: server up behind the proxy, workspace HTML rewritten, hub mounted
+if [[ "${FAILURES}" -eq 0 && "${IMAGE}" == "openscience" ]]; then
+    BASE="${URL%/}"
+    os_up=0
+    for _ in $(seq 1 30); do
+        if curl -sk --max-time 10 "${BASE}/__astroai/health" \
+            | python3 -c "import json,sys; assert json.load(sys.stdin)['openscience']" 2>/dev/null; then
+            os_up=1
+            break
+        fi
+        sleep 5
+    done
+    echo "OpenScience server up: ${os_up}"
+    if [[ "${os_up}" != "1" ]]; then
+        echo "OpenScience did not come up behind the proxy." >&2
+        FAILURES=$((FAILURES + 1))
+    fi
+    ROOT_HTML="$(curl -sk --max-time 20 "${BASE}/" || true)"
+    for want in '__astroai/boot.js' 'astroai-agents-chip'; do
+        if ! grep -q "${want}" <<<"${ROOT_HTML}"; then
+            echo "OpenScience root HTML missing ${want}." >&2
+            FAILURES=$((FAILURES + 1))
+        fi
+    done
+    health_code="$(curl -sk -o /dev/null -w '%{http_code}' --max-time 20 "${BASE}/global/health" || true)"
+    echo "OpenScience /global/health HTTP ${health_code}"
+    [[ "${health_code}" == "200" ]] || FAILURES=$((FAILURES + 1))
+    hub_code="$(curl -sk -o /dev/null -w '%{http_code}' --max-time 30 "${BASE}/astroai-agents/" || true)"
+    echo "Hub HTML HTTP ${hub_code}"
+    [[ "${hub_code}" == "200" ]] || FAILURES=$((FAILURES + 1))
 fi
 
 if [[ "${FAILURES}" -eq 0 ]]; then

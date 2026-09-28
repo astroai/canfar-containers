@@ -1,8 +1,8 @@
 #!/bin/bash -e
 # AstroAI Studio: Unified 5-in-1 development studio for CANFAR.
 # Multiplexes DeepSeek Harness (:3080), Ghostty terminal (:4793),
-# JupyterLab (:8888), Marimo (:2718), OpenVSCode (:8080), Compute Hub (:4792)
-# and OpenScience (:4796, on first visit) over public port 5000 via studio-canfar-proxy.py.
+# JupyterLab (:8888), Marimo (:2718), OpenVSCode (:8080), and Compute Hub (:4792)
+# over public port 5000 via studio-canfar-proxy.py.
 
 export ASTROAI_SESSION_KIND="${ASTROAI_SESSION_KIND:-studio}"
 export PATH="/opt/astroai/venv/cadc/bin:/opt/openvscode-server/bin:/opt/astroai/bin:${PATH}"
@@ -15,7 +15,6 @@ export ASTROAI_TERMINAL_PORT="${ASTROAI_TERMINAL_PORT:-4793}"
 export ASTROAI_JUPYTER_PORT="${ASTROAI_JUPYTER_PORT:-8888}"
 export ASTROAI_MARIMO_PORT="${ASTROAI_MARIMO_PORT:-2718}"
 export ASTROAI_VSCODE_PORT="${ASTROAI_VSCODE_PORT:-8080}"
-export ASTROAI_OPENSCIENCE_PORT="${ASTROAI_OPENSCIENCE_PORT:-4796}"
 export ASTROAI_TAB_TITLE="${ASTROAI_TAB_TITLE:-AstroAI Studio}"
 
 # Bind :5000 BEFORE common-init. On CANFAR, walking a large CephFS home in
@@ -43,8 +42,6 @@ _token_file="${_studio_state}/dsh-web-token"
 : >"${_dsh_log}" 2>/dev/null || true
 rm -f "${_token_file}"
 export ASTROAI_DSH_TOKEN_FILE="${_token_file}"
-rm -f "${_studio_state}/openscience.want" "${_studio_state}/openscience.restart" \
-    "${_studio_state}/openscience.failed"
 
 python3 /opt/astroai/lib/studio-canfar-proxy.py &
 PROXY_PID=$!
@@ -69,11 +66,9 @@ cleanup() {
     local rc=$?
     astroai_boot_log "session:exit rc=${rc}"
     kill "${PROXY_PID:-}" "${WIZARD_PID:-}" "${GHOSTTY_PID:-}" "${DSH_PID:-}" \
-         "${JUPYTER_PID:-}" "${MARIMO_PID:-}" "${VSCODE_PID:-}" "${OPENSCIENCE_PID:-}" \
-         2>/dev/null || true
+         "${JUPYTER_PID:-}" "${MARIMO_PID:-}" "${VSCODE_PID:-}" 2>/dev/null || true
     wait "${PROXY_PID:-}" "${WIZARD_PID:-}" "${GHOSTTY_PID:-}" "${DSH_PID:-}" \
-         "${JUPYTER_PID:-}" "${MARIMO_PID:-}" "${VSCODE_PID:-}" "${OPENSCIENCE_PID:-}" \
-         2>/dev/null || true
+         "${JUPYTER_PID:-}" "${MARIMO_PID:-}" "${VSCODE_PID:-}" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
 
@@ -341,60 +336,6 @@ if [[ -f /opt/astroai/lib/agent-wizard.py ]]; then
     WIZARD_PID=$!
 fi
 
-# 7. OpenScience (port 4796): started when the proxy first sees /openscience/
-#    (flag openscience.want), restarted when the hub saves a key (openscience.restart).
-_os_token="${_studio_state}/openscience-token"
-_os_log="${_studio_state}/logs/openscience.log"
-_os_fast_exits=0
-_start_openscience() {
-    [[ -x /opt/astroai/bin/openscience ]] || return 0
-    if [[ ! -s "${_os_token}" ]]; then
-        (umask 077 && head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n' >"${_os_token}") || true
-    fi
-    rm -f "${_studio_state}/openscience.restart"
-    astroai_boot_log "starting openscience on :${ASTROAI_OPENSCIENCE_PORT}"
-    (
-        cd "${STUDIO_CWD}" || exit 1
-        # Homes set up before the openscience bundle existed skip agent setup (stamp).
-        "${_LAB_BIN}" --yes agent setup openscience || true
-        OPENSCIENCE_AUTH_TOKEN="$(cat "${_os_token}")" \
-            exec /opt/astroai/bin/openscience serve --port "${ASTROAI_OPENSCIENCE_PORT}"
-    ) >>"${_os_log}" 2>&1 &
-    OPENSCIENCE_PID=$!
-    _os_started=${SECONDS}
-}
-_supervise_openscience() {
-    [[ -f "${_studio_state}/openscience.want" ]] || return 0
-    if [[ -n "${OPENSCIENCE_PID:-}" ]] && kill -0 "${OPENSCIENCE_PID}" 2>/dev/null; then
-        if [[ -f "${_studio_state}/openscience.restart" ]]; then
-            astroai_boot_log "model keys changed — restarting openscience"
-            kill "${OPENSCIENCE_PID}" 2>/dev/null || true
-            wait "${OPENSCIENCE_PID}" 2>/dev/null || true
-            _start_openscience
-        fi
-        return 0
-    fi
-    if [[ -n "${OPENSCIENCE_PID:-}" ]]; then
-        # bash -e: a crashed server's non-zero status must not end the Studio.
-        wait "${OPENSCIENCE_PID}" 2>/dev/null || true
-        if ((SECONDS - _os_started < 30)); then
-            _os_fast_exits=$((_os_fast_exits + 1))
-        else
-            _os_fast_exits=0
-        fi
-        OPENSCIENCE_PID=""
-        if ((_os_fast_exits >= 3)); then
-            astroai_boot_log "openscience exited ${_os_fast_exits} times in a row — see ${_os_log}"
-            rm -f "${_studio_state}/openscience.want"
-            touch "${_studio_state}/openscience.failed"
-            _os_fast_exits=0
-            return 0
-        fi
-        astroai_boot_log "openscience died — restarting"
-    fi
-    _start_openscience
-}
-
 astroai_boot_log "studio 5-in-1 workbench ready, entering supervision loop"
 
 # Supervise forever: ensure all services stay alive
@@ -429,7 +370,6 @@ while true; do
         python3 /opt/astroai/lib/agent-wizard.py >>"${_studio_state}/logs/wizard.log" 2>&1 &
         WIZARD_PID=$!
     fi
-    _supervise_openscience
     if _extract_dsh_token && [[ -z "${_token_logged:-}" ]]; then
         astroai_boot_log "dsh web token captured for Skaha Connect redirect"
         _token_logged=1

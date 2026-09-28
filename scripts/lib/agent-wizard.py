@@ -46,6 +46,7 @@ HOME = Path.home()
 SESSION_KIND = (os.environ.get("ASTROAI_SESSION_KIND") or "").strip().lower()
 BACK_UI_LABEL = {
     "openresearch": "OpenResearch",
+    "openscience": "OpenScience",
     "studio": "Studio",
 }.get(SESSION_KIND, "main UI")
 HUB_TITLE = {
@@ -462,9 +463,9 @@ def _keys_list() -> tuple[int, dict[str, Any]]:
 
 
 def _restart_openscience() -> None:
-    """OpenScience reads provider keys from its environment at start; startup-studio.sh
-    restarts a running server when this flag appears."""
-    state = os.environ.get("ASTROAI_STUDIO_STATE", "").strip()
+    """OpenScience reads provider keys from its environment at start;
+    startup-openscience.sh restarts the server when this flag appears."""
+    state = os.environ.get("ASTROAI_OPENSCIENCE_STATE", "").strip()
     if state:
         with contextlib.suppress(OSError):
             (Path(state) / "openscience.restart").touch()

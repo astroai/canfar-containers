@@ -29,7 +29,7 @@
 if [[ "$#" -gt 0 ]]; then
     IMAGES=("$@")
 else
-    IMAGES=(base terminal notebook vscode marimo openresearch studio)
+    IMAGES=(base terminal notebook vscode marimo openresearch openscience studio)
 fi
 OWNER="${OWNER:-astroai}"
 REGISTRY="${REGISTRY:-images.canfar.net}"

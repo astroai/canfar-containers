@@ -139,6 +139,7 @@ Compilers and editors are in interactive images; put CUDA/ML stacks in your pixi
 | `marimo` | Reactive `.py` notebooks; starter seeded once under `$SRCDIR/notebooks` |
 | `notebook` | JupyterLab `:8888`. Stock Skaha may run platform Jupyter CMD — AstroAI `startup-notebook.sh` only with a platform override ([OPERATORS.md](OPERATORS.md)) |
 | `openresearch` | Autoresearch UI (`orx`) on `:5000`; **Terminal** chip → `/astroai-terminal/` (ghostty-web); AstroAI hub at `/astroai-agents/` |
+| `openscience` | OpenScience research workspace on `:5000` with the astroai CADC/VO tools and astronomy Python; **AstroAI** chip → hub at `/astroai-agents/` (model keys, compute) |
 | `studio` | dsh coding portal on `:5000`; **Terminal** + **AstroAI** chips — see [STUDIO.md](STUDIO.md) |
 | `ray-manager` | Cluster UI + Ray head; see Ray section |
 | `improc` | Headless FITS/HDF5 image-processing CLIs — see [Image processing (`improc`)](#image-processing-improc) |

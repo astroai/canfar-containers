@@ -375,7 +375,7 @@ def test_keys_set_passes_value_on_stdin_only() -> None:
 
 
 def test_saved_key_asks_for_an_openscience_restart(tmp_path, monkeypatch) -> None:
-    monkeypatch.setenv("ASTROAI_STUDIO_STATE", str(tmp_path))
+    monkeypatch.setenv("ASTROAI_OPENSCIENCE_STATE", str(tmp_path))
     flag = tmp_path / "openscience.restart"
     with patch.object(wiz, "_run_lab", return_value=(1, "", "Error: bad key\n")):
         wiz._keys_change("OPENAI_API_KEY", "short")

@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1
 # AstroAI Studio: Unified 5-in-1 development studio for CANFAR.
 # Multiplexes DeepSeek Harness (:3080), Ghostty terminal (:4793),
-# JupyterLab (:8888), Marimo (:2718), OpenVSCode (:8080), Compute Hub (:4792)
-# and the OpenScience workspace (:4796, started on first visit) over public port 5000.
+# JupyterLab (:8888), Marimo (:2718), OpenVSCode (:8080), and Compute Hub (:4792)
+# over public port 5000.
 
 ARG REGISTRY=images.canfar.net
 ARG OWNER=astroai
@@ -17,26 +17,6 @@ ARG WS_VERSION=8.21.3
 ARG OPENVSCODE_VERSION=openvscode-server-v1.109.5
 ARG OPENVSCODE_SHA256_X64=b433bf4f0227321a7014d8460d10a8f958adc0f45aa79bd889e84e65e8f88363
 ARG OPENVSCODE_SHA256_ARM64=36d9c14036489b63de84ebace837fcacf7e60e669a0dc715802c5443684ea4dc
-ARG OPENSCIENCE_VERSION=2.0.140
-ARG BUN_VERSION=1.3.14
-
-# OpenScience from source: the release binary only serves its web workspace at
-# the origin root, and the Studio mounts it under /session/contrib/<id>/openscience/.
-FROM oven/bun:${BUN_VERSION} AS openscience
-ARG OPENSCIENCE_VERSION
-RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
-RUN git clone --depth 1 --branch "v${OPENSCIENCE_VERSION}" \
-        https://github.com/synthetic-sciences/openscience /src
-COPY patches/openscience/ /patches/
-WORKDIR /src
-RUN git apply /patches/*.patch
-WORKDIR /src/backend/cli
-RUN bun install --frozen-lockfile
-RUN OPENSCIENCE_CHANNEL=latest OPENSCIENCE_WEB_BASE=./ \
-        bun run script/build.ts --single --skip-install \
-    && install -D -m 0755 dist/@synsci/openscience-linux-*/bin/openscience /out/openscience \
-    && HOME=/tmp /out/openscience --version
 
 FROM ${REGISTRY}/${OWNER}/${BASE_NAME}:${TAG}
 
@@ -126,23 +106,6 @@ RUN ARCH=$(uname -m | sed 's/x86_64/x64/; s/aarch64/arm64/') \
 RUN mkdir -p /opt/openvscode-server/data/Machine
 COPY config/openvscode-settings.json /opt/openvscode-server/data/Machine/settings.json
 RUN chmod a+w /opt/openvscode-server/data/Machine/settings.json
-
-# 5. OpenScience research workspace + astronomy Python (its kernels and shell use
-#    the first python3 on PATH; the wrapper puts this venv first)
-COPY --from=openscience /out/openscience /opt/openscience/bin/openscience
-COPY scripts/openscience-canfar.sh /opt/astroai/bin/openscience
-COPY config/science-py.txt /tmp/science-py.txt
-RUN chmod a+rx /opt/openscience/bin/openscience /opt/astroai/bin/openscience \
-    && /opt/openscience/bin/openscience --version \
-    && uv venv /opt/astroai/venv/science \
-    && uv pip install --python /opt/astroai/venv/science -r /tmp/science-py.txt \
-    && /opt/astroai/venv/science/bin/python -c \
-        "import numpy, scipy, astropy, astroquery, pyvo, photutils, specutils, lightkurve" \
-    && /opt/astroai/venv/science/bin/python -m ipykernel install --prefix /usr/local \
-        --name astro --display-name "Python 3 (astronomy)" \
-    && chmod -R a+rwX /opt/astroai/venv/science \
-    && rm /tmp/science-py.txt \
-    && uv cache clean
 
 ENV PATH="/opt/astroai/bin:/opt/openvscode-server/bin:${PATH}" \
     ASTROAI_SESSION_KIND=studio \
