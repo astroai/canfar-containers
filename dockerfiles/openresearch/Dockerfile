@@ -10,8 +10,8 @@ ARG BASE_NAME=base
 ARG TAG=local
 # Pinned upstream release. Bump ORX_SHA256 together with ORX_VERSION
 # (sha256 of openresearch-cli-x86_64-unknown-linux-musl.tar.xz).
-ARG ORX_VERSION=v0.2.10
-ARG ORX_SHA256=d00ac5c8a62230f601642d2596167fd46741309e857f18195276a271df02c081
+ARG ORX_VERSION=v0.2.11
+ARG ORX_SHA256=bb533d46c37d799c1396415f1fade132d207d9b750fb9bb0cec580b0a1a14e0d
 # Keep in sync with dockerfiles/terminal/Dockerfile.
 ARG GHOSTTY_WEB_VERSION=0.4.0-next.20.g1858a59
 ARG NODE_PTY_VERSION=1.1.0

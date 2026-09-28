@@ -14,4 +14,14 @@ specutils
 regions
 reproject
 lightkurve
+ccdproc
+astroscrappy
+astroplan
+spectral-cube
+radio-beam
+dust_extinction
+gaiadr3-zeropoint
+emcee
+dynesty
+corner
 ipykernel

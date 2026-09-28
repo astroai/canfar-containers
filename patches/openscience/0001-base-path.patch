@@ -9,7 +9,7 @@ default server URL and API routes follow it. A same-origin trusted proxy may als
 the terminal, which is otherwise loopback-only.
 
 Build with OPENSCIENCE_WEB_BASE=./ so index.html uses relative assets.
-Applies to synthetic-sciences/openscience v2.0.140.
+Applies to synthetic-sciences/openscience v2.0.143.
 ---
 diff --git a/frontend/workspace/src/app.tsx b/frontend/workspace/src/app.tsx
 index 639f96a..d327c9f 100644

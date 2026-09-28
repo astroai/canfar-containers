@@ -8,7 +8,7 @@ ARG REGISTRY=images.canfar.net
 ARG OWNER=astroai
 ARG BASE_NAME=base
 ARG TAG=local
-ARG OPENSCIENCE_VERSION=2.0.140
+ARG OPENSCIENCE_VERSION=2.0.143
 ARG BUN_VERSION=1.3.14
 
 FROM oven/bun:${BUN_VERSION} AS openscience
@@ -49,7 +49,7 @@ RUN chmod a+rx /opt/openscience/bin/openscience /opt/astroai/bin/openscience \
     && uv venv /opt/astroai/venv/science \
     && uv pip install --python /opt/astroai/venv/science -r /tmp/science-py.txt \
     && /opt/astroai/venv/science/bin/python -c \
-        "import numpy, scipy, astropy, astroquery, pyvo, photutils, specutils, lightkurve" \
+        "import numpy, scipy, astropy, astroquery, pyvo, photutils, specutils, lightkurve, ccdproc, astroscrappy, astroplan, spectral_cube, radio_beam, dust_extinction, zero_point, emcee, dynesty, corner" \
     && chmod -R a+rwX /opt/astroai/venv/science \
     && rm /tmp/science-py.txt \
     && uv cache clean

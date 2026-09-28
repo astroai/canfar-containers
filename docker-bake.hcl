@@ -25,7 +25,7 @@ variable "DSH_CACHEBUST" {
 }
 
 variable "OPENSCIENCE_VERSION" {
-  default = "2.0.140"
+  default = "2.0.143"
 }
 
 group "default" {
