@@ -10,7 +10,7 @@ This proxy:
   * forwards to ``127.0.0.1:ORX_PORT`` (default 4791)
   * routes ``/astroai-agents/*`` to the AstroAI agent wizard sidecar
   * routes ``/astroai-terminal/*`` to ghostty-web (WebSocket splice)
-  * rewrites HTML/JS/CSS so absolute ``/api``, ``/assets``, ``/favicon``,
+  * rewrites HTML/JS/CSS so absolute ``/api``, ``/_orx``, ``/assets``, ``/favicon``,
     ``/astroai-agents``, ``/astroai-terminal`` URLs include the session prefix
   * injects AstroAI + Terminal chips into HTML (proxy-only; no upstream fork)
 """
@@ -55,7 +55,14 @@ REWRITE_TYPES = (
 )
 
 # Absolute paths the SPA embeds that must stay under the contrib prefix.
-ABS_PREFIXES = ("/api/", "/assets/", "/favicon", "/astroai-agents", "/astroai-terminal")
+ABS_PREFIXES = (
+    "/api/",
+    "/_orx/",
+    "/assets/",
+    "/favicon",
+    "/astroai-agents",
+    "/astroai-terminal",
+)
 
 CHIP_STYLE = (
     "position:fixed;z-index:2147483646;padding:10px 14px;border-radius:8px;"
@@ -98,6 +105,9 @@ def rewrite_body(data: bytes, content_type: str) -> bytes:
             text = text.replace(f'"__KEEP__{abs_prefix}', f'"{PREFIX}{abs_prefix}')
             text = text.replace(f"'__KEEP__{abs_prefix}", f"'{PREFIX}{abs_prefix}")
             text = text.replace(f"`__KEEP__{abs_prefix}", f"`{PREFIX}{abs_prefix}")
+
+            # WebSocket URLs built as `${proto}//${location.host}/api/...`.
+            text = text.replace(f"location.host}}{abs_prefix}", f"location.host}}{PREFIX}{abs_prefix}")
 
         # TanStack Router (orx): without basepath, pathname /session/contrib/<id>/…
         # never matches routes (`/`, `/projects`, …) → in-app Not Found while chips
@@ -168,6 +178,44 @@ HOP_BY_HOP = {
 }
 
 
+def orx_identity_headers(headers) -> dict[str, str]:
+    """Host/Origin overrides so orx's loopback guard accepts proxied browser requests.
+
+    orx rejects unsafe methods and WebSockets unless Host is loopback and Origin
+    is exactly ``http://<Host>``. Only same-origin browser requests get the
+    loopback Origin; anything else keeps its real Origin and orx rejects it.
+    Chromium omits Sec-Fetch-Site on WebSocket handshakes, so without it the
+    Origin host must match the Host (or X-Forwarded-Host) the browser used.
+    """
+    upstream = f"{ORX_HOST}:{ORX_PORT}"
+    overrides = {"Host": upstream}
+    origin = (headers.get("Origin") or "").strip()
+    if not origin:
+        return overrides
+    site = headers.get("Sec-Fetch-Site")
+    if site is not None:
+        same_origin = site.strip().lower() == "same-origin"
+    else:
+        origin_host = urlsplit(origin).netloc.lower()
+        browser_hosts = {
+            h.split(",", 1)[0].strip().lower()
+            for h in (headers.get("Host"), headers.get("X-Forwarded-Host"))
+            if h
+        }
+        same_origin = bool(origin_host) and origin_host in browser_hosts
+    if same_origin:
+        overrides["Origin"] = f"http://{upstream}"
+    return overrides
+
+
+def _apply_overrides(items, overrides: dict[str, str] | None) -> list[tuple[str, str]]:
+    if not overrides:
+        return list(items)
+    lowered = {k.lower() for k in overrides}
+    kept = [(k, v) for k, v in items if k.lower() not in lowered]
+    return kept + list(overrides.items())
+
+
 def is_websocket_request(handler: BaseHTTPRequestHandler) -> bool:
     conn = handler.headers.get("Connection", "").lower()
     upgrade = handler.headers.get("Upgrade", "").lower()
@@ -191,14 +239,20 @@ def _splice_sockets(client: socket.socket, upstream: socket.socket) -> None:
         return
 
 
-def forward_websocket(handler: BaseHTTPRequestHandler, host: str, port: int, path: str) -> None:
+def forward_websocket(
+    handler: BaseHTTPRequestHandler,
+    host: str,
+    port: int,
+    path: str,
+    overrides: dict[str, str] | None = None,
+) -> None:
     try:
         upstream = socket.create_connection((host, port), timeout=30)
     except OSError as exc:
         handler.send_error(502, f"upstream unreachable: {exc}")
         return
     lines = [f"{handler.command} {path} HTTP/1.1"]
-    for key, value in handler.headers.items():
+    for key, value in _apply_overrides(handler.headers.items(), overrides):
         lines.append(f"{key}: {value}")
     payload = ("\r\n".join(lines) + "\r\n\r\n").encode("iso-8859-1")
     try:
@@ -212,20 +266,27 @@ def forward_websocket(handler: BaseHTTPRequestHandler, host: str, port: int, pat
 
 
 def _forward(
-    handler: BaseHTTPRequestHandler, host: str, port: int, path: str, *, rewrite: bool = True
+    handler: BaseHTTPRequestHandler,
+    host: str,
+    port: int,
+    path: str,
+    *,
+    rewrite: bool = True,
+    overrides: dict[str, str] | None = None,
 ) -> None:
     if is_websocket_request(handler):
-        forward_websocket(handler, host, port, path)
+        forward_websocket(handler, host, port, path, overrides)
         return
 
     accept = handler.headers.get("Accept", "")
     streaming = "text/event-stream" in accept or path.startswith("/api/events")
 
-    headers = {
-        k: v
-        for k, v in handler.headers.items()
-        if k.lower() not in HOP_BY_HOP
-    }
+    headers = dict(
+        _apply_overrides(
+            ((k, v) for k, v in handler.headers.items() if k.lower() not in HOP_BY_HOP),
+            overrides,
+        )
+    )
     # Must rewrite uncompressed JS/HTML (basepath patch + /assets prefix).
     headers["Accept-Encoding"] = "identity"
     length = int(handler.headers.get("Content-Length", "0") or "0")
@@ -331,7 +392,7 @@ class OrxProxyHandler(BaseHTTPRequestHandler):
             rest = path[len(TERMINAL_MOUNT) :] or "/"
             _forward(self, TERMINAL_HOST, TERMINAL_PORT, rest, rewrite=False)
             return
-        _forward(self, ORX_HOST, ORX_PORT, path)
+        _forward(self, ORX_HOST, ORX_PORT, path, overrides=orx_identity_headers(self.headers))
 
     def do_GET(self) -> None:
         self._proxy()
