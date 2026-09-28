@@ -61,7 +61,7 @@ def test_injects_api_shim_and_chips() -> None:
     assert b'id="astroai-vscode-chip"' in out
     assert b'href="/session/contrib/abc/vscode/"' in out
     assert b"astroai-resource-banner" not in out
-    assert b'data-astroai-proxy-rev="13"' in out
+    assert b'data-astroai-proxy-rev="14"' in out
     assert b"data-astroai-tab" in out  # branded tab stick
     assert b"data-astroai-brand" in out  # boot splash wordmark
     assert out.index(b"data-astroai-brand") < out.index(b"</head>")

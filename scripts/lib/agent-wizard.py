@@ -461,6 +461,15 @@ def _keys_list() -> tuple[int, dict[str, Any]]:
     return 500, {"ok": False, "keys": [], "error": (err or out or "keys list failed")[:300]}
 
 
+def _restart_openscience() -> None:
+    """OpenScience reads provider keys from its environment at start; startup-studio.sh
+    restarts a running server when this flag appears."""
+    state = os.environ.get("ASTROAI_STUDIO_STATE", "").strip()
+    if state:
+        with contextlib.suppress(OSError):
+            (Path(state) / "openscience.restart").touch()
+
+
 def _keys_change(name: str, value: str | None) -> tuple[int, dict[str, Any]]:
     if not _KEY_NAME_RE.match(name or ""):
         return 400, {"ok": False, "error": "invalid key name"}
@@ -473,6 +482,7 @@ def _keys_change(name: str, value: str | None) -> tuple[int, dict[str, Any]]:
             ["--json", "agent", "keys", "set", name], timeout=60, input_text=value.strip() + "\n"
         )
     if rc == 0:
+        _restart_openscience()
         return 200, {"ok": True, "key": name, "present": value is not None}
     try:
         payload = json.loads(out or "{}")

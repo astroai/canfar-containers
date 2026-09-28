@@ -374,6 +374,17 @@ def test_keys_set_passes_value_on_stdin_only() -> None:
     assert "sk-or-secret" not in json.dumps(data)
 
 
+def test_saved_key_asks_for_an_openscience_restart(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("ASTROAI_STUDIO_STATE", str(tmp_path))
+    flag = tmp_path / "openscience.restart"
+    with patch.object(wiz, "_run_lab", return_value=(1, "", "Error: bad key\n")):
+        wiz._keys_change("OPENAI_API_KEY", "short")
+    assert not flag.exists()
+    with patch.object(wiz, "_run_lab", return_value=(0, "{}", "")):
+        wiz._keys_change("OPENAI_API_KEY", None)
+    assert flag.exists()
+
+
 def test_keys_change_validates_and_surfaces_cli_error() -> None:
     assert wiz._keys_change("bad name", "x")[0] == 400
     assert wiz._keys_change("OPENAI_API_KEY", "a\nb")[0] == 400
