@@ -10,6 +10,11 @@ ARG BASE_NAME=base
 ARG TAG=local
 ARG OPENSCIENCE_VERSION=2.0.143
 ARG BUN_VERSION=1.3.14
+# Must match MICROMAMBA_VERSION and the linux-64 digests pinned in OpenScience's
+# science/kernel/environment-manager.ts, or it downloads its own copy.
+ARG MICROMAMBA_VERSION=2.9.0
+ARG MICROMAMBA_ARCHIVE_SHA256=8761c382127e6363bd9e0a2451aa3ef90d071a79133f736e2f759a3bf13040dd
+ARG MICROMAMBA_BINARY_SHA256=366cd9cd8be14df1ab8ed50352a82111082a36686b2d389fdb79a92c3fafb3e3
 
 FROM oven/bun:${BUN_VERSION} AS openscience
 ARG OPENSCIENCE_VERSION
@@ -30,6 +35,9 @@ RUN OPENSCIENCE_CHANNEL=latest OPENSCIENCE_WEB_BASE=./ \
 FROM ${REGISTRY}/${OWNER}/${BASE_NAME}:${TAG}
 
 ARG OPENSCIENCE_VERSION
+ARG MICROMAMBA_VERSION
+ARG MICROMAMBA_ARCHIVE_SHA256
+ARG MICROMAMBA_BINARY_SHA256
 
 LABEL io.canfar.skaha.session.type="contributed" \
       org.opencontainers.image.title="AstroAI OpenScience" \
@@ -39,9 +47,18 @@ LABEL io.canfar.skaha.session.type="contributed" \
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-# Astronomy Python: OpenScience kernels and shell use the first python3 on PATH,
-# and the wrapper puts this venv first.
+# Astronomy Python: the shell uses the first python3 on PATH, and the wrapper puts
+# this venv first. Kernels use OpenScience's managed "python" starter, which the
+# wrapper points at this venv (with the pinned micromamba) instead of letting it
+# build a separate conda environment in the user's data dir.
 COPY --from=openscience /out/openscience /opt/openscience/bin/openscience
+RUN curl -fsSL -o /tmp/micromamba.tar.bz2 \
+        "https://micro.mamba.pm/api/micromamba/linux-64/${MICROMAMBA_VERSION}" \
+    && echo "${MICROMAMBA_ARCHIVE_SHA256}  /tmp/micromamba.tar.bz2" | sha256sum -c - \
+    && tar -xjf /tmp/micromamba.tar.bz2 -C /tmp bin/micromamba \
+    && echo "${MICROMAMBA_BINARY_SHA256}  /tmp/bin/micromamba" | sha256sum -c - \
+    && install -m 0755 /tmp/bin/micromamba /opt/openscience/bin/micromamba \
+    && rm -rf /tmp/micromamba.tar.bz2 /tmp/bin
 COPY scripts/openscience-canfar.sh /opt/astroai/bin/openscience
 COPY config/science-py.txt /tmp/science-py.txt
 RUN chmod a+rx /opt/openscience/bin/openscience /opt/astroai/bin/openscience \
@@ -49,7 +66,7 @@ RUN chmod a+rx /opt/openscience/bin/openscience /opt/astroai/bin/openscience \
     && uv venv /opt/astroai/venv/science \
     && uv pip install --python /opt/astroai/venv/science -r /tmp/science-py.txt \
     && /opt/astroai/venv/science/bin/python -c \
-        "import numpy, scipy, astropy, astroquery, pyvo, photutils, specutils, lightkurve, ccdproc, astroscrappy, astroplan, spectral_cube, radio_beam, dust_extinction, zero_point, emcee, dynesty, corner" \
+        "import numpy, pandas, scipy, matplotlib, seaborn, PIL, sklearn, astropy, astroquery, pyvo, photutils, specutils, lightkurve, ccdproc, astroscrappy, astroplan, spectral_cube, radio_beam, dust_extinction, zero_point, emcee, dynesty, corner" \
     && chmod -R a+rwX /opt/astroai/venv/science \
     && rm /tmp/science-py.txt \
     && uv cache clean

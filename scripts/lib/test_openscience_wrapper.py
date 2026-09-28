@@ -174,3 +174,52 @@ def test_explicit_data_dir_skips_lease(env: dict[str, str], tmp_path: Path) -> N
     out = run(env, "run")
     assert f"data={tmp_path}/mine" in out.stdout
     assert not lease(env).exists()
+
+
+@pytest.fixture
+def kernel_env(env: dict[str, str], tmp_path: Path) -> dict[str, str]:
+    venv = Path(env["ASTROAI_SCIENCE_VENV"])
+    (venv / "bin" / "python").symlink_to("python3")
+    micromamba = tmp_path / "micromamba"
+    micromamba.write_text("#!/bin/sh\n")
+    micromamba.chmod(0o755)
+    env["ASTROAI_MICROMAMBA"] = str(micromamba)
+    return env
+
+
+def assert_seeded(data: Path, env: dict[str, str]) -> None:
+    conda = data / "conda"
+    assert os.readlink(conda / "envs" / "python") == env["ASTROAI_SCIENCE_VENV"]
+    assert os.readlink(conda / "bin" / "micromamba") == env["ASTROAI_MICROMAMBA"]
+
+
+def test_kernel_python_points_at_image_venv(kernel_env: dict[str, str]) -> None:
+    assert run(kernel_env, "run").returncode == 0
+    assert_seeded(Path(kernel_env["HOME"]) / ".openscience", kernel_env)
+
+
+def test_kernel_python_follows_relocated_data_root(
+    kernel_env: dict[str, str], tmp_path: Path
+) -> None:
+    moved = tmp_path / "moved"
+    moved.mkdir()
+    config = Path(kernel_env["HOME"]) / ".config" / "openscience"
+    config.mkdir(parents=True)
+    (config / "data-root").symlink_to(moved)
+    run(kernel_env, "run")
+    assert_seeded(moved, kernel_env)
+
+
+def test_kernel_python_seeded_in_scratch_fallback(kernel_env: dict[str, str]) -> None:
+    lease(kernel_env).parent.mkdir(parents=True)
+    lease(kernel_env).write_text("sess-b 123\n")
+    run(kernel_env, "run")
+    assert_seeded(Path(kernel_env["SCRATCH"]) / ".openscience", kernel_env)
+
+
+def test_existing_kernel_environment_is_left_alone(kernel_env: dict[str, str]) -> None:
+    conda = Path(kernel_env["HOME"]) / ".openscience" / "conda"
+    (conda / "envs" / "python" / "bin").mkdir(parents=True)
+    run(kernel_env, "run")
+    assert not (conda / "envs" / "python").is_symlink()
+    assert not (conda / "bin" / "micromamba").exists()

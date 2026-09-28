@@ -10,6 +10,7 @@
 set -u
 
 OPENSCIENCE_BIN="${OPENSCIENCE_BIN:-/opt/openscience/bin/openscience}"
+MICROMAMBA_BIN="${ASTROAI_MICROMAMBA:-/opt/openscience/bin/micromamba}"
 SCIENCE_VENV="${ASTROAI_SCIENCE_VENV:-/opt/astroai/venv/science}"
 LEASE_NAME=".canfar-lease"
 LEASE_TTL="${ASTROAI_OPENSCIENCE_LEASE_TTL:-180}"
@@ -67,6 +68,29 @@ if [[ -z "${OPENSCIENCE_DATA_DIR:-}" && -d "${HOME}" ]]; then
             "its OpenScience history on scratch (${fallback}), which is deleted when" \
             "the session ends." >&2
     fi
+fi
+
+# Kernels run OpenScience's managed "python" environment, which it otherwise
+# builds with micromamba (about 2 GB, without astropy) in the data dir on /arc.
+# It accepts an existing environment that passes its import probe, so point it
+# at the image venv; an environment the user already has is left alone.
+seed_kernel_python() {
+    local conda="$1/conda"
+    [[ -x "${SCIENCE_VENV}/bin/python" && -x "${MICROMAMBA_BIN}" ]] || return 0
+    [[ -e "${conda}/envs/python" || -L "${conda}/envs/python" ]] && return 0
+    mkdir -p "${conda}/envs" "${conda}/bin" 2>/dev/null || return 0
+    [[ -e "${conda}/bin/micromamba" ]] || ln -s "${MICROMAMBA_BIN}" "${conda}/bin/micromamba"
+    ln -s "${SCIENCE_VENV}" "${conda}/envs/python"
+}
+os_config="${OPENSCIENCE_CONFIG_DIR:-${XDG_CONFIG_HOME:-${HOME}/.config}/openscience}"
+if [[ -n "${OPENSCIENCE_DATA_DIR:-}" ]]; then
+    seed_kernel_python "${OPENSCIENCE_DATA_DIR}"
+elif [[ -d "${os_config}/data-root" ]]; then
+    seed_kernel_python "${os_config}/data-root"
+elif [[ -s "${os_config}/data-location" ]]; then
+    seed_kernel_python "$(head -n 1 "${os_config}/data-location")"
+elif [[ -d "${HOME}" ]]; then
+    seed_kernel_python "${HOME}/.openscience"
 fi
 
 if [[ -z "${lease_dir}" ]]; then

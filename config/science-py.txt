@@ -5,6 +5,7 @@ numpy
 scipy
 pandas
 matplotlib
+seaborn
 scikit-learn
 astropy
 astroquery
@@ -25,3 +26,4 @@ emcee
 dynesty
 corner
 ipykernel
+pip
