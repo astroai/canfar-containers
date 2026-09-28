@@ -329,6 +329,35 @@ def test_job_failure_reports_exit_and_rejects_unknown_action() -> None:
     assert "failed (exit 3)" in done["summary"]
 
 
+def test_startup_restores_remembered_agents_as_a_hub_job() -> None:
+    script = Path(tempfile.mkdtemp()) / "fake-lab"
+    script.write_text(
+        "#!/bin/sh\n"
+        'case "$*" in\n'
+        '  *--dry-run*) echo \'{"ok": true, "tools": ["codex", "opencode"], "results": []}\' ;;\n'
+        '  *) echo "args: $*" ;;\n'
+        "esac\n"
+    )
+    script.chmod(0o755)
+    with patch.object(wiz, "_lab_bin", return_value=str(script)):
+        wiz._restore_agents_on_start()
+        done = _wait_job()
+    assert done["action"] == "restore"
+    assert done["log"] == ["args: --yes agent install --restore"]
+    assert done["summary"] == "codex, opencode restored"
+
+
+def test_startup_restore_single_agent_and_nothing_missing() -> None:
+    started: list[tuple[str, str]] = []
+    with patch.object(wiz, "_start_job", side_effect=lambda a, b: started.append((a, b))):
+        with patch.object(wiz, "_run_lab", return_value=(0, '{"ok": true, "tool": "kilo"}', "")):
+            wiz._restore_agents_on_start()
+        payload = '{"ok": true, "tools": [], "results": [], "errors": []}'
+        with patch.object(wiz, "_run_lab", return_value=(0, payload, "")):
+            wiz._restore_agents_on_start()
+    assert started == [("restore", "kilo")]
+
+
 def test_keys_set_passes_value_on_stdin_only() -> None:
     seen: dict = {}
 

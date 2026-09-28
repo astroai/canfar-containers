@@ -333,6 +333,7 @@ JOB_VERBS: dict[str, tuple[str, ...]] = {
     "update": ("agent", "update"),
     "remove": ("agent", "remove"),
     "setup": ("agent", "setup"),
+    "restore": ("agent", "install", "--restore"),
 }
 JOB_LOG_LINES = 300
 _ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
@@ -357,7 +358,13 @@ def _job_snapshot() -> dict[str, Any]:
     end = job["finished"] or time.time()
     job["elapsed"] = round(max(0.0, end - job["started"])) if job["started"] else 0
     if job["action"] and not job["running"]:
-        verb = {"install": "installed", "update": "updated", "remove": "removed", "setup": "set up"}
+        verb = {
+            "install": "installed",
+            "update": "updated",
+            "remove": "removed",
+            "setup": "set up",
+            "restore": "restored",
+        }
         job["summary"] = (
             f"{job['agent']} {verb[job['action']]}"
             if job["ok"]
@@ -420,9 +427,22 @@ def _start_job(action: str, agent: str) -> tuple[int, dict[str, Any]]:
             finished=0.0,
         )
         job_id = _JOB["id"]
-    cmd = [_lab_bin(), "--yes", *JOB_VERBS[action], agent]
+    args = JOB_VERBS[action] if action == "restore" else (*JOB_VERBS[action], agent)
+    cmd = [_lab_bin(), "--yes", *args]
     threading.Thread(target=_job_worker, args=(job_id, cmd), daemon=True, name="agent-job").start()
     return 202, {"ok": True, **_job_snapshot()}
+
+
+def _restore_agents_on_start() -> None:
+    """A new session starts with an empty $SCRATCH: reinstall the agents the
+    user installed before (configs are on home) as a normal, visible hub job."""
+    rc, out, _err = _run_lab(["--json", "--dry-run", "agent", "install", "--restore"], timeout=120)
+    data = _parse_json_stdout(out)
+    if rc != 0 or not isinstance(data, dict):
+        return
+    tools = data.get("tools") or ([data["tool"]] if data.get("tool") else [])
+    if tools:
+        _start_job("restore", ", ".join(str(t) for t in tools))
 
 
 # ---------------------------------------------------------------------------
@@ -1177,7 +1197,7 @@ function showJob(job) {
   if (!job || !job.action) { box.hidden = true; return; }
   box.hidden = false;
   box.className = job.running ? '' : (job.ok ? 'ok' : 'bad');
-  const verb = { install: 'Installing', update: 'Updating', remove: 'Removing', setup: 'Setting up' }[job.action];
+  const verb = { install: 'Installing', update: 'Updating', remove: 'Removing', setup: 'Setting up', restore: 'Restoring' }[job.action];
   document.getElementById('job-title').textContent = job.running ? `${verb} ${job.agent}…` : (job.summary || (job.ok ? 'done' : 'failed'));
   document.getElementById('job-time').textContent = job.elapsed ? job.elapsed + 's' : '';
   const pre = document.getElementById('job-log');
@@ -1481,6 +1501,7 @@ def main() -> int:
         sys.stderr.write(f"agent-wizard: bind failed: {exc}\n")
         return 1
     sys.stderr.write(f"agent-wizard: listening 127.0.0.1:{PORT}\n")
+    threading.Thread(target=_restore_agents_on_start, daemon=True, name="agent-restore").start()
     with contextlib.suppress(KeyboardInterrupt):
         server.serve_forever()
     return 0
