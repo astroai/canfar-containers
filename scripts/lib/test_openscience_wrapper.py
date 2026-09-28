@@ -88,6 +88,19 @@ def test_other_live_session_falls_back_to_scratch(env: dict[str, str]) -> None:
     assert all(p.exists() for p in left)
 
 
+def test_scratch_fallback_flag_for_the_session_proxy(env: dict[str, str], tmp_path: Path) -> None:
+    state = tmp_path / "state"
+    state.mkdir()
+    env["ASTROAI_OPENSCIENCE_STATE"] = str(state)
+    lease(env).parent.mkdir(parents=True)
+    lease(env).write_text("sess-b 123\n")
+    run(env, "run")
+    assert (state / "history-on-scratch").read_text() == "sess-b\n"
+    lease(env).unlink()
+    run(env, "run")
+    assert not (state / "history-on-scratch").exists()
+
+
 def test_stale_lease_is_taken_over(env: dict[str, str]) -> None:
     lease(env).parent.mkdir(parents=True)
     lease(env).write_text("sess-b 123\n")

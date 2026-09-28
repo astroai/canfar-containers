@@ -13,6 +13,7 @@ Surface:
 from __future__ import annotations
 
 import contextlib
+import html
 import importlib.util
 import json
 import os
@@ -54,6 +55,22 @@ HUB_TITLE = {
     "openresearch": "AstroAI",
 }.get(SESSION_KIND, "AstroAI")
 HUB_TITLE_SUFFIX = {"studio": "Studio"}.get(SESSION_KIND, "Hub")
+KEYS_LEDE = {
+    "studio": "shared by the Assistant, terminal agents and marimo.",
+    "openscience": "used by OpenScience and by agents you run in its terminal. "
+    "OpenScience restarts for a few seconds to pick up a change.",
+}.get(SESSION_KIND, "shared by the agents in all your AstroAI sessions.")
+KEYS_START = {
+    "studio": "one key works with most agents and with marimo.",
+    "openscience": "one key gives OpenScience models from all the major labs.",
+}.get(SESSION_KIND, "one key works with most agents.")
+KEY_SAVED_NOTE = {
+    "openscience": "Saved. OpenScience is restarting to use it; go back in a few seconds.",
+}.get(SESSION_KIND, "")
+# The OpenScience workspace has its own terminal (inside a project); there is no
+# /astroai-terminal/ sidecar in that session.
+TERMINAL_IN_APP = SESSION_KIND == "openscience"
+TERMINAL_LABEL = "Terminal in an OpenScience project" if TERMINAL_IN_APP else "Terminal"
 # OpenResearch needs orx config wired to the Jobs URL. Studio only needs the
 # ray-manager / Jobs URL (astroai cluster); do not require wire_orx.
 WIRE_ORX = SESSION_KIND == "openresearch"
@@ -458,7 +475,20 @@ def _keys_list() -> tuple[int, dict[str, Any]]:
     rc, out, err = _run_lab(["--json", "agent", "keys", "list"], timeout=60)
     data = _parse_json_stdout(out)
     if rc == 0 and isinstance(data, dict):
-        return 200, {"ok": True, "keys": data.get("keys") or []}
+        rows = data.get("keys") or []
+        # The page shows the first few names; this session's own app leads.
+        own = BACK_UI_LABEL
+        for row in rows:
+            if not (isinstance(row, dict) and isinstance(row.get("used_by"), list)):
+                continue
+            used = row["used_by"]
+            if SESSION_KIND != "studio":
+                # The AstroAI Assistant (dsh) only runs in the Studio.
+                used = [u for u in used if u != "AstroAI Assistant"]
+            if own in used:
+                used = [own, *(u for u in used if u != own)]
+            row["used_by"] = used
+        return 200, {"ok": True, "keys": rows}
     return 500, {"ok": False, "keys": [], "error": (err or out or "keys list failed")[:300]}
 
 
@@ -879,6 +909,7 @@ INDEX_HTML = (
   .callout { border: 1px solid rgba(99,102,241,.55); background: rgba(99,102,241,.1);
              border-radius: 10px; padding: .75rem 1rem; margin-bottom: 1rem; font-size: .93rem; }
   .callout strong { color: #c7d2fe; }
+  .callout a { color: #a5b4fc; font-weight: 600; white-space: nowrap; }
   .list { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--bg2); }
   .key-row { padding: .8rem 1rem; border-top: 1px solid var(--line); }
   .key-row:first-child { border-top: 0; }
@@ -971,7 +1002,7 @@ INDEX_HTML = (
     <section class="panel">
       <h2>Model access</h2>
       <p class="lede">Agents need an API key from a model provider. Keys are saved privately in your
-        home directory (readable only by you) and shared by the Assistant, terminal agents and marimo.
+        home directory (readable only by you) and __KEYS_LEDE__
         A saved key is never shown again.</p>
       <div id="keys-callout"></div>
       <div class="list" id="keys">Loading…</div>
@@ -981,7 +1012,7 @@ INDEX_HTML = (
       <h2>Coding agents</h2>
       <p class="lede">Install puts the CLI on <code>$SCRATCH/.local/bin</code>; Set up writes its config,
         skills folders and CANFAR tools on <code>$HOME</code>. Run an installed agent from the
-        <a class="ext" id="term-link" href="../terminal/">Terminal</a>.</p>
+        <a class="ext" id="term-link" href="../terminal/">__TERMINAL_LABEL__</a>.</p>
       <div id="agents">Loading…</div>
     </section>
     <p class="foot">Skills for CANFAR work: <code>npx skills add astroai/canfar-skills</code> ·
@@ -997,12 +1028,15 @@ INDEX_HTML = (
       <div class="actions"><button id="btn-compute">Start batch compute</button></div>
       <div id="msg"></div>
     </section>
-    <p class="foot">Need <code>canfar login</code>? Run it in the <a class="ext" href="../terminal/" data-term>Terminal</a>, then come back.
+    <p class="foot">Need <code>canfar login</code>? Run it in the <a class="ext" href="../terminal/" data-term>__TERMINAL_LABEL__</a>, then come back.
       Command line: <code>canfar-lab cluster --help</code></p>
   </div>
 </div>
 <script>
 const BACK_LABEL = __BACK_LABEL_JSON__;
+const KEYS_START = __KEYS_START_JSON__;
+const KEY_SAVED_NOTE = __KEY_SAVED_NOTE_JSON__;
+const TERMINAL_IN_APP = __TERMINAL_IN_APP_JSON__;
 const base = location.pathname.replace(/\\/?$/, '/');
 const H = { 'X-AstroAI-Hub': '1' };
 
@@ -1050,8 +1084,9 @@ function terminalHref() {
   const a = document.getElementById('back-link');
   a.href = mainUiHref();
   a.textContent = '← Back to ' + BACK_LABEL;
-  document.getElementById('term-link').href = terminalHref();
-  document.querySelectorAll('a[data-term]').forEach(n => { n.href = terminalHref(); });
+  const term = TERMINAL_IN_APP ? mainUiHref() : terminalHref();
+  document.getElementById('term-link').href = term;
+  document.querySelectorAll('a[data-term]').forEach(n => { n.href = term; });
 })();
 
 async function api(path, opts) {
@@ -1091,8 +1126,7 @@ function renderKeys() {
   const any = keyRows.some(k => k.present);
   document.getElementById('keys-callout').innerHTML = any ? '' :
     '<div class="callout"><strong>Start here:</strong> add one key. OpenRouter is the simplest — ' +
-    'one key works with most agents and with marimo. Use a provider key (Anthropic, OpenAI, …) ' +
-    'if you already have one.</div>';
+    esc(KEYS_START) + ' Use a provider key (Anthropic, OpenAI, …) if you already have one.</div>';
   el.innerHTML = keyRows.map(k => {
     const stored = (k.sources || []).some(s => s === 'studio' || s === 'assistant');
     const envOnly = k.present && !stored;
@@ -1152,6 +1186,10 @@ document.getElementById('keys').addEventListener('submit', async (ev) => {
   form.querySelectorAll('button').forEach(b => { b.disabled = false; });
   if (!data.ok) { err.textContent = data.error || 'failed'; err.hidden = false; return; }
   await loadKeys();
+  if (KEY_SAVED_NOTE) {
+    document.getElementById('keys-callout').innerHTML =
+      `<div class="callout">${esc(KEY_SAVED_NOTE)} <a href="${esc(mainUiHref())}">← Back to ${esc(BACK_LABEL)}</a></div>`;
+  }
 });
 
 // ── agents ────────────────────────────────────────────────────────────
@@ -1315,6 +1353,11 @@ loadAgents();
 </html>
 """.replace("__BACK_LABEL__", BACK_UI_LABEL)
     .replace("__BACK_LABEL_JSON__", json.dumps(BACK_UI_LABEL))
+    .replace("__KEYS_LEDE__", html.escape(KEYS_LEDE))
+    .replace("__KEYS_START_JSON__", json.dumps(KEYS_START))
+    .replace("__KEY_SAVED_NOTE_JSON__", json.dumps(KEY_SAVED_NOTE))
+    .replace("__TERMINAL_IN_APP_JSON__", json.dumps(TERMINAL_IN_APP))
+    .replace("__TERMINAL_LABEL__", TERMINAL_LABEL)
     .replace("__HUB_TITLE_SUFFIX__", HUB_TITLE_SUFFIX)
     .replace("__HUB_TITLE__", HUB_TITLE)
 )

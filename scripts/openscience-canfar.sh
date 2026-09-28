@@ -53,12 +53,16 @@ if [[ -z "${OPENSCIENCE_DATA_DIR:-}" && -d "${HOME}" ]]; then
     home_dir="${HOME}/.openscience"
     mkdir -p "${home_dir}" 2>/dev/null || true
     holder=$(lease_holder "${home_dir}")
+    # The session proxy shows a notice while this flag names the other session.
+    scratch_flag="${ASTROAI_OPENSCIENCE_STATE:+${ASTROAI_OPENSCIENCE_STATE}/history-on-scratch}"
     if [[ -z "${holder}" || "${holder}" == "${owner}" ]]; then
         lease_dir="${home_dir}"
+        [[ -n "${scratch_flag}" ]] && rm -f "${scratch_flag}"
     else
         fallback="${SCRATCH:-/scratch}/.openscience"
         mkdir -p "${fallback}"
         export OPENSCIENCE_DATA_DIR="${fallback}"
+        [[ -n "${scratch_flag}" ]] && printf '%s\n' "${holder}" >"${scratch_flag}"
         echo "openscience: ${home_dir} is in use by session ${holder}; this session keeps" \
             "its OpenScience history on scratch (${fallback}), which is deleted when" \
             "the session ends." >&2

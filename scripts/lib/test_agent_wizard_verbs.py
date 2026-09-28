@@ -385,6 +385,46 @@ def test_saved_key_asks_for_an_openscience_restart(tmp_path, monkeypatch) -> Non
     assert flag.exists()
 
 
+def _wizard_for(kind: str, monkeypatch):
+    monkeypatch.setenv("ASTROAI_SESSION_KIND", kind)
+    spec = importlib.util.spec_from_file_location(f"agent_wizard_{kind}", ROOT / "agent-wizard.py")
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_hub_copy_follows_the_session(monkeypatch) -> None:
+    import re
+
+    studio = _wizard_for("studio", monkeypatch)
+    science = _wizard_for("openscience", monkeypatch)
+    for module in (studio, science):
+        assert not re.findall(r"__[A-Z_]+__", module.INDEX_HTML)
+    assert "the Assistant, terminal agents and marimo" in studio.INDEX_HTML
+    assert "const TERMINAL_IN_APP = false;" in studio.INDEX_HTML
+    assert "marimo" not in science.INDEX_HTML.split("Model access", 1)[1].split("</p>", 1)[0]
+    assert "OpenScience restarts for a few seconds" in science.INDEX_HTML
+    assert "const TERMINAL_IN_APP = true;" in science.INDEX_HTML
+    assert ">Terminal in an OpenScience project</a>" in science.INDEX_HTML
+    assert "Back to OpenScience" in science.INDEX_HTML
+    assert science.KEY_SAVED_NOTE and not studio.KEY_SAVED_NOTE
+
+
+def test_used_by_follows_the_session(monkeypatch) -> None:
+    used_by = ["AstroAI Assistant", "Cline CLI", "Codex CLI", "OpenScience"]
+    listing = json.dumps({"keys": [{"key": "OPENAI_API_KEY", "used_by": used_by}]})
+    for kind, expected in (
+        ("openscience", ["OpenScience", "Cline CLI", "Codex CLI"]),
+        ("studio", used_by),
+    ):
+        module = _wizard_for(kind, monkeypatch)
+        with patch.object(module, "_run_lab", return_value=(0, listing, "")):
+            code, data = module._keys_list()
+        assert code == 200
+        assert data["keys"][0]["used_by"] == expected
+
+
 def test_keys_change_validates_and_surfaces_cli_error() -> None:
     assert wiz._keys_change("bad name", "x")[0] == 400
     assert wiz._keys_change("OPENAI_API_KEY", "a\nb")[0] == 400

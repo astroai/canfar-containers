@@ -34,8 +34,13 @@ INDEX = (
 
 
 @pytest.fixture(autouse=True)
-def _prefix(monkeypatch: pytest.MonkeyPatch) -> None:
+def _prefix(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setattr(proxy, "PREFIX", PREFIX)
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("SCRATCH", str(tmp_path / "scratch"))
+    monkeypatch.delenv("ASTROAI_OPENSCIENCE_STATE", raising=False)
+    for name in proxy.MODEL_KEYS:
+        monkeypatch.delenv(name, raising=False)
 
 
 def test_index_gets_absolute_assets_boot_script_and_hub_chip() -> None:
@@ -59,9 +64,47 @@ def test_index_without_session_prefix(monkeypatch: pytest.MonkeyPatch) -> None:
     out = proxy.inject_html(INDEX, "text/html").decode()
     assert 'src="/assets/index-X.js"' in out
     assert 'src="/__astroai/boot.js"' in out
-    assert proxy.boot_js() == (
+    assert proxy.boot_js().startswith(
         b'window.__OPENSCIENCE_BASE_URL__="";window.__OPENSCIENCE_TRUSTED_PROXY__=true;\n'
     )
+
+
+def _chip(tmp_path: Path) -> str:
+    out = proxy.inject_html(INDEX, "text/html").decode()
+    return out[out.index('<a id="astroai-agents-chip"') :].split("</a>", 1)[0]
+
+
+def test_chip_asks_for_a_key_until_openscience_has_a_model(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    assert _chip(tmp_path).endswith(">Add a model key")
+    dotenv = tmp_path / "home" / ".astroai" / "lab" / ".env"
+    dotenv.parent.mkdir(parents=True)
+    dotenv.write_text("# saved by the hub\nOPENROUTER_API_KEY=\nADS_API_TOKEN=abc\n")
+    assert _chip(tmp_path).endswith(">Add a model key")
+    dotenv.write_text("OPENROUTER_API_KEY=sk-or-xxxxxxxx\n")
+    assert _chip(tmp_path).endswith(">AstroAI")
+    dotenv.unlink()
+    auth = tmp_path / "home" / ".openscience" / "auth.json"
+    auth.parent.mkdir(parents=True)
+    auth.write_text("{}")
+    assert _chip(tmp_path).endswith(">Add a model key")
+    auth.write_text('{"anthropic": {"type": "api"}}')
+    assert _chip(tmp_path).endswith(">AstroAI")
+    auth.unlink()
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "x" * 12)
+    assert _chip(tmp_path).endswith(">AstroAI")
+
+
+def test_scratch_history_banner(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    state = tmp_path / "state"
+    state.mkdir()
+    monkeypatch.setenv("ASTROAI_OPENSCIENCE_STATE", str(state))
+    assert "data-astroai-banner" not in proxy.inject_html(INDEX, "text/html").decode()
+    (state / "history-on-scratch").write_text("<sess-b>\n")
+    out = proxy.inject_html(INDEX, "text/html").decode()
+    assert "in use by session &lt;sess-b&gt;" in out
+    assert out.index("data-astroai-banner") < out.index("</body>")
 
 
 def test_headers_become_loopback_with_token() -> None:
@@ -220,9 +263,10 @@ def test_boot_script_and_health_are_served_while_upstream_is_down(session: dict)
     status, headers, body = _get(session["port"], "/__astroai/boot.js")
     assert status == 200
     assert headers["content-type"].startswith("text/javascript")
-    assert body.decode() == (
+    assert body.decode().startswith(
         f'window.__OPENSCIENCE_BASE_URL__="{PREFIX}";window.__OPENSCIENCE_TRUSTED_PROXY__=true;\n'
     )
+    assert "data-astroai-dismiss" in body.decode()
     status, _, body = _get(session["port"], "/__astroai/health")
     assert status == 200
     assert json.loads(body) == {"proxy": "ok", "openscience": False, "failed": False}

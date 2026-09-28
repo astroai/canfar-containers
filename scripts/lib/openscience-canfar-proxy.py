@@ -55,14 +55,45 @@ HOP_BY_HOP = {
 }
 _DROP_FOR_OPENSCIENCE = ("host", "authorization", "cookie", "referer", "x-real-ip", "forwarded")
 
+# Hub keys that each unlock models in OpenScience (see the canfar-lab registry entry).
+MODEL_KEYS = (
+    "OPENROUTER_API_KEY",
+    "OPENCODE_API_KEY",
+    "DEEPSEEK_API_KEY",
+    "GEMINI_API_KEY",
+    "OPENAI_API_KEY",
+    "ANTHROPIC_API_KEY",
+)
+SCRATCH_HISTORY_FLAG = "history-on-scratch"
+
+_CHIP_BASE = (
+    "position:fixed;z-index:2147483646;right:14px;bottom:14px;padding:6px 11px;"
+    "border-radius:999px;font:600 12px/1.2 system-ui,sans-serif;text-decoration:none;"
+)
+# rel=external: the workspace router otherwise claims same-origin links under its base.
 HUB_CHIP = (
-    # rel=external: the workspace router otherwise claims same-origin links under its base.
     '<a id="astroai-agents-chip" href="{href}" rel="external" '
-    'title="Model keys and CANFAR compute" style="position:fixed;z-index:2147483646;'
-    "right:14px;bottom:14px;padding:6px 11px;"
-    "border-radius:999px;background:rgba(30,32,48,.92);border:1px solid #494d64;"
-    'color:#cad3f5;font:600 12px/1.2 system-ui,sans-serif;text-decoration:none">'
-    "AstroAI</a>"
+    'title="Model keys and CANFAR compute" style="'
+    + _CHIP_BASE
+    + 'background:rgba(30,32,48,.92);border:1px solid #494d64;color:#cad3f5">AstroAI</a>'
+)
+KEY_CHIP = (
+    '<a id="astroai-agents-chip" href="{href}" rel="external" data-needs-key '
+    'title="OpenScience needs a model key before it can answer. Add one in the AstroAI hub '
+    '(OpenRouter is the simplest)." style="'
+    + _CHIP_BASE
+    + 'background:#3d8bfd;border:1px solid #8aadf4;color:#fff">Add a model key</a>'
+)
+SCRATCH_BANNER = (
+    '<div data-astroai-banner role="status" style="position:fixed;z-index:2147483646;left:14px;'
+    "bottom:14px;max-width:26rem;padding:10px 12px;border-radius:8px;background:#363a4f;"
+    "border:1px solid #eed49f;color:#cad3f5;font:13px/1.4 system-ui,sans-serif\">"
+    "<b>History on scratch.</b> Your saved OpenScience history is in use by session "
+    "{holder}, so this session keeps its chats on scratch, which is deleted when the session "
+    "ends. Files you save under /arc are safe. To use your saved history, close the other "
+    "session and restart this one. "
+    '<button type="button" data-astroai-dismiss style="margin-left:4px;background:none;'
+    'border:0;color:#8aadf4;cursor:pointer;font:inherit">Dismiss</button></div>'
 )
 
 
@@ -91,17 +122,54 @@ def retry_start() -> None:
         failed.unlink(missing_ok=True)
 
 
+def has_model_key() -> bool:
+    """Whether OpenScience can reach any model: a hub key (environment or the shared
+    dotenv) or a provider saved in OpenScience's own settings. Names only; values
+    are never read beyond "non-empty"."""
+    if any(os.environ.get(name, "").strip() for name in MODEL_KEYS):
+        return True
+    home = Path.home()
+    with contextlib.suppress(OSError, UnicodeDecodeError):
+        for line in (home / ".astroai" / "lab" / ".env").read_text(encoding="utf-8").splitlines():
+            name, sep, value = line.strip().removeprefix("export ").partition("=")
+            if sep and name.strip() in MODEL_KEYS and value.strip().strip("'\""):
+                return True
+    scratch = Path(os.environ.get("SCRATCH") or "/scratch")
+    for data in (home / ".openscience", scratch / ".openscience"):
+        with contextlib.suppress(OSError, ValueError):
+            if json.loads((data / "auth.json").read_text(encoding="utf-8")):
+                return True
+    return False
+
+
+def scratch_history_holder() -> str | None:
+    flag = state_file(SCRATCH_HISTORY_FLAG)
+    try:
+        return (flag.read_text(encoding="utf-8").strip() or "another session") if flag else None
+    except OSError:
+        return None
+
+
+_DISMISS_JS = (
+    "document.addEventListener('click',function(e){"
+    "var b=e.target.closest&&e.target.closest('[data-astroai-dismiss]');"
+    "if(b){b.closest('[data-astroai-banner]').remove();}});\n"
+)
+
+
 def boot_js() -> bytes:
+    # The workspace CSP forbids inline handlers, so the banner's button is wired here.
     return (
         f"window.__OPENSCIENCE_BASE_URL__={json.dumps(PREFIX)};"
-        "window.__OPENSCIENCE_TRUSTED_PROXY__=true;\n"
+        "window.__OPENSCIENCE_TRUSTED_PROXY__=true;\n" + _DISMISS_JS
     ).encode()
 
 
 def inject_html(data: bytes, content_type: str) -> bytes:
     """Absolute asset URLs (index.html is also served for deep links, where ``./``
     would resolve under the route), the boot script ahead of the deferred module
-    bundle, and the hub chip."""
+    bundle, the hub chip (a call to add a key while OpenScience has no model) and a
+    notice when this session's history lives on scratch."""
     if content_type.split(";", 1)[0].strip().lower() != "text/html":
         return data
     try:
@@ -113,10 +181,16 @@ def inject_html(data: bytes, content_type: str) -> bytes:
     head = text.lower().find("<head")
     gt = text.find(">", head) if head >= 0 else -1
     text = text[: gt + 1] + boot + text[gt + 1 :] if gt >= 0 else boot + text
+    extra = ""
     if "astroai-agents-chip" not in text:
-        chip = HUB_CHIP.format(href=f"{PREFIX}{WIZARD_MOUNT}/")
+        chip = HUB_CHIP if has_model_key() else KEY_CHIP
+        extra += chip.format(href=f"{PREFIX}{WIZARD_MOUNT}/")
+    holder = scratch_history_holder()
+    if holder and "data-astroai-banner" not in text:
+        extra += SCRATCH_BANNER.format(holder=html.escape(holder))
+    if extra:
         idx = text.lower().rfind("</body>")
-        text = text[:idx] + chip + text[idx:] if idx >= 0 else text + chip
+        text = text[:idx] + extra + text[idx:] if idx >= 0 else text + extra
     return text.encode("utf-8")
 
 
