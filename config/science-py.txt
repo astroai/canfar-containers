@@ -1,0 +1,17 @@
+# Astronomy Python for /opt/astroai/venv/science (uv). Unpinned — resolve at image build.
+# First python3 on PATH for OpenScience kernels and shell commands, and the
+# "Python 3 (astronomy)" Jupyter kernel in the Studio.
+numpy
+scipy
+pandas
+matplotlib
+scikit-learn
+astropy
+astroquery
+pyvo
+photutils
+specutils
+regions
+reproject
+lightkurve
+ipykernel

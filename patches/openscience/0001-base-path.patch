@@ -1,0 +1,241 @@
+Serve the OpenScience web workspace under a path prefix (reverse proxy).
+
+The workspace assumed it owned the origin root: absolute /assets URLs,
+router paths and API routes all started at /. Behind the CANFAR Studio
+proxy it lives at /session/contrib/<id>/openscience/. The proxy sets
+window.__OPENSCIENCE_BASE_URL__ to that mount from a same-origin script
+loaded before the app (the CSP forbids inline scripts); the router,
+default server URL and API routes follow it. A same-origin trusted proxy may also enable
+the terminal, which is otherwise loopback-only.
+
+Build with OPENSCIENCE_WEB_BASE=./ so index.html uses relative assets.
+Applies to synthetic-sciences/openscience v2.0.140.
+---
+diff --git a/frontend/workspace/src/app.tsx b/frontend/workspace/src/app.tsx
+index 639f96a..d327c9f 100644
+--- a/frontend/workspace/src/app.tsx
++++ b/frontend/workspace/src/app.tsx
+@@ -21,7 +21,7 @@ import { HighlightsProvider } from "@/context/highlights"
+ import Layout from "@/pages/layout"
+ import DirectoryLayout from "@/pages/directory-layout"
+ import { ErrorPage } from "./pages/error"
+-import { resolveDefaultServerUrl } from "@/config/server-url"
++import { resolveBasePath, resolveDefaultServerUrl } from "@/config/server-url"
+ import { LoadingScreen } from "@synsci/ui/atom-loader"
+ import { DesktopOnboarding } from "@/atlas/DesktopOnboarding"
+ import Home from "@/pages/home"
+@@ -50,6 +50,7 @@ declare global {
+   interface Window {
+     __OPENSCIENCE__?: { updaterEnabled?: boolean; deepLinks?: string[] }
+     __OPENSCIENCE_BASE_URL__?: string
++    __OPENSCIENCE_TRUSTED_PROXY__?: boolean
+   }
+ }
+ 
+@@ -133,6 +134,7 @@ export function AppInterface(props: { defaultUrl?: string }) {
+           <GlobalSDKProvider>
+             <GlobalSyncProvider>
+               <Router
++                base={resolveBasePath() || undefined}
+                 root={(props) => (
+                   <SettingsProvider>
+                     <StartupUpdateCheck />
+diff --git a/frontend/workspace/src/atlas/terminal-endpoint.test.ts b/frontend/workspace/src/atlas/terminal-endpoint.test.ts
+new file mode 100644
+index 0000000..bbc630d
+--- /dev/null
++++ b/frontend/workspace/src/atlas/terminal-endpoint.test.ts
+@@ -0,0 +1,24 @@
++import { afterEach, describe, expect, test } from "bun:test"
++import { terminalEndpointAvailable } from "./terminal-endpoint"
++
++const origin = "https://lab.example.org"
++
++afterEach(() => {
++  if (typeof window === "object") delete window.__OPENSCIENCE_TRUSTED_PROXY__
++})
++
++describe("terminalEndpointAvailable", () => {
++  test("allows loopback servers", () => {
++    expect(terminalEndpointAvailable("http://127.0.0.1:4096", origin)).toBe(true)
++    expect(terminalEndpointAvailable("/pty", "http://localhost:3000")).toBe(true)
++  })
++
++  test("refuses remote servers unless a same-origin proxy vouches for them", () => {
++    const server = `${origin}/session/abc/openscience`
++    expect(terminalEndpointAvailable(server, origin)).toBe(false)
++    if (typeof window !== "object") return
++    window.__OPENSCIENCE_TRUSTED_PROXY__ = true
++    expect(terminalEndpointAvailable(server, origin)).toBe(true)
++    expect(terminalEndpointAvailable("https://other.example.org", origin)).toBe(false)
++  })
++})
+diff --git a/frontend/workspace/src/atlas/terminal-endpoint.ts b/frontend/workspace/src/atlas/terminal-endpoint.ts
+index 4a10cdc..fc73fa5 100644
+--- a/frontend/workspace/src/atlas/terminal-endpoint.ts
++++ b/frontend/workspace/src/atlas/terminal-endpoint.ts
+@@ -1,10 +1,20 @@
+ const loopback = new Set(["localhost", "127.0.0.1", "::1", "[::1]"])
+ 
++/** An authenticating reverse proxy that serves the workspace and the server
++ * from one origin may vouch for the terminal by setting
++ * `window.__OPENSCIENCE_TRUSTED_PROXY__ = true`. */
++function trustedProxy(url: URL, base: string | undefined) {
++  if (typeof window !== "object" || window.__OPENSCIENCE_TRUSTED_PROXY__ !== true) return false
++  return !!base && URL.canParse(base) && url.origin === new URL(base).origin
++}
++
+ export function terminalEndpointAvailable(value: string, origin?: string) {
+   const base = origin ?? (typeof location === "object" ? location.origin : undefined)
+   if (URL.canParse(value)) {
+-    return loopback.has(new URL(value).hostname)
++    const url = new URL(value)
++    return loopback.has(url.hostname) || trustedProxy(url, base)
+   }
+   if (!base || !URL.canParse(base) || !URL.canParse(value, base)) return false
+-  return loopback.has(new URL(value, base).hostname)
++  const url = new URL(value, base)
++  return loopback.has(url.hostname) || trustedProxy(url, base)
+ }
+diff --git a/frontend/workspace/src/config/server-url.test.ts b/frontend/workspace/src/config/server-url.test.ts
+index a211a58..e7909a4 100644
+--- a/frontend/workspace/src/config/server-url.test.ts
++++ b/frontend/workspace/src/config/server-url.test.ts
+@@ -1,6 +1,7 @@
+ import { describe, expect, test } from "bun:test"
+ import {
+   hasDesktopUpdateCapability,
++  resolveBasePath,
+   resolveDefaultServerUrl,
+   resolveDesktopServerUrl,
+   resolveServerRoute,
+@@ -46,6 +47,36 @@ describe("resolveDefaultServerUrl", () => {
+       resolveDefaultServerUrl({ ...base, dev: true, origin: "http://localhost:5173", stored: "http://localhost:4096" }),
+     ).toBe("http://localhost:4096")
+   })
++
++  test("a proxy-mounted page defaults to the server under its mount path", () => {
++    const mounted = { ...base, hostname: "lab.example.org", origin: "https://lab.example.org" }
++    expect(resolveDefaultServerUrl(mounted, "/session/abc/openscience")).toBe(
++      "https://lab.example.org/session/abc/openscience",
++    )
++    // A default stored by an earlier session under another mount is stale.
++    expect(
++      resolveDefaultServerUrl(
++        { ...mounted, stored: "https://lab.example.org/session/old/openscience" },
++        "/session/abc/openscience",
++      ),
++    ).toBe("https://lab.example.org/session/abc/openscience")
++    expect(
++      resolveDefaultServerUrl(
++        { ...mounted, stored: "https://lab.example.org/session/abc/openscience" },
++        "/session/abc/openscience",
++      ),
++    ).toBe("https://lab.example.org/session/abc/openscience")
++  })
++})
++
++describe("resolveBasePath", () => {
++  test("normalises the proxy-announced mount path", () => {
++    expect(resolveBasePath(undefined)).toBe("")
++    expect(resolveBasePath("")).toBe("")
++    expect(resolveBasePath("/")).toBe("")
++    expect(resolveBasePath("/session/abc/openscience/")).toBe("/session/abc/openscience")
++    expect(resolveBasePath("https://lab.example.org/session/abc/openscience")).toBe("/session/abc/openscience")
++  })
+ })
+ 
+ describe("resolveDesktopServerUrl", () => {
+@@ -79,6 +110,15 @@ describe("resolveServerRoute", () => {
+     ).toBe("http://127.0.0.1:4100/api/atlas/project?directory=%2Ftmp%2Fresearch")
+   })
+ 
++  test("keeps the mount path of a proxied server", () => {
++    const origin = "https://lab.example.org"
++    const server = `${origin}/session/abc/openscience`
++    expect(resolveServerRoute("/global/health", server, origin)).toBe("/session/abc/openscience/global/health")
++    expect(resolveServerRoute("/global/health", `${server}/`, "http://127.0.0.1:3000")).toBe(
++      `${server}/global/health`,
++    )
++  })
++
+   test("sends update checks to the selected OpenScience server", () => {
+     expect(resolveServerRoute("/settings/updates?refresh=1", "http://127.0.0.1:4096", base.origin)).toBe(
+       "http://127.0.0.1:4096/settings/updates?refresh=1",
+diff --git a/frontend/workspace/src/config/server-url.ts b/frontend/workspace/src/config/server-url.ts
+index 0fd4f18..0e903a9 100644
+--- a/frontend/workspace/src/config/server-url.ts
++++ b/frontend/workspace/src/config/server-url.ts
+@@ -28,12 +28,36 @@ function staleLoopbackDefault(input: DefaultServerInput) {
+ 
+ const normalize = (url: string) => url.replace(/\/+$/, "").toLowerCase()
+ 
+-export function resolveDefaultServerUrl(input: DefaultServerInput) {
++/** Path a reverse proxy mounts the workspace under (for example
++ * `/session/abc/openscience`), announced by the proxy through
++ * `window.__OPENSCIENCE_BASE_URL__`. Empty when served from the site root. */
++export function resolveBasePath(value = typeof window === "object" ? window.__OPENSCIENCE_BASE_URL__ : undefined) {
++  if (!value) return ""
++  try {
++    return new URL(value, "http://base.invalid").pathname.replace(/\/+$/, "")
++  } catch {
++    return ""
++  }
++}
++
++/** A same-origin default stored under another mount (an earlier proxied
++ * session) points at a path this proxy no longer serves. */
++function staleMountedDefault(input: DefaultServerInput, base: string) {
++  if (!base || !input.stored) return false
++  try {
++    const stored = new URL(input.stored)
++    return stored.origin === input.origin && stored.pathname.replace(/\/+$/, "") !== base
++  } catch {
++    return false
++  }
++}
++
++export function resolveDefaultServerUrl(input: DefaultServerInput, base = resolveBasePath()) {
+   if (input.explicit) return input.explicit
+-  if (input.stored && !staleLoopbackDefault(input)) return input.stored
++  if (input.stored && !staleLoopbackDefault(input) && !staleMountedDefault(input, base)) return input.stored
+   if (input.configured) return input.configured
+   if (input.dev) return "http://localhost:4096"
+-  return input.origin
++  return input.origin + base
+ }
+ 
+ export function resolveDesktopServerUrl(search: string, origin: string) {
+@@ -49,5 +73,6 @@ export function hasDesktopUpdateCapability(search: string) {
+  * hosted separately, while keeping compact relative URLs in bundled builds. */
+ export function resolveServerRoute(path: string, server: string, pageOrigin: string) {
+   const target = new URL(server, pageOrigin)
+-  return target.origin === pageOrigin ? path : new URL(path, target).toString()
++  const mounted = target.pathname.replace(/\/+$/, "") + path
++  return target.origin === pageOrigin ? mounted : new URL(mounted, target).toString()
+ }
+diff --git a/frontend/workspace/src/env.d.ts b/frontend/workspace/src/env.d.ts
+index fcaecf2..832685a 100644
+--- a/frontend/workspace/src/env.d.ts
++++ b/frontend/workspace/src/env.d.ts
+@@ -12,4 +12,5 @@ interface ImportMeta {
+ 
+ interface Window {
+   __OPENSCIENCE_BASE_URL__?: string
++  __OPENSCIENCE_TRUSTED_PROXY__?: boolean
+ }
+diff --git a/frontend/workspace/vite.config.ts b/frontend/workspace/vite.config.ts
+index 2642521..1da2de5 100644
+--- a/frontend/workspace/vite.config.ts
++++ b/frontend/workspace/vite.config.ts
+@@ -26,6 +26,10 @@ export function workspaceManualChunks(id: string): string | undefined {
+ 
+ export default defineConfig(({ command }) => ({
+   plugins: [desktopPlugin] as any,
++  // `./` lets a reverse proxy mount the bundle below the site root: lazy chunks
++  // resolve against their importer, and the proxy rewrites index.html's `./`
++  // references to its mount path (announced as window.__OPENSCIENCE_BASE_URL__).
++  base: process.env.OPENSCIENCE_WEB_BASE || "/",
+   // A production bundle is embedded into the CLI and served by whichever
+   // OpenScience server the user runs, so it must never bake a server address
+   // from a local `.env.local` (the e2e harness writes one with its throwaway

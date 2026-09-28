@@ -24,6 +24,10 @@ variable "DSH_CACHEBUST" {
   default = "1"
 }
 
+variable "OPENSCIENCE_VERSION" {
+  default = "2.0.140"
+}
+
 group "default" {
   targets = ["base", "terminal", "notebook", "vscode", "marimo", "openresearch", "studio"]
 }
@@ -101,8 +105,9 @@ target "studio" {
   dockerfile = "dockerfiles/studio/Dockerfile"
   tags       = ["${REGISTRY}/${OWNER}/studio:${TAG}"]
   args = {
-    DSH_VERSION   = "${DSH_VERSION}"
-    DSH_CACHEBUST = "${DSH_CACHEBUST}"
+    DSH_VERSION         = "${DSH_VERSION}"
+    DSH_CACHEBUST       = "${DSH_CACHEBUST}"
+    OPENSCIENCE_VERSION = "${OPENSCIENCE_VERSION}"
   }
 }
 
