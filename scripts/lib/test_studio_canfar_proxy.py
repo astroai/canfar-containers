@@ -61,7 +61,7 @@ def test_injects_api_shim_and_chips() -> None:
     assert b'id="astroai-vscode-chip"' in out
     assert b'href="/session/contrib/abc/vscode/"' in out
     assert b"astroai-resource-banner" not in out
-    assert b'data-astroai-proxy-rev="12"' in out
+    assert b'data-astroai-proxy-rev="13"' in out
     assert b"data-astroai-tab" in out  # branded tab stick
     assert b"data-astroai-brand" in out  # boot splash wordmark
     assert out.index(b"data-astroai-brand") < out.index(b"</head>")
@@ -209,6 +209,22 @@ def test_studio_assets_are_branded() -> None:
     assert b"<svg" in proxy.STUDIO_ASSETS["/favicon.svg"][0]
     manifest = proxy.json.loads(proxy.STUDIO_ASSETS["/manifest.webmanifest"][0])
     assert manifest["name"] == "AstroAI Studio"
+
+
+def test_assistant_bar_reserves_its_strip_and_nudges_for_a_key() -> None:
+    proxy.PREFIX = "/session/contrib/abc"
+    out = proxy.rewrite_body(
+        b"<html><head></head><body><div id=root></div></body></html>", "text/html"
+    )
+    # dsh's layout starts below the bar instead of under it (the session title stays visible).
+    assert b"padding-top: 44px" in out and b"calc(100vh - 44px)" in out
+    assert b".bar .dock {" in out and b"height: 44px" in out
+    assert b"data-nokey hidden" in out
+    assert b'href="/session/contrib/abc/hub/#agents" data-nokey' in out
+    js = proxy.STUDIO_ASSETS["/__studio/dock.js"][0]
+    assert b"'/hub/api/keys'" in js and b"k.dsh_route && k.present" in js
+    # tool pages keep their own layout: no reserved strip there.
+    assert b"padding-top" not in proxy.inject_dock(b"<html><body></body></html>", "text/html")
 
 
 def test_vscode_gets_configuration_defaults(tmp_path: Path, monkeypatch) -> None:

@@ -63,7 +63,7 @@ WIZARD_MOUNT = "/astroai-agents"
 TERMINAL_MOUNT = "/astroai-terminal"
 COOKIE_PREFIX = "dsh-auth-"
 BRAND_TITLE = "AstroAI Studio"
-PROXY_REVISION = "12"
+PROXY_REVISION = "13"
 
 
 def _token_file_path() -> str:
@@ -195,6 +195,8 @@ BRAND_STYLE = """<style data-astroai-brand>
   background: linear-gradient(135deg, #38bdf8, #6366f1 55%, #a855f7);
   -webkit-background-clip: text; background-clip: text; color: transparent;
 }
+body { padding-top: 44px !important; box-sizing: border-box !important; }
+#root { height: calc(100vh - 44px) !important; height: calc(100dvh - 44px) !important; }
 </style>"""
 
 _ICONS = {
@@ -276,7 +278,12 @@ COMMAND_DOCK_TEMPLATE = (
       font-size: 13px; line-height: 1.3; color: #dfe4ff;
     }
     .dock { position: fixed; z-index: 2147483646; user-select: none; -webkit-user-select: none; }
-    .bar .dock { top: 10px; left: 50%; transform: translateX(-50%); }
+    .bar .dock {
+      top: 0; left: 0; right: 0; height: 44px; display: flex; align-items: center; justify-content: center;
+      background: #0b1026; border-bottom: 1px solid rgba(129, 140, 248, 0.22);
+    }
+    .bar .pill { background: none; border: none; box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; }
+    @media (max-width: 860px) { .bar a.link span { display: none; } .bar a.link { padding: 6px 8px; } }
     .mini .dock { bottom: 28px; left: 50%; transform: translateX(-50%);
                   display: flex; flex-direction: column-reverse; align-items: center; gap: 6px; }
     .corner .dock { top: 3px; right: 8px; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
@@ -314,6 +321,13 @@ COMMAND_DOCK_TEMPLATE = (
       border: 1px solid rgba(129, 140, 248, 0.35); box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
     }
     .handle:hover { background: rgba(11, 16, 38, 0.98); }
+    .nokey {
+      margin-left: 8px; padding: 4px 11px; border-radius: 9999px; font-size: 12px; font-weight: 600;
+      color: #fde68a; background: rgba(251, 191, 36, 0.12); border: 1px solid rgba(251, 191, 36, 0.4);
+      text-decoration: none; white-space: nowrap;
+    }
+    .nokey:hover { background: rgba(251, 191, 36, 0.22); }
+    .nokey[hidden], .mini .nokey, .corner .nokey { display: none; }
     .mini .handle, .corner .handle { display: flex; }
     .corner .handle { padding: 2px 9px; font-size: 11px; }
     .overlay {
@@ -364,6 +378,8 @@ COMMAND_DOCK_TEMPLATE = (
     + """
         <button class="help-btn" data-help title="What can I do here?">?</button>
       </div>
+      <a class="nokey" href="{prefix}/hub/#agents" data-nokey hidden
+         title="The assistant needs a model API key before it can answer">Add a model key to start chatting</a>
       <button class="handle" title="Switch Studio tool"><img src="{prefix}/__studio/logo.svg" alt=""/>Studio</button>
     </div>
     <div class="overlay" role="dialog" aria-modal="true" aria-label="Welcome to AstroAI Studio">
@@ -458,12 +474,23 @@ DOCK_JS = """(function () {
   var seen = false;
   try { seen = localStorage.getItem(KEY) === '1'; } catch (err) {}
   if (mode === 'bar' && !seen) openHelp();
+  if (mode === 'bar') {
+    fetch(P + '/hub/api/keys', { credentials: 'same-origin' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        if (!d || !d.ok) return;
+        var ready = (d.keys || []).some(function (k) { return k.dsh_route && k.present; });
+        root.querySelector('[data-nokey]').hidden = ready;
+      })
+      .catch(function () {});
+  }
 })();
 """
 
 
 def command_dock_html(mode: str = "bar") -> str:
-    """``bar``: top bar (assistant page). ``mini``: bottom handle. ``corner``: top-right handle."""
+    """``bar``: full-width top bar on the assistant page (BRAND_STYLE reserves its
+    height). ``mini``: bottom handle. ``corner``: top-right handle."""
     return COMMAND_DOCK_TEMPLATE.replace("{prefix}", PREFIX).replace("{mode}", mode)
 
 

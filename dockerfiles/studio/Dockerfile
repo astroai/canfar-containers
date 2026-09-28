@@ -8,8 +8,8 @@ ARG REGISTRY=images.canfar.net
 ARG OWNER=astroai
 ARG BASE_NAME=base
 ARG TAG=local
-# Always build with the latest DSH release by default; invalidate with DSH_CACHEBUST
-ARG DSH_VERSION=latest
+# Pinned: 0.1.7 moves settings.yaml into its own store, which canfar-lab still writes.
+ARG DSH_VERSION=0.1.5-rc.3
 ARG DSH_CACHEBUST=1
 ARG GHOSTTY_WEB_VERSION=0.4.0-next.20.g1858a59
 ARG NODE_PTY_VERSION=1.1.0
@@ -36,7 +36,7 @@ LABEL io.canfar.skaha.session.type="contributed" \
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-# 1. dsh: Coding agent harness (latest release, image-baked into /opt/astroai)
+# 1. dsh: Coding agent harness (pinned release, image-baked into /opt/astroai)
 RUN npm install -g --prefix /opt/astroai "@deepseek-ai/dsh@${DSH_VERSION}" \
     && /opt/astroai/bin/dsh --version \
     && corepack enable \
