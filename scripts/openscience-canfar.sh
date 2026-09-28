@@ -69,6 +69,25 @@ if [[ -z "${lease_dir}" ]]; then
     exec "${OPENSCIENCE_BIN}" "$@"
 fi
 
+# OpenScience locks and process ledgers name pids and treat a live pid as a
+# live holder. Pids from another pod (or container) mean nothing here and may
+# be reused, so a lock left by a killed session would block this one. The
+# lease makes this session the only user of the dir, so clear that state when
+# the dir was last used from a different pid namespace.
+pidns="$(hostname 2>/dev/null)/$(readlink "/proc/$$/ns/pid" 2>/dev/null)"
+clear_foreign_locks() {
+    local host_file="$1/.canfar-pidns" last=""
+    [[ -f "${host_file}" ]] && read -r last <"${host_file}"
+    [[ "${last}" == "${pidns}" ]] && return 0
+    find "$1" \( -type d -name '*.lock.coord' -prune -o -type f -name '*.lock' \) \
+        -exec rm -rf {} + 2>/dev/null
+    rm -f "$1/authority-processes.json" "$1/credential-processes.json"
+    local config="${XDG_CONFIG_HOME:-${HOME}/.config}/openscience"
+    rm -rf "${config}/data-root-switch.lock" "${config}/data-root-switch.intent" \
+        "${config}/data-root-operations" "${config}"/*.lock.coord 2>/dev/null
+    printf '%s\n' "${pidns}" >"${host_file}"
+}
+
 lease=$(lease_file "${lease_dir}")
 claim() {
     # Take the lease when it is absent or stale; refresh it when this session holds it.
@@ -82,7 +101,7 @@ claim() {
         return 1
     fi
 }
-claim
+claim && clear_foreign_locks "${lease_dir}"
 (
     while kill -0 "$$" 2>/dev/null; do
         sleep "${HEARTBEAT}"

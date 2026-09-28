@@ -79,12 +79,13 @@ def test_env_keys_python_and_stdin(env: dict[str, str]) -> None:
 
 
 def test_other_live_session_falls_back_to_scratch(env: dict[str, str]) -> None:
-    lease(env).parent.mkdir(parents=True)
+    left = _leftovers(env)
     lease(env).write_text("sess-b 123\n")
     out = run(env, "run")
     assert f"data={env['SCRATCH']}/.openscience" in out.stdout
     assert "in use by session sess-b" in out.stderr
     assert lease(env).read_text() == "sess-b 123\n"
+    assert all(p.exists() for p in left)
 
 
 def test_stale_lease_is_taken_over(env: dict[str, str]) -> None:
@@ -115,6 +116,44 @@ def test_short_run_keeps_long_serve_lease_and_term_reaches_child(env: dict[str, 
     assert serve.wait(timeout=10) == 143
     assert Path(env["FAKE_MARK"]).read_text().strip() == "got-term"
     assert not lease(env).exists()
+
+
+def _leftovers(env: dict[str, str]) -> list[Path]:
+    data = Path(env["HOME"]) / ".openscience"
+    config = Path(env["HOME"]) / ".config" / "openscience"
+    paths = [
+        data / "authority-processes.json.lock",
+        data / "storage" / "session" / "p1" / "s1.json.lock",
+        data / "authority-processes.json",
+        config / "data-root-switch.lock",
+        config / "data-root-operations" / "146.tok.json",
+    ]
+    for path in paths:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text('{"pid": 146}')
+    (data / "storage" / "x.json.lock.coord").mkdir(parents=True)
+    (data / "storage" / "session" / "p1" / "s1.json").write_text("{}")
+    return [*paths, data / "storage" / "x.json.lock.coord"]
+
+
+def test_locks_from_another_pod_are_cleared(env: dict[str, str]) -> None:
+    left = _leftovers(env)
+    # Same session id, so the lease is ours, but a previous container wrote it.
+    lease(env).write_text("sess-a 99\n")
+    (lease(env).parent / ".canfar-pidns").write_text("old-pod/pid:[1]\n")
+    out = run(env, "run")
+    assert "data=default" in out.stdout
+    assert [p for p in left if p.exists()] == []
+    data = Path(env["HOME"]) / ".openscience"
+    assert (data / "storage" / "session" / "p1" / "s1.json").exists()
+    assert (data / ".canfar-pidns").read_text().strip() != "old-pod/pid:[1]"
+
+
+def test_locks_from_this_pod_are_left_to_openscience(env: dict[str, str]) -> None:
+    run(env, "run")
+    left = _leftovers(env)
+    run(env, "run")
+    assert all(p.exists() for p in left)
 
 
 def test_explicit_data_dir_skips_lease(env: dict[str, str], tmp_path: Path) -> None:
