@@ -31,6 +31,16 @@ Studio strictly isolates runtime state on `/scratch`:
 - `${SCRATCH}/.studio-${USER}/vscode-data` / `vscode-extensions` — VS Code runtime data.
 - Durable profiles and credentials remain safe on `/arc/home/${USER}` (`~/.dsh/`, `~/.canfar/`).
 
+## Community Plugins
+
+Studio ships the dsh plugin market ([dshmarket](https://github.com/dsh-market/dsh-market), baked under `/opt/astroai/dsh-plugins`).
+
+- **Install:** Settings → Plugin Market → Discover → Install. Most plugins load live; the rest apply at the next session start.
+- **Switch off/on:** Settings → Plugin Market → Installed. Switches are kept when Studio regenerates the profile at startup.
+- **Restart:** the market's Restart button is disabled on CANFAR, because the session supervisor owns dsh. Start a new session to apply a change that needs a restart.
+- **Compatibility:** the market refuses plugins that declare a newer dsh than the image pin (`DSH_VERSION`). Many recent plugins need dsh ≥ 0.1.7.
+- Installed plugins live in `~/.dsh/profiles/astroai` (durable). The image pins pnpm in a shared corepack home, so installs do not download pnpm into `$HOME`.
+
 ## CLI Usage
 
 ### From Laptop / Workstation

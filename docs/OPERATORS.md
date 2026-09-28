@@ -187,6 +187,13 @@ make test-canfar-session IMAGE=openscience TAG=26.09
 Startup runs sync `astroai studio --prepare --profile canfar --no-install`,
 then `dsh --profile astroai` on loopback `:3080` and `studio-canfar-proxy.py`
 on `:5000`. pnpm/TMPDIR land on session scratch. See [STUDIO.md](STUDIO.md).
+pnpm (`PNPM_VERSION`) lives in `COREPACK_HOME=/opt/corepack` so every user
+runs the same major. `/opt/astroai/dsh-plugins` is a hoisted pnpm project
+(`DSHMARKET_VERSION`); `--prepare` copies each dependency that declares a
+dsh bundle into the profile and enables it (override the directory with
+`ASTROAI_STUDIO_BAKED_PLUGINS`). On CANFAR the profile layer sets the
+market's `allowRestart: false`, since the startup supervisor restarts dsh.
+Needs canfar-lab with baked-plugin support (relock after it is pushed).
 
 **Home quota readings:** Prefer CephFS xattrs over raw `df` (`astroai` `disk_usage`). `ceph.dir.rbytes` can lag after writes — expected Ceph behavior.
 

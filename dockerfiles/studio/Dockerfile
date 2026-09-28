@@ -11,6 +11,10 @@ ARG TAG=local
 # Pinned: 0.1.7 moves settings.yaml into its own store, which canfar-lab still writes.
 ARG DSH_VERSION=0.1.5-rc.3
 ARG DSH_CACHEBUST=1
+# One pnpm for the image and every user: a node_modules built by one pnpm
+# major and changed by another fails with a layout error.
+ARG PNPM_VERSION=12.6.0
+ARG DSHMARKET_VERSION=1.66.5
 ARG GHOSTTY_WEB_VERSION=0.4.0-next.20.g1858a59
 ARG NODE_PTY_VERSION=1.1.0
 ARG WS_VERSION=8.21.3
@@ -22,6 +26,8 @@ FROM ${REGISTRY}/${OWNER}/${BASE_NAME}:${TAG}
 
 ARG DSH_VERSION
 ARG DSH_CACHEBUST
+ARG PNPM_VERSION
+ARG DSHMARKET_VERSION
 ARG GHOSTTY_WEB_VERSION
 ARG NODE_PTY_VERSION
 ARG WS_VERSION
@@ -36,12 +42,30 @@ LABEL io.canfar.skaha.session.type="contributed" \
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-# 1. dsh: Coding agent harness (pinned release, image-baked into /opt/astroai)
+# 1. dsh: Coding agent harness (pinned release, image-baked into /opt/astroai).
+# pnpm lives in a shared corepack home so `dsh plugin` and the plugin market
+# use the pinned version without a per-user download into $HOME.
+ENV COREPACK_HOME=/opt/corepack \
+    COREPACK_DEFAULT_TO_LATEST=0 \
+    COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 RUN npm install -g --prefix /opt/astroai "@deepseek-ai/dsh@${DSH_VERSION}" \
     && /opt/astroai/bin/dsh --version \
     && corepack enable \
-    && corepack prepare pnpm@9.15.9 --activate \
+    && corepack prepare "pnpm@${PNPM_VERSION}" --activate \
+    && chmod -R a+rX "${COREPACK_HOME}" \
     && pnpm --version
+
+# Plugins baked for the Studio profile: canfar-lab copies every dependency
+# here that declares a dsh bundle into ~/.dsh/profiles/astroai and enables it.
+RUN mkdir -p /opt/astroai/dsh-plugins \
+    && cd /opt/astroai/dsh-plugins \
+    && printf '{"name":"astroai-dsh-plugins","private":true,"dependencies":{"dshmarket":"%s"}}\n' \
+        "${DSHMARKET_VERSION}" > package.json \
+    && printf 'nodeLinker: hoisted\n' > pnpm-workspace.yaml \
+    && pnpm install --prod \
+    && test -f node_modules/dshmarket/cordis.patch.yml \
+    && rm -rf "$(pnpm store path)" \
+    && chmod -R a+rX /opt/astroai/dsh-plugins
 
 # Keys-only: do not force DeepSeek-only onboarding gate
 COPY scripts/patch-dsh-skip-deepseek-onboarding.sh /tmp/patch-dsh-skip-deepseek-onboarding.sh
