@@ -83,6 +83,7 @@ RUN mkdir -p /etc/jupyter /etc/astroai-lab
 COPY config/jupyter_server_config.py /etc/jupyter/jupyter_server_config.py
 COPY config/jupyter_lab_config.py /etc/jupyter/jupyter_lab_config.py
 COPY config/jupyter/astroai_scratch_env.py /etc/astroai-lab/jupyter_astroai_scratch_env.py
+COPY config/ipython_kernel_config.py /etc/ipython/ipython_kernel_config.py
 COPY config/marimo.toml /opt/astroai/config/marimo.toml
 COPY config/notebooks/ /opt/astroai/notebooks/
 
