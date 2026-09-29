@@ -105,8 +105,11 @@ def test_injects_tanstack_basepath() -> None:
     proxy.PREFIX = "/session/contrib/abc"
     js = b'vBn=cW({routeTree:gBn,context:{queryClient:rt},trailingSlash:"never",defaultPendingComponent:iS})'
     out = proxy.rewrite_body(js, "text/javascript")
-    assert b'basepath:"/session/contrib/abc",trailingSlash:"always"' in out
+    # "always" sends nested routes (/projects/<id>/tasks/<id>/) to the router's Not Found.
+    assert b'basepath:"/session/contrib/abc",trailingSlash:"preserve"' in out
     assert b'trailingSlash:"never"' not in out
+    assert b'trailingSlash:"always"' not in out
+    assert proxy.rewrite_body(out, "text/javascript") == out
 
 
 def test_html_cache_busts_assets() -> None:

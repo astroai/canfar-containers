@@ -111,22 +111,15 @@ def rewrite_body(data: bytes, content_type: str) -> bytes:
 
         # TanStack Router (orx): without basepath, pathname /session/contrib/<id>/…
         # never matches routes (`/`, `/projects`, …) → in-app Not Found while chips
-        # still show. trailingSlash always keeps a slash so Skaha ingress matches.
+        # still show. trailingSlash "preserve" keeps the slash the Skaha ingress needs
+        # on the session root; "always" sends nested routes to the router's Not Found.
         # ponytail: string patch the baked createRouter call; upstream has no env for this.
         bp = json.dumps(PREFIX)
         if f"basepath:{bp}" not in text:
-            if 'trailingSlash:"never"' in text:
-                text = text.replace(
-                    'trailingSlash:"never"',
-                    f'basepath:{bp},trailingSlash:"always"',
-                    1,
-                )
-            elif 'trailingSlash:"always"' in text:
-                text = text.replace(
-                    'trailingSlash:"always"',
-                    f'basepath:{bp},trailingSlash:"always"',
-                    1,
-                )
+            for mode in ('trailingSlash:"never"', 'trailingSlash:"always"'):
+                if mode in text:
+                    text = text.replace(mode, f'basepath:{bp},trailingSlash:"preserve"', 1)
+                    break
 
     if ctype == "text/html":
         text = stick_html_title(text)
