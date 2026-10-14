@@ -1,8 +1,9 @@
 # syntax=docker/dockerfile:1
 # AstroAI improc: astronomy FITS/HDF5 image-processing CLIs on base.
-# Headless. Apt for native CLIs; source/binaries where Debian lags; uv for
-# science Python (incl. MaxiMask); one micromamba env for sxpp/skymaker/ngmix.
-# Versions float at build time — no lockfiles, no pin ARGs.
+# Headless. Apt for native CLIs; source/binaries where Debian lags; one uv
+# venv (Python 3.13, CUDA 12.9) for science Python, including MaxiMask,
+# torchfits, scarlet2, and ngmix. SkyMaker and sourcextractor++ are built
+# from source. Versions float at build time — no lockfiles, no pin ARGs.
 
 ARG REGISTRY=images.canfar.net
 ARG OWNER=astroai
@@ -63,6 +64,23 @@ RUN curl -fsSL -o stuff.tar.gz \
     && make install \
     && { strip --strip-unneeded /usr/local/bin/* 2>/dev/null || true; } \
     && rm -rf /tmp/stuff*
+
+FROM debian:trixie-slim AS skymaker-build
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential autoconf automake libtool ca-certificates curl pkg-config \
+    libcfitsio-dev libfftw3-dev \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /tmp
+RUN curl -fsSL -o skymaker.tar.gz \
+      https://github.com/astromatic/skymaker/archive/refs/heads/master.tar.gz \
+    && tar xzf skymaker.tar.gz \
+    && cd "$(ls -d skymaker-* | head -1)" \
+    && autoreconf -i \
+    && ./configure --prefix=/usr/local \
+    && make -j"$(nproc)" \
+    && make install \
+    && { strip --strip-unneeded /usr/local/bin/* 2>/dev/null || true; } \
+    && rm -rf /tmp/skymaker*
 
 FROM debian:trixie-slim AS fits2idia-build
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -149,7 +167,9 @@ COPY --from=casutools-build /usr/local/ /usr/local/
 COPY --from=gnuastro-build /usr/local/ /usr/local/
 COPY --from=fits2idia-build /usr/local/ /usr/local/
 COPY --from=stuff-build /usr/local/ /usr/local/
-RUN ldconfig
+COPY --from=skymaker-build /usr/local/ /usr/local/
+RUN ldconfig \
+    && ln -sfn /usr/local/bin/sky /usr/local/bin/skymaker
 
 # GALFIT binary (+ legacy ncurses5 for the Carnegie build).
 # Vendored under dockerfiles/improc/vendor/ — Carnegie HTTPS is too flaky/slow
@@ -210,50 +230,56 @@ RUN TARBALL=topcat-full.jar \
     && chmod 644 "/usr/local/bin/${TARBALL}" \
     && chmod 755 /usr/local/bin/stilts /usr/local/bin/topcat
 
-# Science Python (uv) — one venv: imaging stack + MaxiMask/TF + CUDA torch.
-# scarlet + tractor: no usable PyPI wheels; build from git HEAD.
+# Science Python (uv) — one venv, one CUDA 12.9 toolkit.
+# torch (cu129 index), tensorflow[and-cuda] (MaxiMask), and jax[cuda12]
+# (scarlet2) are one transaction so a single nvidia-*-cu12 set is kept.
+# Pin the cu129 local version. PyPI torch 2.13 is CUDA 13, and uv's
+# first-index strategy stops on that wheel. unsafe-best-match lets the
+# pin select cu129; that wheel's nvidia-*-cu12 pins are the only toolkit.
+# ngmix is not on PyPI. scarlet + tractor have no usable wheels; build from git.
+# Do not assert torch.cuda.is_available() here — builds have no GPU.
 RUN apt-get update && apt-get install -y --no-install-recommends swig \
     && rm -rf /var/lib/apt/lists/*
 COPY config/improc-py.txt /opt/astroai/improc-py.txt
-# CUDA torch from the cu129 index only (local +cu129 tag); torchfits from PyPI.
-# Do not assert torch.cuda.is_available() here — builds have no GPU.
+COPY dockerfiles/improc/check-improc-python.py /opt/astroai/check-improc-python.py
 RUN uv venv /opt/astroai/venv/improc \
-    && uv pip install --python /opt/astroai/venv/improc -r /opt/astroai/improc-py.txt \
     && uv pip install --python /opt/astroai/venv/improc \
+         --index-strategy unsafe-best-match \
          --index-url https://download.pytorch.org/whl/cu129 \
-         "torch" \
-    && uv pip install --python /opt/astroai/venv/improc torchfits \
-    && uv pip install --python /opt/astroai/venv/improc numpy cython setuptools pybind11 peigen \
+         --extra-index-url https://pypi.org/simple \
+         -r /opt/astroai/improc-py.txt \
+         "torch==2.13.0+cu129" \
+         "tensorflow[and-cuda]" \
+         "jax[cuda12]" \
+         torchfits \
+         numba \
+         "ngmix @ git+https://github.com/esheldon/ngmix" \
+         numpy cython setuptools pybind11 peigen \
+    && /opt/astroai/venv/improc/bin/python /opt/astroai/check-improc-python.py \
     && uv pip install --no-build-isolation --python /opt/astroai/venv/improc \
          "scarlet @ git+https://github.com/pmelchior/scarlet" \
     && uv pip install --no-build-isolation --python /opt/astroai/venv/improc \
          "tractor @ git+https://github.com/dstndstn/tractor" \
     && uv cache clean \
     && chmod -R a+rX /opt/astroai/venv/improc \
+    && chmod a+r /opt/astroai/improc-py.txt /opt/astroai/check-improc-python.py \
     && for c in maximask maxitrack weightmask torchfits weightmask-reconstruct-sky; do \
          [[ -x "/opt/astroai/venv/improc/bin/${c}" ]] \
            && ln -sf "/opt/astroai/venv/improc/bin/${c}" "/usr/local/bin/${c}"; \
        done
 
-# Conda-only packages in separate prefixes (unpinned solve). Sharing one env
-# broke ngmix: astrorama/sxpp pins a numpy that cannot import with ngmix's
-# GalSim/astropy stack (numpy.in1d AttributeError).
-RUN micromamba create -y -p /opt/astroai/conda/sxpp \
-      -c astrorama -c conda-forge sourcextractor \
-    && micromamba create -y -p /opt/astroai/conda/skymaker \
-      -c conda-forge astromatic-skymaker \
-    && micromamba create -y -p /opt/astroai/conda/ngmix \
-      -c conda-forge ngmix \
-    && micromamba clean -a -y \
-    && ln -sf /opt/astroai/conda/sxpp/bin/sourcextractor++ /usr/local/bin/sourcextractor++ \
-    && ln -sf /opt/astroai/conda/sxpp/bin/sourcextractor++ /usr/local/bin/sourcextractor \
-    && ln -sf /opt/astroai/conda/skymaker/bin/sky /usr/local/bin/skymaker \
-    && ln -sf /opt/astroai/conda/skymaker/bin/sky /usr/local/bin/sky \
-    && chmod -R a+rX /opt/astroai/conda
+# sourcextractor++ against this venv. The build tree is deleted in the same
+# RUN. Boost 1.87 supplies Boost.Python for Python 3.13 (1.85 does not).
+COPY dockerfiles/improc/build-sourcextractor.sh /tmp/build-sourcextractor.sh
+RUN bash /tmp/build-sourcextractor.sh \
+    && rm -f /tmp/build-sourcextractor.sh
+COPY dockerfiles/improc/sourcextractor-wrapper.sh /usr/local/bin/sourcextractor++
 
 COPY scripts/improc-profile.sh /etc/profile.d/improc.sh
 COPY docs/USAGE.md /opt/astroai/USAGE.md
-RUN chmod a+r /etc/profile.d/improc.sh /opt/astroai/USAGE.md \
+RUN chmod 755 /usr/local/bin/sourcextractor++ \
+    && ln -sfn /usr/local/bin/sourcextractor++ /usr/local/bin/sourcextractor \
+    && chmod a+r /etc/profile.d/improc.sh /opt/astroai/USAGE.md \
     && printf '%s\n' \
          '[ -f /etc/profile.d/improc.sh ] && . /etc/profile.d/improc.sh' \
          >> /etc/bash.bashrc \
@@ -273,8 +299,12 @@ RUN set -euo pipefail; \
         command -v "$c" >/dev/null || { echo "MISSING: $c" >&2; exit 1; }; \
     done; \
     command -v sourcextractor++ >/dev/null \
-      || command -v sourcextractor >/dev/null \
       || { echo "MISSING: sourcextractor++" >&2; exit 1; }; \
-    /opt/astroai/venv/improc/bin/python -c "import ccdproc, photutils, galsim, piff, astroscrappy, lacosmic, sfft, zogyp, healpy, healsparse, astropy_healpix, mocpy, hpgeom, scarlet, scarlet2, twirl, skimage, astroquery, cv2, petrofit, montage_wrapper, galight, lenstronomy, tractor, torch, torchfits, tensorflow, maximask_and_maxitrack, weightmask; assert '+cu' in torch.__version__, torch.__version__"; \
-    /opt/astroai/conda/ngmix/bin/python -c "import ngmix; print('PASS: ngmix')"; \
+    command -v sourcextractor >/dev/null \
+      || { echo "MISSING: sourcextractor" >&2; exit 1; }; \
+    test ! -e /opt/astroai/conda; \
+    sky -v >/dev/null; \
+    timeout 180 sourcextractor++ --version >/dev/null; \
+    /opt/astroai/venv/improc/bin/python /opt/astroai/check-improc-python.py; \
+    /opt/astroai/venv/improc/bin/python -c "import ccdproc, photutils, galsim, piff, astroscrappy, lacosmic, sfft, zogyp, healpy, healsparse, astropy_healpix, mocpy, hpgeom, scarlet, scarlet2, twirl, skimage, astroquery, cv2, petrofit, montage_wrapper, galight, lenstronomy, tractor, torch, torchfits, tensorflow, maximask_and_maxitrack, weightmask, ngmix, sourcextractor; assert '+cu' in torch.__version__, torch.__version__"; \
     echo "improc smoke OK"

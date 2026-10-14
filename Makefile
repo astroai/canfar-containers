@@ -299,10 +299,11 @@ lint-doc-quota: ## forbid test-canfar.sh from reintroducing the false 'headless 
 	./scripts/lint-doc-quota.sh
 
 test-host: ## docker-free checks (selfchecks + agent-wizard unit tests)
-	chmod +x scripts/peek_selfcheck.sh scripts/osc52_copy_selfcheck.sh scripts/lib/test_astroai_boot_log.sh
+	chmod +x scripts/peek_selfcheck.sh scripts/osc52_copy_selfcheck.sh scripts/lib/test_astroai_boot_log.sh scripts/lib/test_astroai_whats_new.sh
 	./scripts/peek_selfcheck.sh
 	./scripts/osc52_copy_selfcheck.sh
 	./scripts/lib/test_astroai_boot_log.sh
+	./scripts/lib/test_astroai_whats_new.sh
 	python3 scripts/lib/test_agent_wizard_verbs.py
 	python3 scripts/lib/test_orx_canfar_proxy.py
 	python3 scripts/lib/test_studio_canfar_proxy.py

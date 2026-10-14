@@ -4,4 +4,7 @@ cadcdata
 cadctap
 vos
 canfar
+# Not on PyPI. Float on the default branch at image build.
+vosfs @ git+https://github.com/shinybrar/vosfs.git
+vos-sync @ git+https://github.com/drtobybrown/vos-sync.git
 # astroai-lab installed from vendor wheel in Dockerfile (same venv).

@@ -68,3 +68,8 @@ use-project() {
 }
 canfar-env() { use-project "$@"; }
 
+if [[ -f /opt/astroai/lib/astroai-whats-new.sh ]]; then
+    # shellcheck disable=SC1091
+    source /opt/astroai/lib/astroai-whats-new.sh
+fi
+

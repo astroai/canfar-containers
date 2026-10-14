@@ -202,9 +202,10 @@ RUN bash /tmp/install-canfar-lab-head.sh /opt/canfar \
     && rm -f /tmp/install-canfar-lab-head.sh /tmp/canfar-lab-head.json
 
 COPY scripts/lib/astroai-env-common.sh scripts/lib/astroai-ui.sh scripts/lib/skaha-proxy.sh \
-     scripts/lib/session_title.py /opt/astroai/lib/
+     scripts/lib/session_title.py scripts/astroai-whats-new.sh /opt/astroai/lib/
 COPY scripts/canfar-verify.sh scripts/canfar-verify-agents.sh scripts/bootstrap-canfar-registry.sh scripts/bootstrap-ray-manager-env.sh scripts/upgrade-cadc-tools.sh scripts/peek /opt/astroai/bin/
 RUN chmod a+rx /opt/astroai/bin/* /opt/astroai/lib/* \
     && ln -sf /opt/astroai/bin/peek /usr/local/bin/peek
 
 COPY docs/USAGE.md /opt/astroai/USAGE.md
+COPY config/whats-new.txt /opt/astroai/whats-new.txt

@@ -20,6 +20,8 @@ This file ships inside images as `/opt/astroai/USAGE.md`.
 4. Persist to `/arc/home` or `/arc/projects` before the session ends (`canfar-lab save` / `git push`).
 5. Env snapshots live in `~/.astroai/lab/saves/` on `/arc/home` — resume them in the next session with `canfar-lab resume NAME`.
 
+The first interactive shell on a new image prints `/opt/astroai/whats-new.txt` once per account (stamp: `~/.astroai/lab/whats-new-seen`). Later shells stay quiet. Notebook, Studio, and VS Code show it when you open their terminal. Set `ASTROAI_WHATS_NEW=0` to skip it.
+
 ### Home base: AstroAI Studio (coding portal)
 
 1. Launch **`studio`** with tag `26.10` / `latest`.
@@ -158,7 +160,7 @@ CADC clients (`cadcget`, `vls`, …) are on PATH from `/opt/canfar`.
 | `improc-terminal` | Interactive CLI (Contributed, :5000) |
 | `improc-notebook` | JupyterLab (Notebook, :8888); kernel **Python 3 (improc)** has healpy/galsim/… |
 
-PATH includes `/opt/astroai/venv/improc/bin` and sourcextractor++.
+PATH includes `/opt/astroai/venv/improc/bin`, sourcextractor++, and SkyMaker.
 
 | Area | Tools |
 |------|--------|
@@ -178,10 +180,10 @@ PATH includes `/opt/astroai/venv/improc/bin` and sourcextractor++.
 | Pretty pictures | `stiff`, `fitspng`, `fitscut`, `astconvertt`, ImageMagick |
 | FITS / HDF5 / tables | cfitsio utils, `fitsverify`, `topcat`/`stilts`, `pqrs`, `h5dump`, `torchfits` (FITS↔tensor; CUDA torch for GPU reads) |
 
-Science Python (including MaxiMask/TensorFlow) lives in `/opt/astroai/venv/improc`
-(on PATH). Conda-only tools use separate prefixes under `/opt/astroai/conda/`
-(sxpp, skymaker, ngmix); their CLIs are linked into `/usr/local/bin`. Import
-ngmix with `/opt/astroai/conda/ngmix/bin/python`.
+Science Python lives in `/opt/astroai/venv/improc` (on PATH): one Python 3.13
+environment. torch (torchfits), TensorFlow (MaxiMask), and JAX (scarlet2) share
+one CUDA 12.9 toolkit. ngmix is imported with that same interpreter.
+sourcextractor++ and SkyMaker (`sky`, `skymaker`) are binaries on PATH.
 
 A complete Stuff → SkyMaker → SExtractor simulation workflow (generate a
 synthetic galaxy field, render it, extract sources) is in

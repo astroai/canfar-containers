@@ -37,8 +37,24 @@ check_image() {
     else
       echo \"PASS: sourcextractor++\"
     fi
-    /opt/astroai/venv/improc/bin/python -c \"import ccdproc, photutils, galsim, piff, astroscrappy, lacosmic, sfft, zogyp, healpy, healsparse, mocpy, hpgeom, scarlet, scarlet2, twirl, skimage, astroquery, cv2, petrofit, montage_wrapper, galight, lenstronomy, tractor, torch, torchfits, tensorflow, maximask_and_maxitrack, weightmask; assert '+cu' in torch.__version__, torch.__version__; print('PASS: improc python imports')\"
-    /opt/astroai/conda/ngmix/bin/python -c \"import ngmix; print('PASS: ngmix')\"
+    if [[ -e /opt/astroai/conda ]]; then
+      echo \"FAIL: /opt/astroai/conda\"
+      missing=\$((missing + 1))
+    fi
+    if ! sky -v >/dev/null; then
+      echo \"FAIL: sky -v\"
+      missing=\$((missing + 1))
+    else
+      echo \"PASS: sky -v\"
+    fi
+    if ! timeout 180 sourcextractor++ --version >/dev/null; then
+      echo \"FAIL: sourcextractor++ --version\"
+      missing=\$((missing + 1))
+    else
+      echo \"PASS: sourcextractor++ --version\"
+    fi
+    /opt/astroai/venv/improc/bin/python /opt/astroai/check-improc-python.py
+    /opt/astroai/venv/improc/bin/python -c \"import ccdproc, photutils, galsim, piff, astroscrappy, lacosmic, sfft, zogyp, healpy, healsparse, mocpy, hpgeom, scarlet, scarlet2, twirl, skimage, astroquery, cv2, petrofit, montage_wrapper, galight, lenstronomy, tractor, torch, torchfits, tensorflow, maximask_and_maxitrack, weightmask, ngmix, sourcextractor; assert '+cu' in torch.__version__, torch.__version__; print('PASS: improc python imports')\"
     ${extra}
     exit \"\$missing\"
     "

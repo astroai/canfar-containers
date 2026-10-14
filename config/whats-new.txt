@@ -1,0 +1,16 @@
+# id: 26.10-vos
+
+What's new in this AstroAI image
+────────────────────────────────
+vos-sync and vosfs are installed in /opt/canfar (on PATH).
+
+  vos-sync SRC DEST
+      Parallel copy between this session and CANFAR VOSpace.
+      Preview:  vos-sync -n vos:vault/<user>/data/ ./data/
+
+  vosfs
+      Read and write VOSpace from Python (fsspec protocol "vos").
+      import fsspec
+      fsspec.filesystem("vos")
+
+Shown once for this image. Again: cat /opt/astroai/whats-new.txt

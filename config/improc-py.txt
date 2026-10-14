@@ -1,7 +1,7 @@
 # Science Python for /opt/astroai/venv/improc (uv). Unpinned — resolve at image build.
 # Not installed into the CADC venv.
-# MaxiMask/TF share this venv (tensorflow>=2.11).
-# torch + torchfits (CUDA 12.9 index) installed in the Dockerfile.
+# torch (cu129), tensorflow[and-cuda], jax[cuda12], torchfits, numba, and ngmix
+# are installed in the same Dockerfile transaction so one CUDA 12.9 toolkit is shared.
 
 # Core image processing
 astropy

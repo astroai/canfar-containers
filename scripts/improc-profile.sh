@@ -1,6 +1,6 @@
-# AstroAI improc PATH — science venv only.
-# Conda CLIs (sourcextractor++, sky) are linked into /usr/local/bin; do not put
-# conda env bins on PATH (their pythons would shadow GalSim/torch/TF).
+# AstroAI improc PATH — one science venv.
+# sourcextractor++ and SkyMaker are on /usr/local/bin. Do not prepend another
+# interpreter; ngmix, GalSim, torch, and TensorFlow all use this venv.
 # Bash-only (/etc/profile sources profile.d for all login shells, including sh).
 if [ -z "${BASH_VERSION:-}" ]; then
     return 0 2>/dev/null || exit 0

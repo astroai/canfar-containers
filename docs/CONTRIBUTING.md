@@ -54,6 +54,7 @@ git checkout -b my-change
 | Marimo starter notebook | **Edit in** [astroai-lab](https://github.com/astroai/canfar-lab) `data/notebooks/starter.py`, then `make sync-marimo-starter` | `marimo` |
 | Jupyter / Ray starters | **Edit in** lab `data/notebooks/`, then `make sync-notebook-starters` | `notebook` |
 | CADC client list | `config/cadc-tools.txt` | `base`+ |
+| First-shell what's new | `config/whats-new.txt` (bump the `# id:` line) | `base`+ |
 | **`astroai` CLI** | `config/astroai-lab.in` + lock, then git `main` at image build | `base`+ |
 | Ray | `config/ray-deps.txt`, `dockerfiles/ray-*`, `ray/`, `scripts/*ray*` | `make build-ray` |
 | Bake graph, tags | `docker-bake.hcl`, `Makefile` | Depends |

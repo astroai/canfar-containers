@@ -18,6 +18,7 @@ Examples:
   upgrade-cadc-tools.sh --upgrade canfar-lab
   upgrade-cadc-tools.sh 'canfar-lab @ git+https://github.com/astroai/canfar-lab.git@main'
   upgrade-cadc-tools.sh --upgrade canfar cadcdata cadctap vos
+  upgrade-cadc-tools.sh --upgrade 'vosfs @ git+https://github.com/shinybrar/vosfs.git' 'vos-sync @ git+https://github.com/drtobybrown/vos-sync.git'
 
 Build-time package list: `/opt/astroai/cadc-tools.txt` (unpinned; resolved when the image is built).
 
