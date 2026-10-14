@@ -188,10 +188,10 @@ _start_dsh() {
     _token_logged=""
     astroai_boot_log "starting dsh --profile astroai on :${DSH_PORT}"
     if command -v stdbuf >/dev/null 2>&1; then
-        env "${_DSH_UNSET_ENV[@]}" stdbuf -oL -eL dsh --profile canfar-lab --no-open \
+        env "${_DSH_UNSET_ENV[@]}" stdbuf -oL -eL dsh --profile astroai --no-open \
             --port "${DSH_PORT}" "${_DSH_TRUST[@]}" >>"${_dsh_log}" 2>&1 &
     else
-        env "${_DSH_UNSET_ENV[@]}" dsh --profile canfar-lab --no-open --port "${DSH_PORT}" \
+        env "${_DSH_UNSET_ENV[@]}" dsh --profile astroai --no-open --port "${DSH_PORT}" \
             "${_DSH_TRUST[@]}" >>"${_dsh_log}" 2>&1 &
     fi
     DSH_PID=$!
