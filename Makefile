@@ -1,4 +1,4 @@
-.PHONY: help build-all build/% build-ray build-improc push-all push/% push-ray push-improc push-latest-tags release-push release-push-ray release-push-improc test-local test-agent-local test-studio-local test-ray test-improc-local test-base-local test-host test-canfar test-canfar-agents test-canfar-session test-canfar-ray test-canfar-ray-gpu test-canfar-ray-autoscale clean clean-all lock-ray lock-astroai-lab lock-check lint lint-doc-quota sync-marimo-starter sync-notebook-starters
+.PHONY: help build-all build/% build-ray build-improc build-specproc push-all push/% push-ray push-improc push-specproc push-latest-tags release-push release-push-ray release-push-improc release-push-specproc test-local test-agent-local test-studio-local test-ray test-improc-local test-specproc-local test-base-local test-host test-canfar test-canfar-agents test-canfar-session test-canfar-ray test-canfar-ray-gpu test-canfar-ray-autoscale clean clean-all lock-ray lock-astroai-lab lock-check lint lint-doc-quota sync-marimo-starter sync-notebook-starters
 
 
 SHELL := bash
@@ -13,6 +13,7 @@ export OWNER REGISTRY PYTHON_VERSION
 SESSION_IMAGES := base terminal notebook vscode marimo openresearch openscience studio
 RAY_IMAGES := ray-manager ray-worker
 IMPROC_IMAGES := improc improc-terminal improc-notebook
+SPECPROC_IMAGES := specproc specproc-terminal specproc-notebook
 IMAGE_PREFIX := $(REGISTRY)/$(OWNER)
 
 help:
@@ -21,16 +22,19 @@ help:
 	@echo "  make build-all          build session images (base → sessions)"
 	@echo "  make build-ray          build ray-manager + ray-worker (+ base/slim chain)"
 	@echo "  make build-improc       build improc + improc-terminal + improc-notebook (+ base)"
+	@echo "  make build-specproc     build specproc family (+ base); group image, not public astroai"
 	@echo "  make build/vscode       build one image (+ parents)"
 	@echo "  make push-all           push session images to Harbor"
 	@echo "  make push-ray           push Ray images to Harbor"
 	@echo "  make push-improc        push improc stack to Harbor"
+	@echo "  make push-specproc      push specproc to a group Harbor project (OWNER must not be astroai)"
 	@echo "  make release-push       bake+push session stack to Harbor (no local load; disk-safe)"
 	@echo "  make release-push-ray   bake+push Ray stack to Harbor (no local load; disk-safe)"
 	@echo "  make release-push-improc bake+push improc stack to Harbor (no local load; disk-safe)"
 	@echo "  make test-local         verify session images locally"
 	@echo "  make test-studio-local  Studio stamp+dangling .dsh boot → token → 200"
 	@echo "  make test-improc-local  verify improc family locally (improc/terminal/notebook)"
+	@echo "  make test-specproc-local verify specproc family locally"
 	@echo "  make test-base-local    run every base-image CLI (not just command -v)"
 	@echo "  make test-agent-local   agent command matrix + no ~/.local pollution (all session images)"
 	@echo "  make test-ray           Ray container + local cluster + UI tests"
@@ -85,6 +89,9 @@ build-ray: ## build Ray manager + worker (uses same base TAG)
 build-improc: ## build improc + improc-terminal + improc-notebook (+ base)
 	TAG=$(BUILD_TAG) docker buildx bake $(BAKE_FLAGS) improc improc-terminal improc-notebook
 
+build-specproc: ## build specproc + terminal + notebook (+ base)
+	TAG=$(BUILD_TAG) docker buildx bake $(BAKE_FLAGS) specproc specproc-terminal specproc-notebook
+
 build/%:
 	TAG=$(BUILD_TAG) docker buildx bake $(BAKE_FLAGS) $(notdir $@)
 
@@ -93,6 +100,13 @@ push-all: $(addprefix push/,$(SESSION_IMAGES))
 push-ray: $(addprefix push/,$(RAY_IMAGES))
 
 push-improc: push/improc push/improc-terminal push/improc-notebook ## push improc stack
+
+push-specproc: ## push specproc family; refuses the public astroai project
+	@if [ "$(OWNER)" = "astroai" ]; then \
+		echo "specproc includes pPXF and MOOG. Push to the group Harbor project: OWNER=<group> make push-specproc" >&2; \
+		exit 1; \
+	fi
+	$(MAKE) push/specproc push/specproc-terminal push/specproc-notebook OWNER=$(OWNER) TAG=$(TAG) BUILD_TAG=$(BUILD_TAG)
 
 # Production Ray push: bake TAG into manager env (RAY_IMAGE_TAG) — use BUILD_TAG=$(TAG).
 #   make build-ray BUILD_TAG=26.09 TAG=26.09 && make push-ray TAG=26.09 BUILD_TAG=26.09
@@ -112,6 +126,13 @@ push/ray-base:
 # refuses to push when the source is OLDER than the local :$(TAG) image (a
 # downgrade — the exact stale-:local incident).
 push/%:
+	@case "$(notdir $@)" in \
+		specproc|specproc-terminal|specproc-notebook) \
+			if [ "$(OWNER)" = "astroai" ]; then \
+				echo "specproc includes pPXF and MOOG. Set OWNER to the group Harbor project." >&2; \
+				exit 1; \
+			fi ;; \
+	esac
 	@src="$(IMAGE_PREFIX)/$(notdir $@):$(BUILD_TAG)"; \
 	dst="$(IMAGE_PREFIX)/$(notdir $@):$(TAG)"; \
 	if ! docker image inspect "$$src" >/dev/null 2>&1; then \
@@ -154,6 +175,14 @@ release-push-ray: ## bake+push ray-manager + ray-worker as :$(TAG) and :latest
 release-push-improc: ## bake+push improc + improc-terminal + improc-notebook as :$(TAG) and :latest
 	TAG=$(TAG) docker buildx bake --push improc improc-terminal improc-notebook
 	@$(MAKE) push-latest-tags IMAGES="$(IMPROC_IMAGES)" TAG=$(TAG)
+
+release-push-specproc: ## bake+push specproc family; refuses the public astroai project
+	@if [ "$(OWNER)" = "astroai" ]; then \
+		echo "specproc includes pPXF and MOOG. OWNER=<group> make release-push-specproc" >&2; \
+		exit 1; \
+	fi
+	TAG=$(TAG) docker buildx bake --push specproc specproc-terminal specproc-notebook
+	@$(MAKE) push-latest-tags IMAGES="$(SPECPROC_IMAGES)" TAG=$(TAG)
 
 lock-ray: ## regenerate config/ray-deps.lock from config/ray-deps.txt (Python 3.13, Ray).
 	@tmp=$$(mktemp); \
@@ -218,6 +247,10 @@ test-ray: build-ray build/base ## Ray image checks + local cluster join + UI
 test-improc-local: ## verify improc CLIs (build first: make build-improc)
 	chmod +x scripts/test-improc-local.sh
 	./scripts/test-improc-local.sh $(BUILD_TAG)
+
+test-specproc-local: ## verify specproc family (build first: make build-specproc)
+	chmod +x scripts/test-specproc-local.sh
+	./scripts/test-specproc-local.sh $(BUILD_TAG)
 
 test-base-local: ## run every base CLI for real (not just command -v)
 	chmod +x scripts/test-base-local.sh

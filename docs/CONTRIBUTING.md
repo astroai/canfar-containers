@@ -54,7 +54,7 @@ git checkout -b my-change
 | Marimo starter notebook | **Edit in** [astroai-lab](https://github.com/astroai/canfar-lab) `data/notebooks/starter.py`, then `make sync-marimo-starter` | `marimo` |
 | Jupyter / Ray starters | **Edit in** lab `data/notebooks/`, then `make sync-notebook-starters` | `notebook` |
 | CADC client list | `config/cadc-tools.txt` | `base`+ |
-| **`astroai` CLI** | `config/astroai-lab.in` + `config/astroai-lab.lock` | `base`+ |
+| **`astroai` CLI** | `config/astroai-lab.in` + lock, then git `main` at image build | `base`+ |
 | Ray | `config/ray-deps.txt`, `dockerfiles/ray-*`, `ray/`, `scripts/*ray*` | `make build-ray` |
 | Bake graph, tags | `docker-bake.hcl`, `Makefile` | Depends |
 
@@ -83,7 +83,7 @@ uv run python -c "print('ok')"
 
 ## Refresh the `astroai-lab` lock
 
-`config/astroai-lab.in` tracks `astroai-lab` `main` unpinned. Images install from the compiled lock (git SHA). After lab lands on `origin/main`, CI `lock-check` fails until you regenerate:
+`config/astroai-lab.in` tracks `canfar-lab` `main` unpinned. Images install the compiled lock, then reinstall `canfar-lab` from that git URL, so a rebuild follows `main` without a lock bump. `lock-check` still fails when the compiled lock drifts from `.in`; regenerate it then:
 
 ```bash
 cd ../astroai-lab
@@ -97,7 +97,7 @@ make test-local BUILD_TAG=local
 make test-ray BUILD_TAG=local
 ```
 
-Same pattern for `make lock-ray` when unpinned Ray deps move. OpenResearch pins an upstream alphaXiv release (`ORX_VERSION` + `ORX_SHA256` in its Dockerfile); bump both together on new releases.
+Same pattern for `make lock-ray` when unpinned Ray deps move. OpenResearch, OpenScience, OpenVSCode, dsh, and canfar-lab are resolved at image build time; there is no version bump to make in the Dockerfiles.
 
 ## Writable CADC venv
 

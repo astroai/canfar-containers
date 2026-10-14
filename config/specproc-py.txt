@@ -1,0 +1,40 @@
+# Science Python for /opt/astroai/venv/specproc (uv). Unpinned — resolve at image build.
+# Fortran synthesizers, git-only wrappers, pymoog, pykurucz, and iNNterpol
+# are installed in the Dockerfile. astroARIADNE is installed there too so this
+# file does not bust the compiled layers.
+# Line lists, MARCS atmospheres, NLTE grids, PHOENIX/BT-Settl spectra, and FSPS
+# spectral libraries beyond the FSPS checkout stay on a mount. SPS_HOME points
+# at the checkout.
+
+# Shared astronomy layer (this venv does not inherit the session science venv)
+numpy
+scipy
+pandas
+matplotlib
+astropy
+astroquery
+h5py
+emcee
+dynesty
+corner
+dill
+
+# Generic spectrum tools
+specutils
+specreduce
+pyspeckit
+spectres
+lmfit
+
+# Engines with wheels
+ppxf
+pysme-astro
+fsps
+astro-prospector
+astro-sedpy
+
+# Nidever Python (PyPI). doppler on PyPI is unrelated; the package is thedoppler.
+dlnpyutils
+annieslasso
+thedoppler
+zenodo_get

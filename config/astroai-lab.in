@@ -1,8 +1,9 @@
-# Source constraint for canfar-lab, consumed by `make lock-astroai-lab` / `make lock-canfar-lab`.
+# Source constraint for canfar-lab, consumed by `make lock-astroai-lab`.
 #
-# Unpinned on purpose: the container TAG is the user-facing version, so the
-# image bakes whatever `main` is at lock time (regenerate with
-# `make lock-canfar-lab` — never edit the lockfile by hand).
+# Unpinned on purpose. The lock pins transitive dependencies for lock-check.
+# Image builds install that lock, then reinstall canfar-lab from this git URL
+# so the package tracks the default branch at build time. Never edit the
+# lockfile by hand.
 #
 # Tracks astroai/canfar-lab main (unpinned).
 canfar-lab @ git+https://github.com/astroai/canfar-lab.git

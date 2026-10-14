@@ -1,7 +1,7 @@
 Serve the OpenScience web workspace under a path prefix (reverse proxy).
 
 The workspace assumed it owned the origin root: absolute /assets URLs,
-router paths and API routes all started at /. Behind the CANFAR Studio
+router paths and API routes all started at /. Behind the CANFAR session
 proxy it lives at /session/contrib/<id>/openscience/. The proxy sets
 window.__OPENSCIENCE_BASE_URL__ to that mount from a same-origin script
 loaded before the app (the CSP forbids inline scripts); the router,
@@ -9,7 +9,7 @@ default server URL and API routes follow it. A same-origin trusted proxy may als
 the terminal, which is otherwise loopback-only.
 
 Build with OPENSCIENCE_WEB_BASE=./ so index.html uses relative assets.
-Applies to synthetic-sciences/openscience v2.0.143.
+Tracks synthetic-sciences/openscience main. Re-check `git apply --check` when a build fails.
 ---
 diff --git a/frontend/workspace/src/app.tsx b/frontend/workspace/src/app.tsx
 index 639f96a..d327c9f 100644
@@ -98,18 +98,18 @@ index 4a10cdc..fc73fa5 100644
 +  return loopback.has(url.hostname) || trustedProxy(url, base)
  }
 diff --git a/frontend/workspace/src/config/server-url.test.ts b/frontend/workspace/src/config/server-url.test.ts
-index a211a58..e7909a4 100644
+index bff45bc..de34373 100644
 --- a/frontend/workspace/src/config/server-url.test.ts
 +++ b/frontend/workspace/src/config/server-url.test.ts
-@@ -1,6 +1,7 @@
- import { describe, expect, test } from "bun:test"
+@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
  import {
    hasDesktopUpdateCapability,
+   remoteWorkspace,
 +  resolveBasePath,
    resolveDefaultServerUrl,
    resolveDesktopServerUrl,
    resolveServerRoute,
-@@ -46,6 +47,36 @@ describe("resolveDefaultServerUrl", () => {
+@@ -47,6 +48,36 @@ describe("resolveDefaultServerUrl", () => {
        resolveDefaultServerUrl({ ...base, dev: true, origin: "http://localhost:5173", stored: "http://localhost:4096" }),
      ).toBe("http://localhost:4096")
    })
@@ -146,7 +146,7 @@ index a211a58..e7909a4 100644
  })
  
  describe("resolveDesktopServerUrl", () => {
-@@ -79,6 +110,15 @@ describe("resolveServerRoute", () => {
+@@ -80,6 +111,15 @@ describe("resolveServerRoute", () => {
      ).toBe("http://127.0.0.1:4100/api/atlas/project?directory=%2Ftmp%2Fresearch")
    })
  
@@ -163,7 +163,7 @@ index a211a58..e7909a4 100644
      expect(resolveServerRoute("/settings/updates?refresh=1", "http://127.0.0.1:4096", base.origin)).toBe(
        "http://127.0.0.1:4096/settings/updates?refresh=1",
 diff --git a/frontend/workspace/src/config/server-url.ts b/frontend/workspace/src/config/server-url.ts
-index 0fd4f18..0e903a9 100644
+index ecd1252..eb3bf77 100644
 --- a/frontend/workspace/src/config/server-url.ts
 +++ b/frontend/workspace/src/config/server-url.ts
 @@ -28,12 +28,36 @@ function staleLoopbackDefault(input: DefaultServerInput) {
@@ -206,7 +206,7 @@ index 0fd4f18..0e903a9 100644
  }
  
  export function resolveDesktopServerUrl(search: string, origin: string) {
-@@ -49,5 +73,6 @@ export function hasDesktopUpdateCapability(search: string) {
+@@ -49,7 +73,8 @@ export function hasDesktopUpdateCapability(search: string) {
   * hosted separately, while keeping compact relative URLs in bundled builds. */
  export function resolveServerRoute(path: string, server: string, pageOrigin: string) {
    const target = new URL(server, pageOrigin)
@@ -214,13 +214,15 @@ index 0fd4f18..0e903a9 100644
 +  const mounted = target.pathname.replace(/\/+$/, "") + path
 +  return target.origin === pageOrigin ? mounted : new URL(mounted, target).toString()
  }
+ 
+ /** Keep a remote window's folder picker server-backed after client navigation
 diff --git a/frontend/workspace/src/env.d.ts b/frontend/workspace/src/env.d.ts
-index fcaecf2..832685a 100644
+index a9c619f..678785e 100644
 --- a/frontend/workspace/src/env.d.ts
 +++ b/frontend/workspace/src/env.d.ts
-@@ -12,4 +12,5 @@ interface ImportMeta {
- 
+@@ -13,4 +13,5 @@ interface ImportMeta {
  interface Window {
+   openscienceDesktop?: { openWorkspace(url: string): Promise<boolean> }
    __OPENSCIENCE_BASE_URL__?: string
 +  __OPENSCIENCE_TRUSTED_PROXY__?: boolean
  }

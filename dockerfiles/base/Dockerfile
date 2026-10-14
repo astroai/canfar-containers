@@ -184,6 +184,23 @@ RUN uv venv /opt/canfar \
        /opt/canfar/bin/canfar-lab env export --no-ensure >/dev/null \
     && uv cache clean
 
+# The lock above pins the rest of the environment. canfar-lab itself tracks
+# the default branch; this layer rebuilds when astroai/canfar-lab main moves.
+ADD https://api.github.com/repos/astroai/canfar-lab/git/refs/heads/main /tmp/canfar-lab-head.json
+COPY scripts/install-canfar-lab-head.sh /tmp/install-canfar-lab-head.sh
+RUN bash /tmp/install-canfar-lab-head.sh /opt/canfar \
+    && /opt/canfar/bin/canfar-lab cluster --help >/dev/null \
+    && printf '%s\n' \
+        '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05"}}' \
+        '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
+        | /opt/canfar/bin/canfar-lab mcp serve \
+        | grep -q cluster_start \
+    && /opt/canfar/bin/python -c "import importlib.resources as r, shutil; p=r.files('canfar_lab.data.shell'); shutil.copy(p.joinpath('profile.sh'), '/etc/astroai-lab/profile.sh'); shutil.copy(p.joinpath('hooks.sh'), '/etc/astroai-lab/hooks.sh')" \
+    && chmod a+r /etc/astroai-lab/profile.sh /etc/astroai-lab/hooks.sh \
+    && HOME=/tmp WORK=/srcdir SCRATCH=/scratch \
+       /opt/canfar/bin/canfar-lab env export --no-ensure >/dev/null \
+    && rm -f /tmp/install-canfar-lab-head.sh /tmp/canfar-lab-head.json
+
 COPY scripts/lib/astroai-env-common.sh scripts/lib/astroai-ui.sh scripts/lib/skaha-proxy.sh \
      scripts/lib/session_title.py /opt/astroai/lib/
 COPY scripts/canfar-verify.sh scripts/canfar-verify-agents.sh scripts/bootstrap-canfar-registry.sh scripts/bootstrap-ray-manager-env.sh scripts/upgrade-cadc-tools.sh scripts/peek /opt/astroai/bin/

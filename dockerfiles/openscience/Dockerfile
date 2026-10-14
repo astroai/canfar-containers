@@ -8,7 +8,6 @@ ARG REGISTRY=images.canfar.net
 ARG OWNER=astroai
 ARG BASE_NAME=base
 ARG TAG=local
-ARG OPENSCIENCE_VERSION=2.0.143
 ARG BUN_VERSION=1.3.14
 # Must match MICROMAMBA_VERSION and the linux-64 digests pinned in OpenScience's
 # science/kernel/environment-manager.ts, or it downloads its own copy.
@@ -17,11 +16,13 @@ ARG MICROMAMBA_ARCHIVE_SHA256=8761c382127e6363bd9e0a2451aa3ef90d071a79133f736e2f
 ARG MICROMAMBA_BINARY_SHA256=366cd9cd8be14df1ab8ed50352a82111082a36686b2d389fdb79a92c3fafb3e3
 
 FROM oven/bun:${BUN_VERSION} AS openscience
-ARG OPENSCIENCE_VERSION
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \
     && rm -rf /var/lib/apt/lists/*
-RUN git clone --depth 1 --branch "v${OPENSCIENCE_VERSION}" \
-        https://github.com/synthetic-sciences/openscience /src
+# Rebuild this stage when the default branch moves.
+ADD https://api.github.com/repos/synthetic-sciences/openscience/git/refs/heads/main /tmp/openscience-head.json
+RUN test -s /tmp/openscience-head.json \
+    && git clone --depth 1 https://github.com/synthetic-sciences/openscience.git /src \
+    && git -C /src rev-parse HEAD
 COPY patches/openscience/ /patches/
 WORKDIR /src
 RUN git apply /patches/*.patch
@@ -34,7 +35,6 @@ RUN OPENSCIENCE_CHANNEL=latest OPENSCIENCE_WEB_BASE=./ \
 
 FROM ${REGISTRY}/${OWNER}/${BASE_NAME}:${TAG}
 
-ARG OPENSCIENCE_VERSION
 ARG MICROMAMBA_VERSION
 ARG MICROMAMBA_ARCHIVE_SHA256
 ARG MICROMAMBA_BINARY_SHA256
@@ -43,7 +43,7 @@ LABEL io.canfar.skaha.session.type="contributed" \
       org.opencontainers.image.title="AstroAI OpenScience" \
       org.opencontainers.image.description="OpenScience research workspace for CANFAR" \
       org.opencontainers.image.source="https://github.com/synthetic-sciences/openscience" \
-      org.opencontainers.image.version="${OPENSCIENCE_VERSION}"
+      org.opencontainers.image.version="main"
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 

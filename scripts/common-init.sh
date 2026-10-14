@@ -23,6 +23,10 @@ if [[ -f /etc/profile.d/improc.sh ]]; then
     # shellcheck disable=SC1091
     source /etc/profile.d/improc.sh
 fi
+if [[ -f /etc/profile.d/specproc.sh ]]; then
+    # shellcheck disable=SC1091
+    source /etc/profile.d/specproc.sh
+fi
 astroai_boot_log "common-init:profile.d done"
 
 _cache_dirs=(

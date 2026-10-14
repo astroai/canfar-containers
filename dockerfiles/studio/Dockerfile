@@ -8,33 +8,19 @@ ARG REGISTRY=images.canfar.net
 ARG OWNER=astroai
 ARG BASE_NAME=base
 ARG TAG=local
-# deepseek-ai/deepseek-harness master (tag dsh-v0.2.1-alpha.1).
-# 0.1.7+ stores Models in the profile patch and imports settings.yaml once.
-ARG DSH_VERSION=0.2.1-alpha.1
-ARG DSH_CACHEBUST=1
 # One pnpm for the image and every user: a node_modules built by one pnpm
 # major and changed by another fails with a layout error.
 ARG PNPM_VERSION=12.6.0
-ARG DSHMARKET_VERSION=1.66.9
 ARG GHOSTTY_WEB_VERSION=0.4.0-next.20.g1858a59
 ARG NODE_PTY_VERSION=1.1.0
 ARG WS_VERSION=8.21.3
-ARG OPENVSCODE_VERSION=openvscode-server-v1.109.5
-ARG OPENVSCODE_SHA256_X64=b433bf4f0227321a7014d8460d10a8f958adc0f45aa79bd889e84e65e8f88363
-ARG OPENVSCODE_SHA256_ARM64=36d9c14036489b63de84ebace837fcacf7e60e669a0dc715802c5443684ea4dc
 
 FROM ${REGISTRY}/${OWNER}/${BASE_NAME}:${TAG}
 
-ARG DSH_VERSION
-ARG DSH_CACHEBUST
 ARG PNPM_VERSION
-ARG DSHMARKET_VERSION
 ARG GHOSTTY_WEB_VERSION
 ARG NODE_PTY_VERSION
 ARG WS_VERSION
-ARG OPENVSCODE_VERSION
-ARG OPENVSCODE_SHA256_X64
-ARG OPENVSCODE_SHA256_ARM64
 
 LABEL io.canfar.skaha.session.type="contributed" \
       org.opencontainers.image.title="AstroAI Studio" \
@@ -43,35 +29,50 @@ LABEL io.canfar.skaha.session.type="contributed" \
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-# 1. dsh: Coding agent harness (pinned release, image-baked into /opt/astroai).
+# 1. dsh: coding agent harness, image-baked into /opt/astroai.
+# The CLI published from deepseek-harness master is the npm dist-tag `alpha`.
+# `apps/cli/lib` is a build product and is not in git; npm `latest` is an older rc.
 # pnpm lives in a shared corepack home so `dsh plugin` and the plugin market
 # use the pinned version without a per-user download into $HOME.
 ENV COREPACK_HOME=/opt/corepack \
     COREPACK_DEFAULT_TO_LATEST=0 \
     COREPACK_ENABLE_DOWNLOAD_PROMPT=0
-RUN npm install -g --prefix /opt/astroai "@deepseek-ai/dsh@${DSH_VERSION}" \
+ADD https://api.github.com/repos/deepseek-ai/deepseek-harness/git/refs/heads/master /tmp/dsh-head.json
+RUN test -s /tmp/dsh-head.json \
+    && npm install -g --prefix /opt/astroai "@deepseek-ai/dsh@alpha" \
     && /opt/astroai/bin/dsh --version \
     && corepack enable \
     && corepack prepare "pnpm@${PNPM_VERSION}" --activate \
     && chmod -R a+rX "${COREPACK_HOME}" \
-    && pnpm --version
+    && pnpm --version \
+    && rm -f /tmp/dsh-head.json
 
 # Plugins baked for the Studio profile: canfar-lab copies every dependency
 # here that declares a dsh bundle into ~/.dsh/profiles/astroai and enables it.
-RUN mkdir -p /opt/astroai/dsh-plugins \
+# dshmarket tracks its default branch. pnpm 12 ignores a "pnpm" key in
+# package.json and waits out freshly published versions unless
+# minimumReleaseAge is 0. "*" allows the alpha CLI as a peer.
+ADD https://api.github.com/repos/dsh-market/dsh-market/git/refs/heads/main /tmp/dshmarket-head.json
+RUN test -s /tmp/dshmarket-head.json \
+    && mkdir -p /opt/astroai/dsh-plugins \
     && cd /opt/astroai/dsh-plugins \
     && printf '%s\n' \
         '{' \
         '  "name": "astroai-dsh-plugins",' \
         '  "private": true,' \
-        '  "dependencies": {"dshmarket": "'"${DSHMARKET_VERSION}"'"},' \
-        '  "pnpm": {"peerDependencyRules": {"allowedVersions": {"@deepseek-ai/dsh-settings": "'"${DSH_VERSION}"'"}}}' \
+        '  "dependencies": {"dshmarket": "*"}' \
         '}' \
         > package.json \
-    && printf 'nodeLinker: hoisted\n' > pnpm-workspace.yaml \
+    && printf '%s\n' \
+        'nodeLinker: hoisted' \
+        'minimumReleaseAge: 0' \
+        'peerDependencyRules:' \
+        '  allowedVersions:' \
+        '    "@deepseek-ai/dsh-settings": "*"' \
+        > pnpm-workspace.yaml \
     && pnpm install --prod \
     && test -f node_modules/dshmarket/cordis.patch.yml \
-    && rm -rf "$(pnpm store path)" \
+    && rm -rf "$(pnpm store path)" /tmp/dshmarket-head.json \
     && chmod -R a+rX /opt/astroai/dsh-plugins
 
 # Keys-only: do not force DeepSeek-only onboarding gate
@@ -118,21 +119,11 @@ COPY config/ipython_kernel_config.py /etc/ipython/ipython_kernel_config.py
 COPY config/marimo.toml /opt/astroai/config/marimo.toml
 COPY config/notebooks/ /opt/astroai/notebooks/
 
-# 4. OpenVSCode Server (browser IDE)
-RUN ARCH=$(uname -m | sed 's/x86_64/x64/; s/aarch64/arm64/') \
-    && case "${ARCH}" in \
-        x64) SHA256="${OPENVSCODE_SHA256_X64}" ;; \
-        arm64) SHA256="${OPENVSCODE_SHA256_ARM64}" ;; \
-        *) echo "unsupported arch: ${ARCH}" >&2; exit 1 ;; \
-       esac \
-    && TARBALL="${OPENVSCODE_VERSION}-linux-${ARCH}.tar.gz" \
-    && curl -fsSL -o "${TARBALL}" \
-        "https://github.com/gitpod-io/openvscode-server/releases/download/${OPENVSCODE_VERSION}/${TARBALL}" \
-    && echo "${SHA256}  ${TARBALL}" | sha256sum -c - \
-    && tar -xzf "${TARBALL}" -C /opt \
-    && mv "/opt/${OPENVSCODE_VERSION}-linux-${ARCH}" /opt/openvscode-server \
-    && rm "${TARBALL}" \
-    && chmod -R a+rx /opt/openvscode-server
+# 4. OpenVSCode Server (browser IDE): current GitHub release.
+COPY scripts/install-openvscode-latest.sh /tmp/install-openvscode-latest.sh
+ADD https://api.github.com/repos/gitpod-io/openvscode-server/releases/latest /tmp/openvscode-release.json
+RUN bash /tmp/install-openvscode-latest.sh \
+    && rm -f /tmp/install-openvscode-latest.sh /tmp/openvscode-release.json
 
 RUN mkdir -p /opt/openvscode-server/data/Machine
 COPY config/openvscode-settings.json /opt/openvscode-server/data/Machine/settings.json

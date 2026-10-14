@@ -1,26 +1,32 @@
 # syntax=docker/dockerfile:1
 # AstroAI openresearch: OpenResearch (orx) autoresearch dashboard.
-# Installs the pinned upstream alphaXiv release musl binary — the Ray Jobs
-# compute backend ships upstream since v0.1.88 (#141), so no fork build.
+# Compiles the latest commit of alphaXiv/openresearch-cli (default branch).
+# The desktop/GTK feature stays off. Debian's rustc is too old for current
+# crates, so the builder is the floating official Rust image.
 # Proxies :4791 → :5000; embeds ghostty-web at /astroai-terminal/.
 
 ARG REGISTRY=images.canfar.net
 ARG OWNER=astroai
 ARG BASE_NAME=base
 ARG TAG=local
-# Pinned upstream release. Bump ORX_SHA256 together with ORX_VERSION
-# (sha256 of openresearch-cli-x86_64-unknown-linux-musl.tar.xz).
-ARG ORX_VERSION=v0.2.15
-ARG ORX_SHA256=f36ed4095f4839767a162a555d9e7eafc04f70f0664ce3767178f81fc0b45c86
 # Keep in sync with dockerfiles/terminal/Dockerfile.
 ARG GHOSTTY_WEB_VERSION=0.4.0-next.20.g1858a59
 ARG NODE_PTY_VERSION=1.1.0
 ARG WS_VERSION=8.21.3
 
+FROM rust:1-bookworm AS orx
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+# Rebuild this stage when the default branch moves.
+ADD https://api.github.com/repos/alphaXiv/openresearch-cli/git/refs/heads/main /tmp/orx-head.json
+RUN test -s /tmp/orx-head.json \
+    && git clone --depth 1 https://github.com/alphaXiv/openresearch-cli.git /tmp/orx \
+    && git -C /tmp/orx rev-parse HEAD \
+    && cargo build --release --locked --manifest-path /tmp/orx/Cargo.toml \
+    && install -D -m 0755 /tmp/orx/target/release/orx /out/orx
+
 FROM ${REGISTRY}/${OWNER}/${BASE_NAME}:${TAG}
 
-ARG ORX_VERSION
-ARG ORX_SHA256
 ARG GHOSTTY_WEB_VERSION
 ARG NODE_PTY_VERSION
 ARG WS_VERSION
@@ -28,21 +34,12 @@ ARG WS_VERSION
 LABEL io.canfar.skaha.session.type="contributed" \
       org.opencontainers.image.title="AstroAI OpenResearch" \
       org.opencontainers.image.description="OpenResearch (orx) autoresearch dashboard for CANFAR" \
-      org.opencontainers.image.source="https://github.com/alphaXiv/OpenResearch" \
-      org.opencontainers.image.version="${ORX_VERSION}"
+      org.opencontainers.image.source="https://github.com/alphaXiv/openresearch-cli" \
+      org.opencontainers.image.version="main"
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
-# Verify with the upstream filename — release .sha256 assets pin it.
-RUN TARBALL="openresearch-cli-x86_64-unknown-linux-musl.tar.xz"; \
-    curl -fsSL \
-      "https://github.com/alphaXiv/openresearch-cli/releases/download/${ORX_VERSION}/${TARBALL}" \
-      -o "/tmp/${TARBALL}" \
-    && printf '%s *%s\n' "${ORX_SHA256}" "${TARBALL}" > /tmp/orx.sha256 \
-    && cd /tmp && sha256sum -c orx.sha256 \
-    && tar -xJf "/tmp/${TARBALL}" \
-    && install -m 0755 openresearch-cli-x86_64-unknown-linux-musl/orx /opt/astroai/bin/orx \
-    && rm -rf "/tmp/${TARBALL}" /tmp/orx.sha256 /tmp/openresearch-cli-x86_64-unknown-linux-musl \
-    && /opt/astroai/bin/orx --version
+COPY --from=orx /out/orx /opt/astroai/bin/orx
+RUN /opt/astroai/bin/orx --version
 
 # ghostty-web sidecar (same stack as astroai/terminal; proxy mounts /astroai-terminal/).
 RUN apt-get update && apt-get install -y --no-install-recommends tmux \

@@ -50,6 +50,20 @@ Register **`improc-terminal`** (Contributed) and **`improc-notebook`** (Notebook
 leave **`improc`** headless for batch. Build/push: `make build-improc` /
 `make push-improc`.
 
+**`specproc` is not an `astroai` catalog image.** It vendors pPXF and MOOG,
+which are not licensed for public redistribution. Build locally with
+`make build-specproc`. Publish only into the group Harbor project:
+
+```bash
+OWNER=<group> make push-specproc TAG=<tag> BUILD_TAG=<tag>
+```
+
+Register that project's `specproc-terminal` (Contributed, 5000) and
+`specproc-notebook` (Notebook, 8888). Leave `specproc` headless. Do not add
+these names to the public `astroai` project or to `scripts/harbor-cleanup.sh`.
+Mount the shared line lists, grids, and filters readonly at `/specproc-data`
+(see [USAGE](USAGE.md#spectroscopy-specproc)). The image does not contain them.
+
 Users authenticate once with `canfar login` (credentials under `/arc/home`,
 `~/.canfar/config.yaml`). Ray manager sessions reuse that home volume.
 
@@ -177,19 +191,19 @@ make test-canfar-session IMAGE=openscience TAG=26.09
 ```
 
 
-**OpenResearch notes:** Image installs the pinned upstream [alphaXiv OpenResearch](https://github.com/alphaXiv/OpenResearch) musl release (`ORX_VERSION` + `ORX_SHA256` in the Dockerfile; currently **v0.2.15**; the Ray Jobs backend ships upstream since v0.1.88). Startup defaults compute to Ray when a manager Jobs URL is already known; the AstroAI hub **Start batch compute** button ensures an autoscaling ray-manager and wires OpenResearch. Bump `ORX_VERSION`/`ORX_SHA256` together on upstream releases. Since v0.2.10 orx only accepts a loopback Host and a matching Origin; `orx-canfar-proxy.py` presents both for same-origin browser traffic (including WebSockets, which Chromium sends without `Sec-Fetch-Site`) and prefixes the `/_orx/` control paths, so re-run a browser check behind the session path when bumping. See [USAGE.md](USAGE.md).
+**OpenResearch notes:** Image compiles the latest commit of [alphaXiv/openresearch-cli](https://github.com/alphaXiv/openresearch-cli) (default branch; the Ray Jobs backend ships upstream since v0.1.88). Startup defaults compute to Ray when a manager Jobs URL is already known; the AstroAI hub **Start batch compute** button ensures an autoscaling ray-manager and wires OpenResearch. Since v0.2.10 orx only accepts a loopback Host and a matching Origin; `orx-canfar-proxy.py` presents both for same-origin browser traffic (including WebSockets, which Chromium sends without `Sec-Fetch-Site`) and prefixes the `/_orx/` control paths, so re-run a browser check behind the session path when the upstream CLI moves. See [USAGE.md](USAGE.md).
 
-**OpenScience notes:** Built from source at `OPENSCIENCE_VERSION` (bake variable, currently **2.0.143**) with `patches/openscience/*.patch`, so the web workspace works under the session path; re-check the patch applies when bumping. The science venv (`config/science-py.txt`) adds the astropy-affiliated reduction, planning, cube, extinction and sampling packages. The wrapper points OpenScience's managed kernel environment (`<data>/conda/envs/python`) at that venv, with the micromamba binary it pins, so kernels get the astronomy stack instead of a ~2 GB conda download on `/arc`; packages the agent installs go to a per-project directory under the data dir. An environment a user already downloaded is left in place (delete `~/.openscience/conda` to switch), and `MICROMAMBA_*` in the Dockerfile must follow OpenScience's pin on bumps. Startup runs `canfar-lab agent setup openscience` (astroai MCP with CADC/VO tools, CANFAR instructions, astronomy skills under the `astronomy` category, an `astronomy` specialist agent, `/find-data`, `/save-results`, `/scale-out` and `/astro-check` commands, approval gates for cluster/job tools, sandbox off because the image has no bubblewrap). Agent and command files the user edits are kept on later setups. Setting `ASTROAI_LLM_BASE_URL` and `ASTROAI_LLM_MODELS` (comma-separated, optional `ASTROAI_LLM_API_KEY`) in the environment or `~/.astroai/lab/.env` adds an OpenAI-compatible `canfar` provider. Group skills are picked up from a trusted project's `.openscience/skills/`. Startup restarts the server when model keys are saved in the hub. `~/.openscience` is leased to one live session; a second concurrent session uses `$SCRATCH/.openscience`. Session state and logs: `$SCRATCH/.openscience-$USER/`.
+**OpenScience notes:** Built from the latest commit of `synthetic-sciences/openscience` (default branch) with `patches/openscience/*.patch`, so the web workspace works under the session path; re-check the patch applies when a build fails on `git apply`. The science venv (`config/science-py.txt`) adds the astropy-affiliated reduction, planning, cube, extinction and sampling packages. The wrapper points OpenScience's managed kernel environment (`<data>/conda/envs/python`) at that venv, with the micromamba binary it pins, so kernels get the astronomy stack instead of a ~2 GB conda download on `/arc`; packages the agent installs go to a per-project directory under the data dir. An environment a user already downloaded is left in place (delete `~/.openscience/conda` to switch), and `MICROMAMBA_*` in the Dockerfile must follow OpenScience's pin on bumps. Startup runs `canfar-lab agent setup openscience` (astroai MCP with CADC/VO tools, CANFAR instructions, astronomy skills under the `astronomy` category, an `astronomy` specialist agent, `/find-data`, `/save-results`, `/scale-out` and `/astro-check` commands, approval gates for cluster/job tools, sandbox off because the image has no bubblewrap). Agent and command files the user edits are kept on later setups. Setting `ASTROAI_LLM_BASE_URL` and `ASTROAI_LLM_MODELS` (comma-separated, optional `ASTROAI_LLM_API_KEY`) in the environment or `~/.astroai/lab/.env` adds an OpenAI-compatible `canfar` provider. Group skills are picked up from a trusted project's `.openscience/skills/`. Startup restarts the server when model keys are saved in the hub. `~/.openscience` is leased to one live session; a second concurrent session uses `$SCRATCH/.openscience`. Session state and logs: `$SCRATCH/.openscience-$USER/`.
 
 **Agent auto-setup:** UI kinds (`openresearch`, `vscode`, `studio`) default `ASTROAI_LAB_AGENT_SETUP=bg` when unset. **Marimo** stays opt-in for full setup (startup still runs `agent setup marimo` only). Terminal stays opt-in. Failures never block the main UI; see `~/.astroai/lab/agent-setup.log`.
 
-**Studio notes:** Image bakes `@deepseek-ai/dsh@0.2.1-alpha.1` (deepseek-harness master) + pnpm (pins in Dockerfile).
+**Studio notes:** Image bakes `@deepseek-ai/dsh@alpha` (the npm dist-tag published from deepseek-harness `master`; `apps/cli/lib` is not in git) and the current dshmarket, plus pnpm (`PNPM_VERSION` in the Dockerfile).
 Startup runs sync `canfar-lab studio --prepare --profile canfar --no-install`,
 then `dsh --profile astroai` on loopback `:3080` and `studio-canfar-proxy.py`
 on `:5000`. pnpm/TMPDIR land on session scratch. See [STUDIO.md](STUDIO.md).
 pnpm (`PNPM_VERSION`) lives in `COREPACK_HOME=/opt/corepack` so every user
 runs the same major. `/opt/astroai/dsh-plugins` is a hoisted pnpm project
-(`DSHMARKET_VERSION`); `--prepare` copies each dependency that declares a
+of the current dshmarket; `--prepare` copies each dependency that declares a
 dsh bundle into the profile and enables it (override the directory with
 `ASTROAI_STUDIO_BAKED_PLUGINS`). On CANFAR the profile layer sets the
 market's `allowRestart: false`, since the startup supervisor restarts dsh.
@@ -275,8 +289,8 @@ session record ages out. Prefer grepping `[astroai-boot]` for `common-init:ERR`,
   (`CANFAR_LAB_BIN_DIR`) — prefer that over baking agent binaries into images
   or installing onto `/arc` home (NFS is too slow). Skills:
   `npx skills add astroai/canfar-skills`.
-- **Plugins vs skills:** images bake `astroai-lab` from `config/astroai-lab.lock`. That package's plugins are **MCP / tools / rules only**. Skill packs (`SKILL.md`) install via `npx skills add astroai/canfar-skills` (skills.sh), not `canfar-lab agent plugins`.
-- **Release order:** merge/push `astroai-lab` first → `make lock-astroai-lab` here → rebuild/push images. Skipping the lock leaves Harbor on an older lab that still managed skills as plugins.
+- **Plugins vs skills:** images install `config/astroai-lab.lock`, then reinstall `canfar-lab` from git `main`. That package's plugins are **MCP / tools / rules only**. Skill packs (`SKILL.md`) install via `npx skills add astroai/canfar-skills` (skills.sh), not `canfar-lab agent plugins`.
+- **Release order:** merge/push `canfar-lab` first, then rebuild/push images (the image build fetches `main`). Run `make lock-astroai-lab` when `lock-check` reports drift so CI stays green.
 - Quota warnings fire at session start and via `canfar-lab status` (≈80 / 90 / 95%).
 - User data lifecycle (`canfar-lab save`, `canfar data`) is documented for users in [USAGE.md](USAGE.md).
 

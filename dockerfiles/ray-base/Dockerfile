@@ -51,6 +51,15 @@ RUN uv venv /opt/canfar \
     && HOME=/tmp WORK=/srcdir SCRATCH=/scratch \
        /opt/canfar/bin/canfar-lab env export --no-ensure >/dev/null
 
+# canfar-lab tracks the default branch; the lock above pins its dependencies.
+ADD https://api.github.com/repos/astroai/canfar-lab/git/refs/heads/main /tmp/canfar-lab-head.json
+COPY scripts/install-canfar-lab-head.sh /tmp/install-canfar-lab-head.sh
+RUN bash /tmp/install-canfar-lab-head.sh /opt/canfar \
+    && /opt/canfar/bin/python -c "import importlib.resources as r, shutil; p=r.files('canfar_lab.data.shell'); shutil.copy(p.joinpath('profile.sh'), '/etc/astroai-lab/profile.sh'); shutil.copy(p.joinpath('hooks.sh'), '/etc/astroai-lab/hooks.sh')" \
+    && chmod a+r /etc/astroai-lab/profile.sh /etc/astroai-lab/hooks.sh \
+    && HOME=/tmp WORK=/srcdir SCRATCH=/scratch \
+       /opt/canfar/bin/canfar-lab env export --no-ensure >/dev/null
+
 COPY scripts/lib/astroai-env-common.sh scripts/lib/astroai-ui.sh /opt/astroai/lib/
 COPY config/ray-deps.txt config/ray-deps.lock /tmp/
 RUN uv venv /opt/astroai/venv/ray \
@@ -59,7 +68,9 @@ RUN uv venv /opt/astroai/venv/ray \
     && rm /tmp/ray-deps.txt /tmp/ray-deps.lock /tmp/astroai-lab.in /tmp/astroai-lab.lock \
     && /opt/astroai/venv/ray/bin/python -c "import ray; print(ray.__version__)" \
         > /opt/astroai/ray-version.txt \
-    && chmod a+r /opt/astroai/ray-version.txt
+    && chmod a+r /opt/astroai/ray-version.txt \
+    && bash /tmp/install-canfar-lab-head.sh /opt/astroai/venv/ray \
+    && rm -f /tmp/install-canfar-lab-head.sh /tmp/canfar-lab-head.json
 
 ENV PATH="/opt/astroai/venv/ray/bin:/opt/canfar/bin:${PATH}"
 

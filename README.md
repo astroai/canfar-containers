@@ -71,6 +71,7 @@ Requires Docker with buildx. Full loop: [CONTRIBUTING.md](docs/CONTRIBUTING.md).
 make build-all              # session stack
 make build-ray              # ray-manager + ray-worker
 make build-improc           # astronomy image-processing CLIs (+ base)
+make build-specproc         # group spectroscopy stack (+ base); not public astroai
 make build/vscode           # one image (+ parents)
 make test-local             # local smokes
 make test-improc-local      # improc CLI smoke
@@ -87,6 +88,8 @@ make push/vscode TAG=26.09
 make push-all TAG=26.09
 make push-ray TAG=26.09
 make push-improc TAG=26.09
+# specproc is group-only (pPXF and MOOG). OWNER must not be astroai:
+# OWNER=<group> make push-specproc TAG=26.09 BUILD_TAG=26.09
 ```
 
 Default `TAG` is current UTC `YY.MM` (for example `26.10`).
@@ -94,10 +97,10 @@ Default `TAG` is current UTC `YY.MM` (for example `26.10`).
 ## Layout
 
 ```
-dockerfiles/   python (untagged bake parent) → base → sessions | improc; python → ray-base → worker; base → ray-manager
+dockerfiles/   python (untagged bake parent) → base → sessions | improc | specproc; python → ray-base → worker; base → ray-manager
 ray/           manager FastAPI app + worker helpers
 scripts/       startup-*.sh, test-*.sh, profile
-config/        astroai-lab.lock, ray-deps.lock, improc-py.txt, notebooks (synced from lab)
+config/        astroai-lab.lock, ray-deps.lock, improc-py.txt, specproc-py.txt, notebooks (synced from lab)
 docs/          USAGE, RAY, OPERATORS, CONTRIBUTING
 examples/ray/  container-local Ray smokes
 ```

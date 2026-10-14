@@ -11,11 +11,12 @@ Operating guidance for coding agents and maintainers working in `astroai/canfar-
 - **Bake Graph (`docker-bake.hcl`):**
   - Untagged `python` stage (Python 3.13 + uv/pixi foundation).
   - Fat `base` (compilers + session tools) → interactive sessions (`terminal`, `vscode`, `notebook`, `marimo`, `openresearch`, `openscience`, `studio`) and `improc` stack (`improc`, `improc-terminal`, `improc-notebook`).
+  - Group spectroscopy stack (`specproc`, `specproc-terminal`, `specproc-notebook`) is built the same way (`make build-specproc`) but is not part of `build-all` or the public `astroai` release. Push only with `OWNER=<group>` (`make push-specproc` refuses `OWNER=astroai`) because the image includes pPXF and MOOG.
   - Slim `ray-base` → `ray-worker`; fat `base` → `ray-manager`.
 - **Ray Stack (`ray/`):**
   - FastAPI-based Ray cluster manager app (`ray/manager/`) and worker lifecycle helpers (`ray/worker/`).
 - **In-Session Integrations:**
-  - `astroai` CLI and lab utilities installed via lockfiles (`config/astroai-lab.lock`).
+  - `astroai` CLI and lab utilities: `config/astroai-lab.lock` pins the environment, then the image reinstalls `canfar-lab` from git `main`.
   - Writable CADC environment (`/opt/canfar`).
 
 ## Verification Commands and Tiers
