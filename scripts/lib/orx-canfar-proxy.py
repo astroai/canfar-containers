@@ -373,6 +373,8 @@ class OrxProxyHandler(BaseHTTPRequestHandler):
 
     def _proxy(self) -> None:
         path = self.path
+        if PREFIX and (path == PREFIX or path.startswith(PREFIX + "/")):
+            path = path[len(PREFIX) :] or "/"
         # Route AstroAI wizard under /astroai-agents (strip mount for sidecar).
         # Do not rewrite wizard HTML: prefixing quoted `/astroai-agents` in the
         # back-link script makes "Back" navigate to `/` and leave the session.
