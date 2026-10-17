@@ -8,6 +8,7 @@ Multiplexes the unified 5-in-1 workbench over port 5000:
   * ``/vscode/*`` → OpenVSCode Server (127.0.0.1:VSCODE_PORT, default 8080)
   * ``/hub/*`` & ``/astroai-agents/*`` → Compute & Agent Wizard hub (127.0.0.1:WIZARD_PORT, default 4792)
   * ``/api/studio/status`` → Real-time JSON health and system metrics
+  * ``/api/studio/sync`` → Desk dock state (GET) and Desktop sync / cluster actions (POST)
 
 Features:
   * Early 0.0.0.0:5000 bind with instant 200 splash page (prevents Skaha liveness crash-loops)
@@ -24,10 +25,14 @@ import html
 import json
 import os
 import re
+import secrets
 import select
 import shutil
 import socket
+import subprocess
 import sys
+import threading
+import time
 from collections.abc import Callable
 from http.client import HTTPConnection
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -63,7 +68,7 @@ WIZARD_MOUNT = "/astroai-agents"
 TERMINAL_MOUNT = "/astroai-terminal"
 COOKIE_PREFIX = "dsh-auth-"
 BRAND_TITLE = "AstroAI Studio"
-PROXY_REVISION = "15"
+PROXY_REVISION = "16"
 
 
 def _token_file_path() -> str:
@@ -494,6 +499,64 @@ def command_dock_html(mode: str = "bar") -> str:
     return COMMAND_DOCK_TEMPLATE.replace("{prefix}", PREFIX).replace("{mode}", mode)
 
 
+# ---------------------------------------------------------------------------
+# Desk dock (vendored from canfar-lab; pairs with /api/studio/sync)
+# ---------------------------------------------------------------------------
+
+#: Per-process bearer for /api/studio/sync, embedded in the injected config.
+DESK_TOKEN = secrets.token_urlsafe(24)
+_DESK_DOCK_PATH = _LIB / "astroai-dock.html"
+_DESK_DOCK_CACHE: str | None = None
+
+#: Session-side buttons only add what the Studio command dock lacks; navigation
+#: stays there to avoid duplicating it. "Desktop sync" is §6.2 of desk-sync.md.
+SESSION_DESK_BUTTONS: tuple[dict[str, Any], ...] = (
+    {
+        "id": "desktop-sync",
+        "label": "Desktop sync",
+        "action": "sync_to_desktop",
+        "kind": "primary",
+        "title": "Commit + push this session's work, then ask the desk to pull",
+    },
+    {
+        "id": "cluster",
+        "label": "Launch cluster",
+        "action": "cluster",
+        "payload": {"mode": "start"},
+        "title": "Start the CANFAR Ray cluster (never a local one)",
+    },
+)
+
+
+def desk_dock_html() -> str:
+    """The vendored Desk dock asset (single-sourced in canfar-lab)."""
+    global _DESK_DOCK_CACHE
+    if _DESK_DOCK_CACHE is None:
+        try:
+            _DESK_DOCK_CACHE = _DESK_DOCK_PATH.read_text(encoding="utf-8")
+        except OSError:
+            _DESK_DOCK_CACHE = ""
+    return _DESK_DOCK_CACHE
+
+
+def desk_dock_snippet() -> str:
+    """Dock config + asset injected into dsh pages (empty when not vendored)."""
+    asset = desk_dock_html()
+    if not asset:
+        return ""
+    state_url = f"{PREFIX}/api/studio/sync" if PREFIX else "/api/studio/sync"
+    config = {
+        "mode": "session",
+        "token": DESK_TOKEN,
+        "state_url": state_url,
+        "action_url": state_url,
+        "version": PROXY_REVISION,
+        "buttons": list(SESSION_DESK_BUTTONS),
+    }
+    payload = json.dumps(config).replace("</", "<\\/")
+    return f'<script id="astroai-dock-config" type="application/json">{payload}</script>\n{asset}\n'
+
+
 def _send_asset(handler: BaseHTTPRequestHandler, body: bytes, content_type: str) -> None:
     handler.send_response(200)
     handler.send_header("Content-Type", content_type)
@@ -620,6 +683,11 @@ def rewrite_body(data: bytes, content_type: str) -> bytes:
             gt = text.find(">", head) if head >= 0 else -1
             text = text[: gt + 1] + BRAND_STYLE + text[gt + 1 :] if gt >= 0 else BRAND_STYLE + text
         text = _add_dock(text, "bar")
+        if "astroai-dock-config" not in text:
+            snippet = desk_dock_snippet()
+            if snippet:
+                idx = text.lower().rfind("</body>")
+                text = text[:idx] + snippet + text[idx:] if idx >= 0 else text + snippet
     return text.encode("utf-8")
 
 
@@ -906,6 +974,287 @@ def get_studio_status() -> dict[str, Any]:
     }
 
 
+# ---------------------------------------------------------------------------
+# /api/studio/sync — Desktop sync chip + parity state on session dsh pages
+# ---------------------------------------------------------------------------
+
+_SYNC_LOCK = threading.Lock()
+_SYNC_TIMEOUT_SECONDS = 300
+_CLUSTER_TIMEOUT_SECONDS = 60
+_DESK_VERSION_CACHE: dict[str, str] = {"dsh": "", "lab": ""}
+_SYNC_ROUTE = "/api/studio/sync"
+
+
+class SyncBusy(RuntimeError):
+    """An exchange is already running in this proxy process."""
+
+
+class SyncUnavailable(RuntimeError):
+    """The canfar-lab CLI is not installed in this image."""
+
+
+def _lab_binary() -> str | None:
+    explicit = os.environ.get("ASTROAI_LAB_BIN", "").strip()
+    if explicit:
+        return explicit
+    return shutil.which("canfar-lab")
+
+
+def _read_json_file(path: Path) -> dict[str, Any] | None:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _utc_now() -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
+def installed_dsh_version() -> str | None:
+    """Version of the dsh npm package behind ``dsh`` on PATH, when detectable."""
+    if _DESK_VERSION_CACHE["dsh"]:
+        return _DESK_VERSION_CACHE["dsh"]
+    version: str | None = None
+    binary = shutil.which("dsh")
+    if binary:
+        try:
+            resolved = Path(binary).resolve()
+        except OSError:
+            resolved = None
+        if resolved is not None:
+            for parent in list(resolved.parents)[:8]:
+                if parent.name != "dsh":
+                    continue
+                manifest = _read_json_file(parent / "package.json")
+                if manifest and manifest.get("version"):
+                    version = str(manifest["version"])
+                break
+    _DESK_VERSION_CACHE["dsh"] = version or ""
+    return version
+
+
+def lab_version() -> str | None:
+    """canfar-lab version as reported by the CLI (cached; None when absent)."""
+    if _DESK_VERSION_CACHE["lab"]:
+        return _DESK_VERSION_CACHE["lab"]
+    version: str | None = None
+    binary = _lab_binary()
+    if binary:
+        with contextlib.suppress(OSError, subprocess.SubprocessError):
+            proc = subprocess.run(
+                [binary, "--version"],
+                capture_output=True,
+                text=True,
+                timeout=20,
+                check=False,
+            )
+            if proc.returncode == 0:
+                words = (proc.stdout or proc.stderr).strip().split()
+                if words and re.search(r"\d", words[-1]):
+                    version = words[-1]
+    _DESK_VERSION_CACHE["lab"] = version or ""
+    return version
+
+
+def sync_mailbox_state() -> dict[str, Any]:
+    """Read the shared mailbox under ``$HOME`` (doorbell only, never the protocol)."""
+    home = Path(os.path.expanduser("~"))
+    explicit = os.environ.get("CANFAR_LAB_SYNC_MAILBOX", "").strip()
+    box = Path(explicit) if explicit else home / ".astroai" / "lab" / "sync"
+    state: dict[str, Any] = {
+        "path": str(box),
+        "exists": box.is_dir(),
+        "shared": True,  # session side: the mailbox IS the shared home
+        "session_ready": False,
+        "counts": {"requests": 0, "processing": 0, "events": 0},
+        "last_exchange": None,
+    }
+    if not state["exists"]:
+        return state
+    for kind in state["counts"]:
+        directory = box / kind
+        if directory.is_dir():
+            state["counts"][kind] = len(list(directory.glob("*.json")))
+    ready = _read_json_file(box / "ready.json")
+    if ready is not None and ready.get("side") in (None, "session"):
+        state["session_ready"] = True
+    last = _read_json_file(box / "state" / "session.json")
+    if last is not None:
+        state["last_exchange"] = last
+    return state
+
+
+def get_sync_state() -> dict[str, Any]:
+    """Dock chip state for the session side (shape mirrors the desk state)."""
+    return {
+        "ok": True,
+        "mode": "session",
+        "ts": _utc_now(),
+        "root": _studio_workdir() or "",
+        "session": {
+            "id": SESSION_ID or None,
+            "name": BRAND_TITLE,
+            "status": "Running" if SESSION_ID else "Unknown",
+        },
+        "dsh": {"spec": "image", "installed": installed_dsh_version(), "release": None},
+        "lab": {"version": lab_version()},
+        "mailbox": sync_mailbox_state(),
+        "auth": None,
+    }
+
+
+def _token_matches(handler: BaseHTTPRequestHandler) -> bool:
+    supplied = handler.headers.get("X-Desk-Token") or ""
+    return bool(supplied) and secrets.compare_digest(supplied, DESK_TOKEN)
+
+
+def _is_loopback(handler: BaseHTTPRequestHandler) -> bool:
+    try:
+        host = handler.client_address[0]
+    except (AttributeError, IndexError):
+        return False
+    return host in ("127.0.0.1", "::1")
+
+
+def sync_authorized(handler: BaseHTTPRequestHandler) -> bool:
+    """Bearer token from the injected config, or a same-container caller."""
+    return _is_loopback(handler) or _token_matches(handler)
+
+
+def read_json_body(handler: BaseHTTPRequestHandler) -> dict[str, Any]:
+    try:
+        length = int(handler.headers.get("Content-Length") or 0)
+    except ValueError:
+        length = 0
+    if length <= 0:
+        return {}
+    try:
+        raw = handler.rfile.read(min(length, 1_000_000))
+        data = json.loads(raw.decode("utf-8"))
+    except (OSError, ValueError, UnicodeDecodeError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _parse_stdout_json(stdout: str) -> dict[str, Any] | None:
+    start = stdout.find("{")
+    if start < 0:
+        return None
+    try:
+        data = json.loads(stdout[start:])
+    except ValueError:
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def run_desktop_sync(payload: dict[str, Any]) -> dict[str, Any]:
+    """Publish the session's repos and drop the desk an event (§6.2)."""
+    binary = _lab_binary()
+    if not binary:
+        raise SyncUnavailable("canfar-lab CLI not found on PATH in this image")
+    if not _SYNC_LOCK.acquire(blocking=False):
+        raise SyncBusy("an exchange is already running")
+    try:
+        args = [binary, "--json"]
+        if payload.get("dry_run"):
+            args.append("--dry-run")
+        args += ["sync", "exchange", "--to", "desktop"]
+        proc = subprocess.run(
+            args,
+            cwd=_studio_workdir() or None,
+            capture_output=True,
+            text=True,
+            timeout=_SYNC_TIMEOUT_SECONDS,
+            check=False,
+        )
+    finally:
+        _SYNC_LOCK.release()
+    parsed = _parse_stdout_json(proc.stdout or "")
+    result: dict[str, Any] = {
+        "ok": proc.returncode == 0,
+        "action": "sync_to_desktop",
+        "to": "desktop",
+        "returncode": proc.returncode,
+        "cmd": args,
+    }
+    if parsed is not None:
+        result["report"] = parsed.get("published")
+        result["event"] = parsed.get("event")
+        result["mailbox"] = parsed.get("mailbox")
+        result["session_ready"] = parsed.get("session_ready")
+    else:
+        result["output"] = ((proc.stdout or "") + (proc.stderr or ""))[-4000:]
+    return result
+
+
+def _cluster_log_path() -> Path:
+    state = os.environ.get("ASTROAI_STUDIO_STATE", "").strip().rstrip("/")
+    base = Path(state) if state else Path(os.path.expanduser("~")) / ".astroai" / "lab"
+    return base / "logs" / "desk-cluster.log"
+
+
+def run_cluster(payload: dict[str, Any]) -> dict[str, Any]:
+    """`canfar lab cluster` from the session dock: status in-band, start/stop detached."""
+    binary = _lab_binary()
+    if not binary:
+        raise SyncUnavailable("canfar-lab CLI not found on PATH in this image")
+    mode = str(payload.get("mode") or "status").strip().lower()
+    if mode not in ("status", "start", "stop"):
+        raise ValueError(f"unknown cluster mode: {mode!r}")
+    if mode == "status":
+        proc = subprocess.run(
+            [binary, "--json", "cluster", "status"],
+            cwd=_studio_workdir() or None,
+            capture_output=True,
+            text=True,
+            timeout=_CLUSTER_TIMEOUT_SECONDS,
+            check=False,
+        )
+        parsed = _parse_stdout_json(proc.stdout or "")
+        return {
+            "ok": proc.returncode == 0,
+            "action": "cluster",
+            "mode": mode,
+            "returncode": proc.returncode,
+            "manager": parsed,
+            "output": None
+            if parsed is not None
+            else ((proc.stdout or "") + (proc.stderr or ""))[-2000:],
+        }
+    log_path = _cluster_log_path()
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    with log_path.open("ab") as log:
+        subprocess.Popen(
+            [binary, "cluster", mode],
+            cwd=_studio_workdir() or None,
+            stdout=log,
+            stderr=log,
+            start_new_session=True,
+        )
+    return {
+        "ok": True,
+        "action": "cluster",
+        "mode": mode,
+        "log": str(log_path),
+        "hint": "canfar lab cluster status",
+    }
+
+
+SYNC_ACTIONS: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
+    "sync_to_desktop": run_desktop_sync,
+    "cluster": run_cluster,
+}
+
+
+def run_sync_action(action: str, payload: dict[str, Any]) -> dict[str, Any]:
+    runner = SYNC_ACTIONS.get(action)
+    if runner is None:
+        raise ValueError(f"unknown sync action: {action!r}")
+    return runner(payload)
+
+
 def _forward(
     handler: BaseHTTPRequestHandler,
     host: str,
@@ -1054,6 +1403,10 @@ class StudioProxyHandler(BaseHTTPRequestHandler):
         if route == "/api/studio/status":
             _send_json(self, 200, get_studio_status())
             return
+        # Desk dock state (GET) + Desktop sync / cluster actions (POST)
+        if route == _SYNC_ROUTE or route.startswith(_SYNC_ROUTE + "/"):
+            self._studio_sync(route)
+            return
         asset = STUDIO_ASSETS.get(route)
         if asset and self.command in ("GET", "HEAD"):
             _send_asset(self, *asset)
@@ -1113,6 +1466,35 @@ class StudioProxyHandler(BaseHTTPRequestHandler):
 
         # Default: Forward to DSH
         _forward(self, DSH_HOST, DSH_PORT, public)
+
+    def _studio_sync(self, route: str) -> None:
+        if not sync_authorized(self):
+            _send_json(self, 403, {"ok": False, "error": "forbidden"})
+            return
+        if self.command in ("GET", "HEAD"):
+            _send_json(self, 200, get_sync_state())
+            return
+        if self.command != "POST":
+            _send_json(self, 405, {"ok": False, "error": "method not allowed"})
+            return
+        action = route[len(_SYNC_ROUTE) :].strip("/") or "sync_to_desktop"
+        payload = read_json_body(self)
+        self.log_message('"studio-sync" %s %s', self.command, route)
+        try:
+            result = run_sync_action(action, payload)
+        except SyncBusy as exc:
+            _send_json(self, 409, {"ok": False, "error": str(exc)})
+            return
+        except SyncUnavailable as exc:
+            _send_json(self, 503, {"ok": False, "error": str(exc)})
+            return
+        except ValueError as exc:
+            _send_json(self, 400, {"ok": False, "error": str(exc)})
+            return
+        except subprocess.TimeoutExpired as exc:
+            _send_json(self, 504, {"ok": False, "error": f"timed out after {exc.timeout}s"})
+            return
+        _send_json(self, 200 if result.get("ok") else 500, result)
 
     def do_GET(self) -> None:
         self._proxy()

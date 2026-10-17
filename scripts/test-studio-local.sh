@@ -143,7 +143,43 @@ if ! grep -q 'data-astroai-proxy-rev=' /tmp/studio-local-page.$$; then
     echo "FAIL: HTML missing studio proxy fingerprint" >&2
     exit 1
 fi
-rm -f /tmp/studio-local-page.$$
+if ! grep -q 'astroai-dock-revision' /tmp/studio-local-page.$$ \
+    || ! grep -q 'id="astroai-dock-config"' /tmp/studio-local-page.$$; then
+    echo "FAIL: dsh page missing the vendored Desk dock" >&2
+    exit 1
+fi
+DOCK_TOKEN="$(
+    grep -o '"token": *"[^"]*"' /tmp/studio-local-page.$$ | head -1 \
+        | sed 's/.*"token": *"//; s/"$//'
+)"
+if [[ -z "${DOCK_TOKEN}" ]]; then
+    echo "FAIL: Desk dock config carries no bearer token" >&2
+    exit 1
+fi
+
+# Desk sync API (docs/STUDIO.md § Desk Sync): state + single-flight dry-run.
+SYNC_CODE="$(
+    curl -sS -o /tmp/studio-local-sync.$$ -w '%{http_code}' --max-time 10 \
+        -H 'Host: workloads.canfar.net' -H "X-Desk-Token: ${DOCK_TOKEN}" \
+        "http://127.0.0.1:${HOST_PORT}/session/contrib/${SESSION_ID}/api/studio/sync"
+)"
+if [[ "${SYNC_CODE}" != "200" ]] || ! grep -q '"mode": "session"' /tmp/studio-local-sync.$$; then
+    echo "FAIL: /api/studio/sync state returned ${SYNC_CODE}" >&2
+    cat /tmp/studio-local-sync.$$ >&2 || true
+    exit 1
+fi
+SYNC_POST="$(
+    curl -sS -o /tmp/studio-local-sync.$$ -w '%{http_code}' --max-time 120 \
+        -H 'Host: workloads.canfar.net' -H "X-Desk-Token: ${DOCK_TOKEN}" \
+        -H 'Content-Type: application/json' -d '{"dry_run": true}' \
+        "http://127.0.0.1:${HOST_PORT}/session/contrib/${SESSION_ID}/api/studio/sync/sync_to_desktop"
+)"
+if [[ "${SYNC_POST}" != "200" ]] || ! grep -q '"action": "sync_to_desktop"' /tmp/studio-local-sync.$$; then
+    echo "FAIL: /api/studio/sync/sync_to_desktop returned ${SYNC_POST}" >&2
+    cat /tmp/studio-local-sync.$$ >&2 || true
+    exit 1
+fi
+rm -f /tmp/studio-local-sync.$$ /tmp/studio-local-page.$$
 
 # Tools bound to 127.0.0.1 must still accept the public Host the proxy forwards
 # (Jupyter's local-host check answered 403 to every CANFAR request).
@@ -165,5 +201,16 @@ for tool in jupyter/lab jupyter/api/status marimo/ vscode/ terminal/ hub/; do
         exit 1
     fi
 done
+
+# Session-side Desk mailbox: the watcher must ring the doorbell at boot.
+for _ in $(seq 1 30); do
+    [[ -f "${FAKE_HOME}/.astroai/lab/sync/ready.json" ]] && break
+    sleep 2
+done
+if [[ ! -f "${FAKE_HOME}/.astroai/lab/sync/ready.json" ]]; then
+    echo "FAIL: session sync watcher never wrote ready.json" >&2
+    grep -i 'sync watcher' "${BOOT}" >&2 || true
+    exit 1
+fi
 
 echo "OK: studio stamp+dangling .dsh boot → token → 200, tools reachable via public Host (${IMAGE})"

@@ -13,6 +13,7 @@ Contributed session image `images.canfar.net/astroai/studio:<tag>` — unified 5
 | `marimo edit` | `127.0.0.1:2718` | Marimo reactive scientific notebooks | `/marimo/` |
 | `openvscode-server` | `127.0.0.1:8080` | OpenVSCode Server web IDE | `/vscode/` |
 | `agent-wizard.py` | `127.0.0.1:4792` | Compute hub (Ray clusters + batch jobs) | `/hub/` |
+| `canfar-lab sync watch` | poll | Desk mailbox doorbell: absorb desk requests, reply with events | — |
 
 ## Glassmorphism Command Dock
 
@@ -21,6 +22,29 @@ All web interfaces in Studio feature an injected, floating Glassmorphism Command
 - **Middle-click or Cmd/Ctrl-click** opens any tool in a new browser tab.
 - **Status Indicator**: Live pulsing dot reflects health of the underlying daemons.
 - **Toggle visibility**: `Cmd+K` / `Ctrl+K` or clicking the close toggle.
+
+## Desk Sync
+
+The session runs `canfar-lab sync watch --session --interval 30` (started by
+`startup-studio.sh`, restarted by the supervision loop if it dies). It polls the
+shared mailbox at `~/.astroai/lab/sync` — a doorbell only; GitHub is the
+protocol — and answers desk requests by bootstrapping missing repos and
+fast-forwarding. Divergent or dirty trees stop with a report; nothing is ever
+stashed.
+
+The dsh page also carries the **Desk dock** card (vendored from canfar-lab as
+`scripts/lib/astroai-dock.html`, drift-gated by `make desk-assets-check`):
+
+- **Desktop sync** — commit + push this session's repos (secret-scan gated) and
+  drop the desk an event to pull.
+- **Launch cluster** — start the CANFAR Ray cluster (never a local one).
+- Chips show session status, the image dsh and canfar-lab versions, and the
+  last exchange time.
+
+`GET /api/studio/sync` serves the dock state; `POST /api/studio/sync/<action>`
+(`sync_to_desktop`, `cluster`) runs it. Both require the per-process bearer
+embedded in the injected page (or a loopback caller), and the exchange is
+single-flight. Protocol details: canfar-lab `docs/desk-sync.md`.
 
 ## Storage Isolation & Zero-Cache Hygiene
 

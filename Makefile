@@ -1,4 +1,4 @@
-.PHONY: help build-all build/% build-ray build-improc build-specproc push-all push/% push-ray push-improc push-specproc push-latest-tags release-push release-push-ray release-push-improc release-push-specproc test-local test-agent-local test-studio-local test-ray test-improc-local test-specproc-local test-base-local test-host test-canfar test-canfar-agents test-canfar-session test-canfar-ray test-canfar-ray-gpu test-canfar-ray-autoscale clean clean-all lock-ray lock-astroai-lab lock-check lint lint-doc-quota sync-marimo-starter sync-notebook-starters
+.PHONY: help build-all build/% build-ray build-improc build-specproc push-all push/% push-ray push-improc push-specproc push-latest-tags release-push release-push-ray release-push-improc release-push-specproc test-local test-agent-local test-studio-local test-ray test-improc-local test-specproc-local test-base-local test-host test-canfar test-canfar-agents test-canfar-session test-canfar-ray test-canfar-ray-gpu test-canfar-ray-autoscale clean clean-all lock-ray lock-astroai-lab lock-check lint lint-doc-quota sync-marimo-starter sync-notebook-starters sync-desk-assets desk-assets-check
 
 
 SHELL := bash
@@ -52,9 +52,11 @@ help:
 	@echo "  make lock-check         fail if a lockfile drifts from its source"
 	@echo "  make lint-doc-quota     forbid false 'headless consumes quota' advice in test-canfar.sh"
 	@echo "  make test-host          docker-free: peek/osc52 selfchecks + agent-wizard tests"
-	@echo "  make lint               lock-check + lint-doc-quota + test-host"
+	@echo "  make lint               lock-check + lint-doc-quota + test-host + desk-assets-check"
 	@echo "  make sync-marimo-starter copy marimo starter.py from ../astroai-lab"
 	@echo "  make sync-notebook-starters copy starter.ipynb + ray_train.ipynb from lab"
+	@echo "  make sync-desk-assets   vendor the Desk dock asset from ../canfar-lab"
+	@echo "  make desk-assets-check  fail if scripts/lib/astroai-dock.html drifts from its lock"
 	@echo ""
 	@echo "  OWNER=$(OWNER)  REGISTRY=$(REGISTRY)  BUILD_TAG=$(BUILD_TAG)  TAG=$(TAG)"
 
@@ -75,6 +77,14 @@ sync-notebook-starters: sync-marimo-starter ## copy all lab notebooks into confi
 	cp "$(ASTROAI_LAB_IPYNB)" config/notebooks/starter.ipynb
 	cp "$(ASTROAI_LAB_RAY_NB)" config/notebooks/ray_train.ipynb
 	@echo "updated config/notebooks/{starter.ipynb,ray_train.ipynb}"
+
+sync-desk-assets: ## vendor the Desk dock from sibling canfar-lab + refresh the lock
+	@chmod +x scripts/sync-desk-assets.sh
+	@./scripts/sync-desk-assets.sh
+
+desk-assets-check: ## fail if the vendored Desk dock drifts from config/desk-assets.lock
+	@chmod +x scripts/sync-desk-assets.sh
+	@./scripts/sync-desk-assets.sh --check
 
 # --load lands tags in the local docker daemon (required for test-local /
 # test-agent-local). Without it, a docker-container buildx driver only caches.
@@ -314,9 +324,10 @@ test-host: ## docker-free checks (selfchecks + agent-wizard unit tests)
 	@! grep -E 'format = "in ' config/starship.toml
 	@grep -q 'disabled = true' config/starship.toml
 
-lint: ## lockfile drift + doc-quota guard + docker-free host tests
+lint: ## lockfile drift + doc-quota guard + dock-asset drift + docker-free host tests
 	$(MAKE) lock-check
 	$(MAKE) lint-doc-quota
+	$(MAKE) desk-assets-check
 	$(MAKE) test-host
 
 .PHONY: ray-launch

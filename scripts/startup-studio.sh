@@ -66,9 +66,9 @@ cleanup() {
     local rc=$?
     astroai_boot_log "session:exit rc=${rc}"
     kill "${PROXY_PID:-}" "${WIZARD_PID:-}" "${GHOSTTY_PID:-}" "${DSH_PID:-}" \
-         "${JUPYTER_PID:-}" "${MARIMO_PID:-}" "${VSCODE_PID:-}" 2>/dev/null || true
+         "${JUPYTER_PID:-}" "${MARIMO_PID:-}" "${VSCODE_PID:-}" "${SYNC_WATCH_PID:-}" 2>/dev/null || true
     wait "${PROXY_PID:-}" "${WIZARD_PID:-}" "${GHOSTTY_PID:-}" "${DSH_PID:-}" \
-         "${JUPYTER_PID:-}" "${MARIMO_PID:-}" "${VSCODE_PID:-}" 2>/dev/null || true
+         "${JUPYTER_PID:-}" "${MARIMO_PID:-}" "${VSCODE_PID:-}" "${SYNC_WATCH_PID:-}" 2>/dev/null || true
 }
 trap cleanup EXIT INT TERM
 
@@ -155,6 +155,20 @@ _clear_stale_dsh_locks() {
         rm -f "${lock}" && astroai_boot_log "removed stale dsh lock $(basename "${lock}")"
     done
     shopt -u nullglob
+}
+
+_start_sync_watch() {
+    # Session side of the Desk mailbox (docs/desk-sync.md §6.2): poll $HOME for
+    # desk requests, bootstrap/absorb ff-only, answer with events. GitHub is the
+    # protocol; this only rings the doorbell. /arc is a network FS → poll.
+    if [[ -z "${_LAB_BIN:-}" ]] || ! command -v "${_LAB_BIN}" >/dev/null 2>&1; then
+        return 0
+    fi
+    mkdir -p "${HOME}/.astroai/lab/sync"
+    "${_LAB_BIN}" sync watch --session --interval 30 \
+        >>"${_studio_state}/logs/sync-watch.log" 2>&1 &
+    SYNC_WATCH_PID=$!
+    astroai_boot_log "sync watcher started (pid=${SYNC_WATCH_PID}, mailbox=${HOME}/.astroai/lab/sync)"
 }
 
 _dump_dsh_log() {
@@ -335,6 +349,7 @@ if [[ -f /opt/astroai/lib/agent-wizard.py ]]; then
 fi
 
 astroai_boot_log "studio 5-in-1 workbench ready, entering supervision loop"
+_start_sync_watch
 
 # Supervise forever: ensure all services stay alive
 while true; do
@@ -367,6 +382,10 @@ while true; do
     if [[ -n "${WIZARD_PID:-}" ]] && ! kill -0 "${WIZARD_PID}" 2>/dev/null; then
         python3 /opt/astroai/lib/agent-wizard.py >>"${_studio_state}/logs/wizard.log" 2>&1 &
         WIZARD_PID=$!
+    fi
+    if [[ -n "${SYNC_WATCH_PID:-}" ]] && ! kill -0 "${SYNC_WATCH_PID}" 2>/dev/null; then
+        astroai_boot_log "sync watcher died — restarting"
+        _start_sync_watch
     fi
     if _extract_dsh_token && [[ -z "${_token_logged:-}" ]]; then
         astroai_boot_log "dsh web token captured for Skaha Connect redirect"

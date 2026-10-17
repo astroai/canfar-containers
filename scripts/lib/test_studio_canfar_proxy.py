@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parent
 SPEC = importlib.util.spec_from_file_location(
@@ -61,7 +63,8 @@ def test_injects_api_shim_and_chips() -> None:
     assert b'id="astroai-vscode-chip"' in out
     assert b'href="/session/contrib/abc/vscode/"' in out
     assert b"astroai-resource-banner" not in out
-    assert b'data-astroai-proxy-rev="15"' in out
+    assert b'data-astroai-proxy-rev="16"' in out
+    assert b'id="astroai-dock-config"' in out  # session Desk dock (rev 16)
     assert b"data-astroai-tab" in out  # branded tab stick
     assert b"data-astroai-brand" in out  # boot splash wordmark
     assert out.index(b"data-astroai-brand") < out.index(b"</head>")
@@ -288,6 +291,149 @@ def test_status_reports_workdir(tmp_path: Path, monkeypatch) -> None:
     assert not proxy._is_ephemeral("/arc/projects/p")
 
 
+# ---------------------------------------------------------------------------
+# Desk dock + /api/studio/sync (session side of docs/desk-sync.md)
+# ---------------------------------------------------------------------------
+
+
+class _FakeHandler:
+    def __init__(self, *, token: str = "", client: tuple[str, int] = ("10.0.0.9", 1)) -> None:
+        self.headers = {"X-Desk-Token": token} if token else {}
+        self.client_address = client
+
+
+def test_vendored_desk_dock_asset_matches_its_lock() -> None:
+    asset = proxy.desk_dock_html()
+    assert "astroai-dock-revision" in asset
+    assert 'id="astroai-dock"' in asset
+    lock = (ROOT.parent.parent / "config" / "desk-assets.lock").read_text(encoding="utf-8")
+    assert "dock_sha256=" in lock and "dock_revision=" in lock
+
+
+def test_desk_dock_injected_on_dsh_pages() -> None:
+    proxy.PREFIX = "/session/contrib/abc"
+    html = b"<html><head></head><body><h1>dsh</h1></body></html>"
+    out = proxy.rewrite_body(html, "text/html")
+    assert b'id="astroai-dock-config"' in out
+    assert b"astroai-dock-revision" in out  # vendored asset self-identifies
+    assert b"Desktop sync" in out
+    assert b"Launch cluster" in out
+    assert b'"/session/contrib/abc/api/studio/sync"' in out
+    assert out.index(b"astroai-dock-config") < out.index(b"</body>")
+    # Tool pages (mini/corner command dock) do not carry the Desk dock.
+    assert b"astroai-dock-config" not in proxy.inject_dock(html, "text/html")
+    proxy.PREFIX = ""
+    assert '"/api/studio/sync"' in proxy.desk_dock_snippet()
+
+
+def test_desk_dock_config_embeds_the_token() -> None:
+    proxy.PREFIX = "/session/contrib/abc"
+    snippet = proxy.desk_dock_snippet()
+    assert proxy.DESK_TOKEN in snippet
+    assert '"mode": "session"' in snippet
+    assert '"action": "sync_to_desktop"' in snippet
+
+
+def test_sync_authorized_token_or_loopback() -> None:
+    assert proxy.sync_authorized(_FakeHandler(token=proxy.DESK_TOKEN)) is True
+    assert proxy.sync_authorized(_FakeHandler(token="nope")) is False
+    assert proxy.sync_authorized(_FakeHandler()) is False
+    assert proxy.sync_authorized(_FakeHandler(client=("127.0.0.1", 5))) is True
+    assert proxy.sync_authorized(_FakeHandler(client=("::1", 5))) is True
+
+
+def test_sync_state_reads_the_mailbox(tmp_path: Path) -> None:
+    box = tmp_path / ".astroai" / "lab" / "sync"
+    for kind in ("requests", "events", "processing", "state"):
+        (box / kind).mkdir(parents=True)
+    (box / "ready.json").write_text('{"side": "session"}', encoding="utf-8")
+    (box / "requests" / "r1.json").write_text("{}", encoding="utf-8")
+    (box / "state" / "session.json").write_text(
+        '{"absorbed_at": "2026-10-17T00:00:00Z"}', encoding="utf-8"
+    )
+    with mock.patch.dict(os.environ, {"HOME": str(tmp_path)}):
+        state = proxy.get_sync_state()
+    assert state["mode"] == "session"
+    assert set(state["dsh"]) == {"spec", "installed", "release"}
+    assert "version" in state["lab"]
+    mailbox = state["mailbox"]
+    assert mailbox["exists"] is True
+    assert mailbox["session_ready"] is True
+    assert mailbox["counts"]["requests"] == 1
+    assert mailbox["last_exchange"]["absorbed_at"] == "2026-10-17T00:00:00Z"
+
+
+def test_run_desktop_sync_parses_cli_json() -> None:
+    stdout = (
+        '{\n  "to": "desktop",\n  "event": "e.json",\n  "mailbox": "/box",\n'
+        '  "published": {"op": "publish", "repos": []}\n}\n'
+    )
+    completed = proxy.subprocess.CompletedProcess([], 0, stdout, "")
+    with (
+        mock.patch.object(proxy, "_lab_binary", return_value="/x/canfar-lab"),
+        mock.patch.object(proxy, "_studio_workdir", return_value="/scratch/src"),
+        mock.patch.object(proxy.subprocess, "run", return_value=completed) as run,
+    ):
+        result = proxy.run_desktop_sync({"dry_run": True})
+    assert result["ok"] is True
+    assert result["action"] == "sync_to_desktop"
+    assert result["event"] == "e.json"
+    assert result["report"]["op"] == "publish"
+    args = run.call_args[0][0]
+    assert args == ["/x/canfar-lab", "--json", "--dry-run", "sync", "exchange", "--to", "desktop"]
+    assert run.call_args.kwargs["cwd"] == "/scratch/src"
+
+
+def test_run_desktop_sync_single_flight() -> None:
+    assert proxy._SYNC_LOCK.acquire(blocking=False)
+    try:
+        with mock.patch.object(proxy, "_lab_binary", return_value="/x/canfar-lab"):
+            try:
+                proxy.run_desktop_sync({})
+            except proxy.SyncBusy:
+                pass
+            else:
+                raise AssertionError("expected SyncBusy while a run is in flight")
+    finally:
+        proxy._SYNC_LOCK.release()
+
+
+def test_run_sync_action_rejects_unknown() -> None:
+    try:
+        proxy.run_sync_action("nope", {})
+    except ValueError as exc:
+        assert "nope" in str(exc)
+    else:
+        raise AssertionError("expected ValueError for an unknown action")
+
+
+def test_run_cluster_status_uses_cli() -> None:
+    completed = proxy.subprocess.CompletedProcess([], 0, '{"state": "running"}', "")
+    with (
+        mock.patch.object(proxy, "_lab_binary", return_value="/x/canfar-lab"),
+        mock.patch.object(proxy.subprocess, "run", return_value=completed) as run,
+    ):
+        result = proxy.run_cluster({"mode": "status"})
+    assert result["ok"] is True
+    assert result["manager"] == {"state": "running"}
+    assert run.call_args[0][0] == ["/x/canfar-lab", "--json", "cluster", "status"]
+
+
+def test_run_cluster_start_detaches(tmp_path: Path) -> None:
+    with (
+        mock.patch.object(proxy, "_lab_binary", return_value="/x/canfar-lab"),
+        mock.patch.object(proxy, "_studio_workdir", return_value=None),
+        mock.patch.dict(os.environ, {"ASTROAI_STUDIO_STATE": str(tmp_path)}),
+        mock.patch.object(proxy.subprocess, "Popen") as popen,
+    ):
+        result = proxy.run_cluster({"mode": "start"})
+    assert result["ok"] is True
+    assert Path(result["log"]).is_file()
+    assert result["log"].startswith(str(tmp_path))
+    assert popen.call_args[0][0] == ["/x/canfar-lab", "cluster", "start"]
+    assert popen.call_args.kwargs["start_new_session"] is True
+
+
 if __name__ == "__main__":
     import tempfile
 
@@ -310,4 +456,16 @@ if __name__ == "__main__":
         assert proxy.index_token_redirect("/", None) == "/session/contrib/abc/?token=sekrit"
         proxy.PREFIX = ""
         assert proxy.index_token_redirect("/", None) == "/?token=sekrit"
+    test_vendored_desk_dock_asset_matches_its_lock()
+    test_desk_dock_injected_on_dsh_pages()
+    test_desk_dock_config_embeds_the_token()
+    test_sync_authorized_token_or_loopback()
+    with tempfile.TemporaryDirectory() as td:
+        test_sync_state_reads_the_mailbox(Path(td))
+    test_run_desktop_sync_parses_cli_json()
+    test_run_desktop_sync_single_flight()
+    test_run_sync_action_rejects_unknown()
+    test_run_cluster_status_uses_cli()
+    with tempfile.TemporaryDirectory() as td:
+        test_run_cluster_start_detaches(Path(td))
     print("ok")

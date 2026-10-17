@@ -135,13 +135,13 @@ ENV PATH="/opt/astroai/bin:/opt/openvscode-server/bin:${PATH}" \
 
 COPY scripts/lib/skaha-proxy.sh scripts/lib/studio-canfar-proxy.py \
      scripts/lib/agent-wizard.py scripts/lib/orx-wire-compute.py \
-     scripts/lib/session_title.py /opt/astroai/lib/
+     scripts/lib/session_title.py scripts/lib/astroai-dock.html /opt/astroai/lib/
 COPY scripts/common-init.sh scripts/startup-studio.sh /cadc/
 COPY scripts/skaha-startup-studio.sh /skaha/startup.sh
 RUN chmod a+rx /opt/astroai/lib/studio-canfar-proxy.py /opt/astroai/lib/agent-wizard.py \
         /opt/astroai/lib/orx-wire-compute.py /opt/astroai/lib/session_title.py \
         /cadc/*.sh /skaha/startup.sh \
-    && chmod a+r /opt/astroai/lib/skaha-proxy.sh
+    && chmod a+r /opt/astroai/lib/skaha-proxy.sh /opt/astroai/lib/astroai-dock.html
 
 EXPOSE 5000
 
