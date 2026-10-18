@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import importlib.util
+import io
+import json
 import os
 from pathlib import Path
 from unittest import mock
@@ -346,7 +348,9 @@ def test_sync_state_reads_the_mailbox(tmp_path: Path) -> None:
     box = tmp_path / ".astroai" / "lab" / "sync"
     for kind in ("requests", "events", "processing", "state"):
         (box / kind).mkdir(parents=True)
-    (box / "ready.json").write_text('{"side": "session"}', encoding="utf-8")
+    (box / "ready.json").write_text(
+        json.dumps({"side": "session", "ts": proxy._utc_now()}), encoding="utf-8"
+    )
     (box / "requests" / "r1.json").write_text("{}", encoding="utf-8")
     (box / "state" / "session.json").write_text(
         '{"absorbed_at": "2026-10-17T00:00:00Z"}', encoding="utf-8"
@@ -361,6 +365,12 @@ def test_sync_state_reads_the_mailbox(tmp_path: Path) -> None:
     assert mailbox["session_ready"] is True
     assert mailbox["counts"]["requests"] == 1
     assert mailbox["last_exchange"]["absorbed_at"] == "2026-10-17T00:00:00Z"
+    # A marker from an earlier boot (> 2 h) or without a timestamp must not
+    # claim the watcher is up — same rule as canfar-lab's bus.read_ready.
+    for stale in ('{"side": "session", "ts": "2020-01-01T00:00:00Z"}', '{"side": "session"}'):
+        (box / "ready.json").write_text(stale, encoding="utf-8")
+        with mock.patch.dict(os.environ, {"HOME": str(tmp_path)}):
+            assert proxy.get_sync_state()["mailbox"]["session_ready"] is False
 
 
 def test_run_desktop_sync_parses_cli_json() -> None:
@@ -416,7 +426,9 @@ def test_run_cluster_status_uses_cli() -> None:
         result = proxy.run_cluster({"mode": "status"})
     assert result["ok"] is True
     assert result["manager"] == {"state": "running"}
-    assert run.call_args[0][0] == ["/x/canfar-lab", "--json", "cluster", "status"]
+    # `--json` must sit after the subcommand: `cluster status` reads its own
+    # flag, not the root callback's (unlike `sync exchange`).
+    assert run.call_args[0][0] == ["/x/canfar-lab", "cluster", "status", "--json"]
 
 
 def test_run_cluster_start_detaches(tmp_path: Path) -> None:
@@ -432,6 +444,90 @@ def test_run_cluster_start_detaches(tmp_path: Path) -> None:
     assert result["log"].startswith(str(tmp_path))
     assert popen.call_args[0][0] == ["/x/canfar-lab", "cluster", "start"]
     assert popen.call_args.kwargs["start_new_session"] is True
+
+
+class _FakeProxyHandler:
+    """Enough of BaseHTTPRequestHandler for StudioProxyHandler._studio_sync."""
+
+    def __init__(
+        self,
+        *,
+        method: str = "GET",
+        headers: dict[str, str] | None = None,
+        client: tuple[str, int] = ("10.0.0.9", 1),
+        body: bytes = b"",
+    ) -> None:
+        self.command = method
+        self.headers = headers or {}
+        self.client_address = client
+        self.rfile = io.BytesIO(body)
+        self.wfile = io.BytesIO()
+        self.status: int | None = None
+
+    def send_response(self, status: int, message: str | None = None) -> None:
+        self.status = status
+
+    def send_header(self, key: str, value: str) -> None:
+        pass
+
+    def end_headers(self) -> None:
+        pass
+
+    def log_message(self, fmt: str, *args: object) -> None:
+        pass
+
+
+def test_studio_sync_handler_status_codes() -> None:
+    handler = proxy.StudioProxyHandler
+    # Unauthorized non-loopback GET carries no token → 403, no work done.
+    fake = _FakeProxyHandler()
+    with mock.patch.object(proxy, "run_sync_action") as run:
+        handler._studio_sync(fake, "/api/studio/sync")
+    assert fake.status == 403
+    run.assert_not_called()
+    # Token-authorized GET returns the dock state.
+    fake = _FakeProxyHandler(headers={"X-Desk-Token": proxy.DESK_TOKEN})
+    with (
+        mock.patch.object(proxy, "lab_version", return_value="0.7.0"),
+        mock.patch.object(proxy, "installed_dsh_version", return_value=None),
+        mock.patch.object(proxy, "run_sync_action") as run,
+    ):
+        handler._studio_sync(fake, "/api/studio/sync")
+    assert fake.status == 200
+    assert json.loads(fake.wfile.getvalue().decode("utf-8"))["mode"] == "session"
+    run.assert_not_called()
+    # Action outcomes map to status codes (busy, bad input, timeout, I/O).
+    def _post() -> _FakeProxyHandler:
+        return _FakeProxyHandler(
+            method="POST",
+            headers={"X-Desk-Token": proxy.DESK_TOKEN, "Content-Length": "0"},
+        )
+
+    for exc, want in (
+        (proxy.SyncBusy("busy"), 409),
+        (proxy.SyncUnavailable("no cli"), 503),
+        (ValueError("unknown sync action"), 400),
+        (proxy.subprocess.TimeoutExpired([], 300), 504),
+        (OSError("no such cwd"), 500),
+    ):
+        fake = _post()
+        with mock.patch.object(proxy, "run_sync_action", side_effect=exc):
+            handler._studio_sync(fake, "/api/studio/sync/sync_to_desktop")
+        assert fake.status == want, (exc, fake.status)
+    # Malformed JSON never reaches the action (it would drop dry_run).
+    body = b"{nope"
+    headers = {"X-Desk-Token": proxy.DESK_TOKEN, "Content-Length": str(len(body))}
+    fake = _FakeProxyHandler(method="POST", headers=headers, body=body)
+    with mock.patch.object(proxy, "run_sync_action") as run:
+        handler._studio_sync(fake, "/api/studio/sync/sync_to_desktop")
+    assert fake.status == 400
+    run.assert_not_called()
+    # Unsupported method still answers 405 instead of proxying to dsh.
+    fake = _FakeProxyHandler(
+        method="PUT", headers={"X-Desk-Token": proxy.DESK_TOKEN, "Content-Length": "0"}
+    )
+    handler._studio_sync(fake, "/api/studio/sync")
+    assert fake.status == 405
 
 
 if __name__ == "__main__":
@@ -468,4 +564,5 @@ if __name__ == "__main__":
     test_run_cluster_status_uses_cli()
     with tempfile.TemporaryDirectory() as td:
         test_run_cluster_start_detaches(Path(td))
+    test_studio_sync_handler_status_codes()
     print("ok")

@@ -34,6 +34,7 @@ import sys
 import threading
 import time
 from collections.abc import Callable
+from datetime import datetime, timezone
 from http.client import HTTPConnection
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -981,6 +982,8 @@ def get_studio_status() -> dict[str, Any]:
 _SYNC_LOCK = threading.Lock()
 _SYNC_TIMEOUT_SECONDS = 300
 _CLUSTER_TIMEOUT_SECONDS = 60
+#: Same window canfar-lab's ``sync.bus.read_ready`` trusts a ready.json marker.
+_READY_MAX_AGE_SECONDS = 7200
 _DESK_VERSION_CACHE: dict[str, str] = {"dsh": "", "lab": ""}
 _SYNC_ROUTE = "/api/studio/sync"
 
@@ -1058,6 +1061,21 @@ def lab_version() -> str | None:
     return version
 
 
+def _ready_is_fresh(payload: dict[str, Any]) -> bool:
+    """Only trust ``ready.json`` while its ``ts`` is within the watcher window.
+
+    Mirrors ``canfar-lab``'s ``sync.bus.read_ready``: a marker left behind by a
+    previous boot (same shared ``$HOME``) must not claim the watcher is up.
+    """
+    try:
+        when = datetime.fromisoformat(str(payload.get("ts") or "").replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=timezone.utc)
+    return (datetime.now(timezone.utc) - when).total_seconds() <= _READY_MAX_AGE_SECONDS
+
+
 def sync_mailbox_state() -> dict[str, Any]:
     """Read the shared mailbox under ``$HOME`` (doorbell only, never the protocol)."""
     home = Path(os.path.expanduser("~"))
@@ -1078,7 +1096,11 @@ def sync_mailbox_state() -> dict[str, Any]:
         if directory.is_dir():
             state["counts"][kind] = len(list(directory.glob("*.json")))
     ready = _read_json_file(box / "ready.json")
-    if ready is not None and ready.get("side") in (None, "session"):
+    if (
+        ready is not None
+        and ready.get("side") in (None, "session")
+        and _ready_is_fresh(ready)
+    ):
         state["session_ready"] = True
     last = _read_json_file(box / "state" / "session.json")
     if last is not None:
@@ -1124,18 +1146,31 @@ def sync_authorized(handler: BaseHTTPRequestHandler) -> bool:
 
 
 def read_json_body(handler: BaseHTTPRequestHandler) -> dict[str, Any]:
+    """Decode a JSON object body; ``ValueError`` when the body is undecodable.
+
+    An action like ``sync_to_desktop`` mutates the user's repos, so a malformed
+    body must not silently mean "run with defaults" (i.e. without ``dry_run``).
+    """
     try:
         length = int(handler.headers.get("Content-Length") or 0)
     except ValueError:
         length = 0
     if length <= 0:
         return {}
+    if length > 1_000_000:
+        raise ValueError("body too large")
     try:
-        raw = handler.rfile.read(min(length, 1_000_000))
+        raw = handler.rfile.read(length)
         data = json.loads(raw.decode("utf-8"))
-    except (OSError, ValueError, UnicodeDecodeError):
+    except (OSError, UnicodeDecodeError) as exc:
+        raise ValueError("unreadable body") from exc
+    except ValueError as exc:
+        raise ValueError("invalid JSON body") from exc
+    if data is None:
         return {}
-    return data if isinstance(data, dict) else {}
+    if not isinstance(data, dict):
+        raise ValueError("body must be a JSON object")
+    return data
 
 
 def _parse_stdout_json(stdout: str) -> dict[str, Any] | None:
@@ -1205,7 +1240,7 @@ def run_cluster(payload: dict[str, Any]) -> dict[str, Any]:
         raise ValueError(f"unknown cluster mode: {mode!r}")
     if mode == "status":
         proc = subprocess.run(
-            [binary, "--json", "cluster", "status"],
+            [binary, "cluster", "status", "--json"],
             cwd=_studio_workdir() or None,
             capture_output=True,
             text=True,
@@ -1478,9 +1513,9 @@ class StudioProxyHandler(BaseHTTPRequestHandler):
             _send_json(self, 405, {"ok": False, "error": "method not allowed"})
             return
         action = route[len(_SYNC_ROUTE) :].strip("/") or "sync_to_desktop"
-        payload = read_json_body(self)
         self.log_message('"studio-sync" %s %s', self.command, route)
         try:
+            payload = read_json_body(self)
             result = run_sync_action(action, payload)
         except SyncBusy as exc:
             _send_json(self, 409, {"ok": False, "error": str(exc)})
@@ -1493,6 +1528,11 @@ class StudioProxyHandler(BaseHTTPRequestHandler):
             return
         except subprocess.TimeoutExpired as exc:
             _send_json(self, 504, {"ok": False, "error": f"timed out after {exc.timeout}s"})
+            return
+        except OSError as exc:
+            _send_json(
+                self, 500, {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+            )
             return
         _send_json(self, 200 if result.get("ok") else 500, result)
 
