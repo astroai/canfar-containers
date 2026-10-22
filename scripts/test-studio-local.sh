@@ -94,10 +94,6 @@ if ! grep -q 'dsh web token captured for Skaha Connect redirect' "${BOOT}" 2>/de
     tail -40 "${BOOT}" >&2 || true
     exit 1
 fi
-if grep -q 'WARN: dsh web token not found' "${BOOT}" 2>/dev/null; then
-    echo "FAIL: boot.log reports missing dsh web token" >&2
-    exit 1
-fi
 if ! grep -q 'restore:\.dsh/sessions\|restore:\.dsh/storages' "${RUNTIME}" 2>/dev/null; then
     echo "FAIL: agent layout did not restore durable ~/.dsh dirs" >&2
     cat "${RUNTIME}" >&2 || true

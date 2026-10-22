@@ -142,6 +142,20 @@ fi
 cd "${STUDIO_CWD}"
 _dsh_home="${DSH_HOME:-${HOME}/.dsh}"
 mkdir -p "${_dsh_home}"
+# `canfar lab studio` inside the pod reads this file. The image argv above
+# already passes the same hosts to the supervised dsh.
+{
+    printf '%s\n' \
+        ws-uv.canfar.net \
+        ws-uvic.canfar.net \
+        staging.canfar.net \
+        workloads.canfar.net \
+        workload-uv.canfar.net
+    if [[ -n "${ASTROAI_STUDIO_TRUSTED_HOST:-}" ]]; then
+        # shellcheck disable=SC2086
+        printf '%s\n' ${ASTROAI_STUDIO_TRUSTED_HOST//,/ }
+    fi
+} >"${_dsh_home}/studio-trusted-hosts"
 
 _clear_stale_dsh_locks() {
     local lock pid

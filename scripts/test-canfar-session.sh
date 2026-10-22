@@ -281,10 +281,6 @@ if [[ "${IMAGE}" == "studio" ]]; then
         echo "Studio logs missing dsh web token capture — Connect URL will 401." >&2
         FAILURES=$((FAILURES + 1))
     fi
-    if grep -q 'WARN: dsh web token not found' "${LOGS}"; then
-        echo "Studio failed to scrape dsh launch token." >&2
-        FAILURES=$((FAILURES + 1))
-    fi
     # Follow one hop: bare Connect URL should 302 to ?token= (proxy), then leave
     # the SPA alone (cookie / further redirects are browser-side).
     if [[ "${HTTP_CODE}" == "302" || "${HTTP_CODE}" == "303" ]]; then

@@ -62,7 +62,7 @@ Studio ships the dsh plugin market ([dshmarket](https://github.com/dsh-market/ds
 - **Install:** Settings → Plugin Market → Discover → Install. Most plugins load live; the rest apply at the next session start.
 - **Switch off/on:** Settings → Plugin Market → Installed. Switches are kept when Studio regenerates the profile at startup.
 - **Restart:** the market's Restart button is disabled on CANFAR, because the session supervisor owns dsh. Start a new session to apply a change that needs a restart.
-- **Compatibility:** the market refuses plugins that declare a newer dsh than the CLI baked in the image. The image installs the npm `alpha` dist-tag (the build published from deepseek-harness `master`) and the current dshmarket, and allows that CLI as a peer.
+- **Compatibility:** the market refuses plugins that declare a newer dsh than the CLI baked in the image. The image installs `@deepseek-ai/dsh@${DSH_VERSION}` (the same pin as canfar-lab) and the current dshmarket, and allows that CLI as a peer.
 - Installed plugins live in `~/.dsh/profiles/astroai` (durable). The image pins pnpm in a shared corepack home, so installs do not download pnpm into `$HOME`.
 
 ## CLI Usage
