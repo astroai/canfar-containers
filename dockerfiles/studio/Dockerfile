@@ -12,7 +12,7 @@ ARG TAG=local
 # major and changed by another fails with a layout error.
 ARG PNPM_VERSION=12.6.0
 # Same string as canfar-lab DSH_VERSION. Do not float the npm alpha tag.
-ARG DSH_VERSION=0.2.1-rc.2
+ARG DSH_VERSION=0.2.1-rc.3
 ARG GHOSTTY_WEB_VERSION=0.4.0-next.20.g1858a59
 ARG NODE_PTY_VERSION=1.1.0
 ARG WS_VERSION=8.21.3
