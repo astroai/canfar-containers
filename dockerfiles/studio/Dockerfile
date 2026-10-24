@@ -11,6 +11,8 @@ ARG TAG=local
 # One pnpm for the image and every user: a node_modules built by one pnpm
 # major and changed by another fails with a layout error.
 ARG PNPM_VERSION=12.6.0
+# Same string as canfar-lab DSH_VERSION. Do not float the npm alpha tag.
+ARG DSH_VERSION=0.2.1-rc.3
 ARG GHOSTTY_WEB_VERSION=0.4.0-next.20.g1858a59
 ARG NODE_PTY_VERSION=1.1.0
 ARG WS_VERSION=8.21.3
@@ -18,6 +20,7 @@ ARG WS_VERSION=8.21.3
 FROM ${REGISTRY}/${OWNER}/${BASE_NAME}:${TAG}
 
 ARG PNPM_VERSION
+ARG DSH_VERSION
 ARG GHOSTTY_WEB_VERSION
 ARG NODE_PTY_VERSION
 ARG WS_VERSION
@@ -30,28 +33,27 @@ LABEL io.canfar.skaha.session.type="contributed" \
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # 1. dsh: coding agent harness, image-baked into /opt/astroai.
-# The CLI published from deepseek-harness master is the npm dist-tag `alpha`.
-# `apps/cli/lib` is a build product and is not in git; npm `latest` is an older rc.
+# Pinned to canfar-lab's DSH_VERSION. `apps/cli/lib` is not in git, so this
+# installs the published npm package at that version, not harness master.
 # pnpm lives in a shared corepack home so `dsh plugin` and the plugin market
 # use the pinned version without a per-user download into $HOME.
 ENV COREPACK_HOME=/opt/corepack \
     COREPACK_DEFAULT_TO_LATEST=0 \
     COREPACK_ENABLE_DOWNLOAD_PROMPT=0
-ADD https://api.github.com/repos/deepseek-ai/deepseek-harness/git/refs/heads/master /tmp/dsh-head.json
-RUN test -s /tmp/dsh-head.json \
-    && npm install -g --prefix /opt/astroai "@deepseek-ai/dsh@alpha" \
-    && /opt/astroai/bin/dsh --version \
+RUN test -n "${DSH_VERSION}" \
+    && npm install -g --prefix /opt/astroai "@deepseek-ai/dsh@${DSH_VERSION}" \
+    && ver="$(/opt/astroai/bin/dsh --version)" \
+    && printf '%s\n' "${ver}" | grep -F -- "${DSH_VERSION}" \
     && corepack enable \
     && corepack prepare "pnpm@${PNPM_VERSION}" --activate \
     && chmod -R a+rX "${COREPACK_HOME}" \
-    && pnpm --version \
-    && rm -f /tmp/dsh-head.json
+    && pnpm --version
 
 # Plugins baked for the Studio profile: canfar-lab copies every dependency
 # here that declares a dsh bundle into ~/.dsh/profiles/astroai and enables it.
 # dshmarket tracks its default branch. pnpm 12 ignores a "pnpm" key in
 # package.json and waits out freshly published versions unless
-# minimumReleaseAge is 0. "*" allows the alpha CLI as a peer.
+# minimumReleaseAge is 0. "*" allows the pinned dsh CLI as a peer.
 ADD https://api.github.com/repos/dsh-market/dsh-market/git/refs/heads/main /tmp/dshmarket-head.json
 RUN test -s /tmp/dshmarket-head.json \
     && mkdir -p /opt/astroai/dsh-plugins \
@@ -135,13 +137,13 @@ ENV PATH="/opt/astroai/bin:/opt/openvscode-server/bin:${PATH}" \
 
 COPY scripts/lib/skaha-proxy.sh scripts/lib/studio-canfar-proxy.py \
      scripts/lib/agent-wizard.py scripts/lib/orx-wire-compute.py \
-     scripts/lib/session_title.py /opt/astroai/lib/
+     scripts/lib/session_title.py scripts/lib/astroai-dock.html /opt/astroai/lib/
 COPY scripts/common-init.sh scripts/startup-studio.sh /cadc/
 COPY scripts/skaha-startup-studio.sh /skaha/startup.sh
 RUN chmod a+rx /opt/astroai/lib/studio-canfar-proxy.py /opt/astroai/lib/agent-wizard.py \
         /opt/astroai/lib/orx-wire-compute.py /opt/astroai/lib/session_title.py \
         /cadc/*.sh /skaha/startup.sh \
-    && chmod a+r /opt/astroai/lib/skaha-proxy.sh
+    && chmod a+r /opt/astroai/lib/skaha-proxy.sh /opt/astroai/lib/astroai-dock.html
 
 EXPOSE 5000
 

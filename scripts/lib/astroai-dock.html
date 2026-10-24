@@ -1,0 +1,212 @@
+<!-- AstroAI Desk dock — single source asset (canfar-lab src/canfar_lab/data/desk/dock.html).
+     Vendored into canfar-containers via scripts/sync-desk-assets.sh; keep both proxies stdlib-only. -->
+<meta name="astroai-dock-revision" content="2">
+<style>
+  #astroai-dock {
+    position: fixed; right: 14px; bottom: 14px; z-index: 2147483000;
+    width: 292px; border: 1px solid rgba(255,255,255,.14); border-radius: 10px;
+    background: rgba(18,20,26,.94); color: #e8e8ea; backdrop-filter: blur(6px);
+    font: 12px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    box-shadow: 0 8px 28px rgba(0,0,0,.45);
+  }
+  #astroai-dock .ad-head { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid rgba(255,255,255,.08); cursor: default; }
+  #astroai-dock .ad-title { font-weight: 650; letter-spacing: .2px; }
+  #astroai-dock .ad-chips { margin-left: auto; display: flex; gap: 5px; }
+  #astroai-dock .ad-chip { padding: 1px 7px; border-radius: 999px; background: rgba(255,255,255,.08); color: #b9bcc6; white-space: nowrap; max-width: 110px; overflow: hidden; text-overflow: ellipsis; }
+  #astroai-dock .ad-chip.ok { background: rgba(63,185,80,.18); color: #7ee787; }
+  #astroai-dock .ad-chip.warn { background: rgba(210,153,34,.2); color: #e3b341; }
+  #astroai-dock .ad-chip.bad { background: rgba(248,81,73,.18); color: #ff7b72; }
+  #astroai-dock .ad-toggle { margin-left: 2px; background: none; border: 0; color: #b9bcc6; cursor: pointer; font-size: 13px; }
+  #astroai-dock .ad-body { padding: 9px 10px 10px; }
+  #astroai-dock.collapsed .ad-body { display: none; }
+  #astroai-dock .ad-buttons { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
+  #astroai-dock button.ad-act {
+    text-align: left; padding: 7px 9px; border-radius: 7px; cursor: pointer;
+    border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.06); color: #e8e8ea;
+    font: inherit;
+  }
+  #astroai-dock button.ad-act:hover { background: rgba(255,255,255,.12); }
+  #astroai-dock button.ad-act.primary { background: rgba(56,139,253,.2); border-color: rgba(56,139,253,.5); }
+  #astroai-dock button.ad-act:disabled { opacity: .5; cursor: progress; }
+  #astroai-dock .ad-drawer { margin-top: 8px; padding: 7px 9px; border-radius: 7px; background: rgba(255,255,255,.05); max-height: 190px; overflow: auto; }
+  #astroai-dock .ad-drawer.err { background: rgba(248,81,73,.12); color: #ffb3ad; }
+  #astroai-dock .ad-drawer a { color: #79c0ff; }
+  #astroai-dock .ad-foot { margin-top: 7px; color: #8b8f99; font-size: 11px; }
+</style>
+<div id="astroai-dock" hidden>
+  <div class="ad-head">
+    <span class="ad-title">AstroAI desk</span>
+    <span class="ad-chips" id="ad-chips"></span>
+    <button class="ad-toggle" id="ad-toggle" type="button" title="Collapse">&#9662;</button>
+  </div>
+  <div class="ad-body" id="ad-body">
+    <div class="ad-buttons" id="ad-buttons"></div>
+    <div class="ad-drawer" id="ad-drawer" hidden></div>
+    <div class="ad-foot" id="ad-foot"></div>
+  </div>
+</div>
+<script>
+(function () {
+  if (window.__astroaiDockLoaded) { return; }
+  window.__astroaiDockLoaded = true;
+  var cfgEl = document.getElementById("astroai-dock-config");
+  if (!cfgEl) { return; }
+  var cfg;
+  try { cfg = JSON.parse(cfgEl.textContent || "{}"); } catch (err) { return; }
+
+  var root = document.getElementById("astroai-dock");
+  if (!root) { return; }
+  root.hidden = false;
+  var chipsEl = document.getElementById("ad-chips");
+  var buttonsEl = document.getElementById("ad-buttons");
+  var drawerEl = document.getElementById("ad-drawer");
+  var footEl = document.getElementById("ad-foot");
+  var state = null;
+
+  var collapsed = false;
+  try { collapsed = localStorage.getItem("astroai-dock-collapsed") === "1"; } catch (err) { collapsed = false; }
+  if (collapsed) { root.classList.add("collapsed"); }
+  document.getElementById("ad-toggle").addEventListener("click", function () {
+    collapsed = !root.classList.contains("collapsed");
+    root.classList.toggle("collapsed", collapsed);
+    try { localStorage.setItem("astroai-dock-collapsed", collapsed ? "1" : "0"); } catch (err) {}
+  });
+
+  function header() { return { "X-Desk-Token": cfg.token, "Content-Type": "application/json" }; }
+
+  function api(url, body, method) {
+    return fetch(url, {
+      method: method || (body === undefined ? "GET" : "POST"),
+      headers: header(),
+      body: body === undefined ? undefined : JSON.stringify(body)
+    }).then(function (resp) {
+      return resp.json().catch(function () { return {}; }).then(function (data) {
+        data = data || {};
+        if (!resp.ok || data.ok === false) {
+          var err = new Error(data.error || ("HTTP " + resp.status));
+          err.data = data;
+          throw err;
+        }
+        return data;
+      });
+    });
+  }
+
+  function chip(text, tone) {
+    var span = document.createElement("span");
+    span.className = "ad-chip" + (tone ? " " + tone : "");
+    span.textContent = text;
+    span.title = text;
+    return span;
+  }
+
+  function renderChips() {
+    chipsEl.textContent = "";
+    var session = state && state.session;
+    if (session && session.status) {
+      chipsEl.appendChild(chip("session " + session.status, session.status === "Running" ? "ok" : "warn"));
+    } else {
+      chipsEl.appendChild(chip("no session", "warn"));
+    }
+    var dsh = state && state.dsh;
+    if (dsh && dsh.installed) {
+      var tone = "ok";
+      if (dsh.release && dsh.release.version && dsh.release.version !== dsh.installed) { tone = "warn"; }
+      chipsEl.appendChild(chip("dsh " + dsh.installed, tone));
+    }
+    var lab = state && state.lab;
+    if (lab && lab.version) {
+      chipsEl.appendChild(chip("lab " + lab.version, ""));
+    }
+    var last = state && state.mailbox && state.mailbox.last_exchange;
+    if (last && last.absorbed_at) {
+      chipsEl.appendChild(chip("sync " + last.absorbed_at.slice(5, 16) + "Z", "ok"));
+    } else if (state && state.mailbox && state.mailbox.session_ready) {
+      chipsEl.appendChild(chip("watcher up", "ok"));
+    } else {
+      chipsEl.appendChild(chip("no watcher", ""));
+    }
+  }
+
+  function renderButtons() {
+    buttonsEl.textContent = "";
+    var buttons = (cfg.buttons || []).slice();
+    if (state && state.auth && state.auth.authenticated === false) {
+      buttons.push({ id: "login", label: "Login", action: "login", title: "Run canfar login in a terminal" });
+    }
+    buttons.forEach(function (btn) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "ad-act" + (btn.kind === "primary" ? " primary" : "");
+      b.textContent = btn.label;
+      if (btn.title) { b.title = btn.title; }
+      b.addEventListener("click", function () { act(btn, b); });
+      buttonsEl.appendChild(b);
+    });
+  }
+
+  function showDrawer(ok, node) {
+    drawerEl.textContent = "";
+    drawerEl.hidden = false;
+    drawerEl.classList.toggle("err", !ok);
+    drawerEl.appendChild(node);
+  }
+
+  function textNode(text) { return document.createTextNode(text); }
+
+  function summarize(result) {
+    var parts = [];
+    if (result.report && result.report.summary) {
+      Object.keys(result.report.summary).forEach(function (key) {
+        parts.push(result.report.summary[key] + " " + key);
+      });
+    }
+    if (result.url) { parts.push(result.url); }
+    if (result.opened) { parts.push("opened: " + result.opened); }
+    if (result.request) { parts.push("request " + result.request); }
+    if (result.session_ready === false) { parts.push("session not ready"); }
+    if (result.hint) { parts.push(result.hint); }
+    return parts.join(" · ") || "ok";
+  }
+
+  function act(btn, node) {
+    if (btn.action === "cluster" && (btn.payload || {}).mode === "start") {
+      if (!window.confirm("Start the CANFAR Ray cluster (on CANFAR, not locally)?")) { return; }
+    }
+    node.disabled = true;
+    api(cfg.action_url + "/" + btn.action, btn.payload || {}).then(function (result) {
+      var div = document.createElement("div");
+      div.appendChild(textNode(btn.label + ": " + summarize(result)));
+      if (result.url) {
+        div.appendChild(document.createElement("br"));
+        var a = document.createElement("a");
+        a.href = result.url; a.target = "_blank"; a.rel = "noreferrer";
+        a.textContent = "open " + result.url;
+        div.appendChild(a);
+      }
+      showDrawer(true, div);
+    }).catch(function (err) {
+      var div = document.createElement("div");
+      div.appendChild(textNode(btn.label + " failed: " + (err.message || String(err))));
+      showDrawer(false, div);
+    }).finally(function () {
+      node.disabled = false;
+      refresh(true);
+    });
+  }
+
+  function refresh(fromAction) {
+    if (fromAction) { state = null; }
+    api(cfg.state_url).then(function (data) {
+      state = data;
+      renderChips();
+      renderButtons();
+      footEl.textContent = state.root ? "root: " + state.root : "";
+    }).catch(function () {});
+  }
+
+  renderButtons();
+  refresh();
+  setInterval(function () { refresh(); }, 4000);
+})();
+</script>

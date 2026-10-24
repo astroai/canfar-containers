@@ -197,7 +197,7 @@ make test-canfar-session IMAGE=openscience TAG=26.09
 
 **Agent auto-setup:** UI kinds (`openresearch`, `vscode`, `studio`) default `ASTROAI_LAB_AGENT_SETUP=bg` when unset. **Marimo** stays opt-in for full setup (startup still runs `agent setup marimo` only). Terminal stays opt-in. Failures never block the main UI; see `~/.astroai/lab/agent-setup.log`.
 
-**Studio notes:** Image bakes `@deepseek-ai/dsh@alpha` (the npm dist-tag published from deepseek-harness `master`; `apps/cli/lib` is not in git) and the current dshmarket, plus pnpm (`PNPM_VERSION` in the Dockerfile).
+**Studio notes:** Image bakes `@deepseek-ai/dsh@${DSH_VERSION}` (the same pin as canfar-lab; `apps/cli/lib` is not in git) and the current dshmarket, plus pnpm (`PNPM_VERSION` in the Dockerfile).
 Startup runs sync `canfar-lab studio --prepare --profile canfar --no-install`,
 then `dsh --profile astroai` on loopback `:3080` and `studio-canfar-proxy.py`
 on `:5000`. pnpm/TMPDIR land on session scratch. See [STUDIO.md](STUDIO.md).
