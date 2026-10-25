@@ -37,19 +37,19 @@ flowchart TB
 
 | Image | Use for | Skaha type |
 |-------|---------|------------|
-| `terminal` | Browser terminal (ghostty-web + tmux) | Contributed |
-| `vscode` | Browser IDE (OpenVSCode Server) | Contributed |
-| `notebook` | JupyterLab | Notebook |
-| `marimo` | Reactive notebooks | Contributed |
-| `openresearch` | OpenResearch (`orx`) autoresearch dashboard | Contributed |
-| `openscience` | OpenScience research workspace with CADC/VO tools and astronomy Python | Contributed |
-| `studio` | AstroAI Studio (`dsh` coding portal) — [STUDIO.md](docs/STUDIO.md) | Contributed |
 | `base` | Headless parent (CI / batch) | — |
-| `improc` | Astronomy FITS/HDF5 image-processing CLIs | Headless |
-| `improc-terminal` | Same tools + browser terminal (ghostty-web/tmux) | Contributed |
-| `improc-notebook` | Same tools + JupyterLab (improc kernel) | Notebook |
+| `studio` | AstroAI Studio on base — [STUDIO.md](docs/STUDIO.md) | Contributed |
+| `improc-studio` | Same studio; improc is the default Python | Contributed |
+| `specproc` | Group spectroscopy stack (not public `astroai`) | Headless |
+| `specproc-studio` | Same studio; specproc is the default Python (group image) | Contributed |
+| `notebook` | JupyterLab. Still built; will be removed | Notebook |
+| `marimo` | Reactive notebooks. Still built; will be removed | Contributed |
+| `vscode` | Browser IDE. Still built; will be removed | Contributed |
+| `improc` | Astronomy FITS/HDF5 CLIs (parent of `improc-studio`) | Headless |
 | `ray-manager` | Ray head + control panel + Dashboard ([RAY.md](docs/RAY.md)) | Contributed |
 | `ray-worker` | Ray worker CPU or GPU (manager-launched) | Headless |
+
+`terminal`, `openresearch`, and `openscience` still have Dockerfiles. They are not part of `make build-all`.
 
 ## Documentation
 
@@ -68,11 +68,11 @@ In-session: `canfar-lab help` · `less /opt/astroai/USAGE.md`
 Requires Docker with buildx. Full loop: [CONTRIBUTING.md](docs/CONTRIBUTING.md).
 
 ```bash
-make build-all              # session stack
+make build-all              # base, studio, improc-studio, specproc, specproc-studio, plus legacy notebook/marimo/vscode
 make build-ray              # ray-manager + ray-worker
-make build-improc           # astronomy image-processing CLIs (+ base)
-make build-specproc         # group spectroscopy stack (+ base); not public astroai
-make build/vscode           # one image (+ parents)
+make build-improc           # improc + improc-studio (+ base)
+make build-specproc         # specproc + specproc-studio (+ base); not public astroai
+make build/studio           # one image (+ parents)
 make test-local             # local smokes
 make test-improc-local      # improc CLI smoke
 make test-ray               # local Ray cluster + UI
@@ -84,12 +84,12 @@ See [OPERATORS.md](docs/OPERATORS.md). The `astroai` Harbor project is **public*
 (anonymous pull); push still needs `docker login images.canfar.net`.
 
 ```bash
-make push/vscode TAG=26.09
-make push-all TAG=26.09
-make push-ray TAG=26.09
-make push-improc TAG=26.09
-# specproc is group-only (pPXF and MOOG). OWNER must not be astroai:
-# OWNER=<group> make push-specproc TAG=26.09 BUILD_TAG=26.09
+make push/studio TAG=26.10
+make push-all TAG=26.10
+make push-ray TAG=26.10
+make push-improc TAG=26.10
+# specproc* is built with the other images, then push-all retags it to k-pop
+# (pPXF and MOOG). Override with SPECPROC_OWNER=<project>.
 ```
 
 Default `TAG` is current UTC `YY.MM` (for example `26.10`).
@@ -108,7 +108,7 @@ examples/ray/  container-local Ray smokes
 ## Design
 
 - **Same images for CPU and GPU** — choose the node in the portal; CUDA/ML stacks via pixi/uv in the project.
-- **Bake graph:** untagged `python` stage → fat `base` (compilers + session tools) → interactive sessions and `improc`; slim `ray-base` (from that python stage) → `ray-worker`; fat `base` → `ray-manager`. `python` is not published to Harbor.
+- **Bake graph:** untagged `python` stage → fat `base` (compilers + session tools) → `studio`, and → `improc` → `improc-studio` / `specproc` → `specproc-studio`. Legacy `notebook`, `marimo`, and `vscode` are still in the default build. Slim `ray-base` (from that python stage) → `ray-worker`; fat `base` → `ray-manager`. `python` is not published to Harbor. Images install the latest PyPI `canfar-lab`.
 - **Fast session disks:** `WORK` is `$SCRATCH/src` when `/srcdir` is the container overlay (OOM-fragile) and `/scratch` is a volume; `SCRATCH` (`/scratch`) holds data and caches. Both are session-private. `/arc/home` and `/arc/projects` are shared across sessions. Persist with `canfar-lab save` / `git push`.
 - **Skaha types:** Contributed listen on **5000**; Notebook on **8888**.
 - **Auth at the edge:** Session UIs trust CANFAR TLS + portal login. Use these images only behind an authenticating reverse proxy.

@@ -24,12 +24,12 @@
 #                              (mounted at /opt/astroai-lab-src + PYTHONPATH)
 #                              for testing uncommitted astroai code.
 
-# Images under test: explicit args win; default = all session images (same set
-# as the Makefile SESSION_IMAGES / test-local loop).
+# Images under test: explicit args win; default = the bake default group
+# (same set as the Makefile DEFAULT_IMAGES / test-local loop).
 if [[ "$#" -gt 0 ]]; then
     IMAGES=("$@")
 else
-    IMAGES=(base terminal notebook vscode marimo openresearch openscience studio)
+    IMAGES=(base studio improc-studio specproc specproc-studio notebook marimo vscode)
 fi
 OWNER="${OWNER:-astroai}"
 REGISTRY="${REGISTRY:-images.canfar.net}"
@@ -212,8 +212,10 @@ chmod +x "${PROBE}"
 run_scenario() {
     local label="$1" scratch_arg=() scratch_env=()
     if [[ "$label" == "with-scratch" ]]; then
+        # canfar-lab uses scratch for CLI installs only on a Skaha session
+        # (skaha_sessionid) or a studio image. Headless images need the id.
         scratch_arg=(-v "${FAKE_SCRATCH}:/scratch")
-        scratch_env=(-e SCRATCH=/scratch)
+        scratch_env=(-e SCRATCH=/scratch -e skaha_sessionid=test-session)
     else
         # Point SCRATCH at a path that does not exist (and /scratch is not
         # mounted) so scratch resolution falls back to the runtime root.

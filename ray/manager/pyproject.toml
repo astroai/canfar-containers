@@ -33,7 +33,7 @@ extend-ignore = ["SIM112"]
 # bounds here.
 #
 # Note: `make lock-ray` regenerates config/ray-deps.lock only — it does NOT
-# touch this directory's uv.lock. After canfar-lab main moves, run `uv lock`
+# touch this directory's uv.lock. After a canfar-lab release, run `uv lock`
 # here and `make lock-astroai-lab`.
 [project]
 name = "astroai-ray-manager"
@@ -50,8 +50,9 @@ dependencies = [
     "websockets>=12",
     "canfar>=1.4.1",
     # Cluster lifecycle + CANFAR ops ship in canfar-lab (`canfar_workload`).
-    # Unpinned: the container TAG is the user-facing version.
-    "canfar-lab @ git+https://github.com/astroai/canfar-lab.git@main",
+    # PyPI package. The container TAG is the user-facing version; images
+    # reinstall the latest release at build time.
+    "canfar-lab>=0.7.0",
 ]
 
 [dependency-groups]

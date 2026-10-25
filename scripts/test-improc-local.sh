@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # Local smoke for the improc image family:
 #   images.canfar.net/astroai/improc:<tag>
-#   images.canfar.net/astroai/improc-terminal:<tag>   (browser shell on improc)
-#   images.canfar.net/astroai/improc-notebook:<tag>  (JupyterLab on improc)
+#   images.canfar.net/astroai/improc-studio:<tag>   (studio; improc is the default Python)
 set -euo pipefail
 
 TAG="${1:-${BUILD_TAG:-local}}"
@@ -63,10 +62,16 @@ check_image() {
 
 check_image improc ""
 
-# improc-terminal: browser shell on improc — ghostty-web server must be present.
-check_image improc-terminal "test -f /opt/ghostty-web/server.mjs && echo 'PASS: ghostty-web' || { echo 'FAIL: ghostty-web missing'; missing=\$((missing + 1)); }"
+# improc-studio: studio on improc. Default Jupyter kernel and marimo use the science venv.
+check_image improc-studio "
+    test -x /opt/astroai/bin/dsh && echo 'PASS: dsh' || { echo 'FAIL: dsh missing'; missing=\$((missing + 1)); }
+    test -f /opt/ghostty-web/server.mjs && echo 'PASS: ghostty-web' || { echo 'FAIL: ghostty-web missing'; missing=\$((missing + 1)); }
+    jupyter kernelspec list 2>/dev/null | grep -q improc && echo 'PASS: improc jupyter kernel' || { echo 'FAIL: improc jupyter kernel not registered'; missing=\$((missing + 1)); }
+    marimo_bin=\$(readlink -f \"\$(command -v marimo)\")
+    case \"\${marimo_bin}\" in
+      /opt/astroai/venv/improc/*) echo 'PASS: marimo is improc venv' ;;
+      *) echo \"FAIL: marimo is \${marimo_bin}\"; missing=\$((missing + 1)) ;;
+    esac
+"
 
-# improc-notebook: JupyterLab on improc — the improc science kernel must be registered.
-check_image improc-notebook "jupyter kernelspec list 2>/dev/null | grep -q improc && echo 'PASS: improc jupyter kernel' || { echo 'FAIL: improc jupyter kernel not registered'; missing=\$((missing + 1)); }"
-
-echo "improc family local smoke passed (improc, improc-terminal, improc-notebook)"
+echo "improc family local smoke passed (improc, improc-studio)"

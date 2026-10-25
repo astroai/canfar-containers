@@ -19,6 +19,7 @@ ARG WS_VERSION=8.21.3
 
 FROM ${REGISTRY}/${OWNER}/${BASE_NAME}:${TAG}
 
+ARG BASE_NAME
 ARG PNPM_VERSION
 ARG DSH_VERSION
 ARG GHOSTTY_WEB_VERSION
@@ -109,8 +110,24 @@ RUN chmod a+r /opt/ghostty-web/server.mjs /opt/ghostty-web/client.mjs \
     && test -f /opt/ghostty-web/node_modules/ghostty-web/ghostty-vt.wasm \
     && chmod -R a+rX /opt/ghostty-web
 
-# 3. JupyterLab + Marimo (system-wide scientific notebook suite)
-RUN uv pip install --system ipykernel jupyterlab marimo vos
+# 3. JupyterLab + Marimo.
+# base: both use the system interpreter.
+# improc / specproc: JupyterLab stays on the system interpreter and that
+# science venv is the default kernel. Marimo runs inside the science venv
+# so notebooks import the stack without a kernel switch.
+RUN uv pip install --system ipykernel jupyterlab vos \
+    && if [[ "${BASE_NAME}" == "improc" || "${BASE_NAME}" == "specproc" ]]; then \
+         _py="/opt/astroai/venv/${BASE_NAME}"; \
+         test -x "${_py}/bin/python"; \
+         uv pip install --python "${_py}" ipykernel marimo; \
+         "${_py}/bin/python" -m ipykernel install --prefix=/usr/local \
+           --name=python3 --display-name="Python 3 (${BASE_NAME})"; \
+         "${_py}/bin/python" -m ipykernel install --prefix=/usr/local \
+           --name="${BASE_NAME}" --display-name="Python (${BASE_NAME})"; \
+         ln -sfn "${_py}/bin/marimo" /usr/local/bin/marimo; \
+       else \
+         uv pip install --system marimo; \
+       fi
 
 ENV JUPYTER_CONFIG_DIR=/etc/jupyter
 RUN mkdir -p /etc/jupyter /etc/astroai-lab

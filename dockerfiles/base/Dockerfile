@@ -185,10 +185,10 @@ RUN uv venv /opt/canfar \
     && uv cache clean
 
 # The lock above pins the rest of the environment. canfar-lab itself tracks
-# the default branch; this layer rebuilds when astroai/canfar-lab main moves.
-ADD https://api.github.com/repos/astroai/canfar-lab/git/refs/heads/main /tmp/canfar-lab-head.json
-COPY scripts/install-canfar-lab-head.sh /tmp/install-canfar-lab-head.sh
-RUN bash /tmp/install-canfar-lab-head.sh /opt/canfar \
+# the latest PyPI release; this layer rebuilds when that release changes.
+ADD https://pypi.org/pypi/canfar-lab/json /tmp/canfar-lab-pypi.json
+COPY scripts/install-canfar-lab-latest.sh /tmp/install-canfar-lab-latest.sh
+RUN bash /tmp/install-canfar-lab-latest.sh /opt/canfar \
     && /opt/canfar/bin/canfar-lab cluster --help >/dev/null \
     && printf '%s\n' \
         '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05"}}' \
@@ -199,7 +199,7 @@ RUN bash /tmp/install-canfar-lab-head.sh /opt/canfar \
     && chmod a+r /etc/astroai-lab/profile.sh /etc/astroai-lab/hooks.sh \
     && HOME=/tmp WORK=/srcdir SCRATCH=/scratch \
        /opt/canfar/bin/canfar-lab env export --no-ensure >/dev/null \
-    && rm -f /tmp/install-canfar-lab-head.sh /tmp/canfar-lab-head.json
+    && rm -f /tmp/install-canfar-lab-latest.sh /tmp/canfar-lab-pypi.json
 
 COPY scripts/lib/astroai-env-common.sh scripts/lib/astroai-ui.sh scripts/lib/skaha-proxy.sh \
      scripts/lib/session_title.py scripts/astroai-whats-new.sh /opt/astroai/lib/

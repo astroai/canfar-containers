@@ -16,17 +16,35 @@ variable "PYTHON_VERSION" {
   default = "3.13"
 }
 
+# Default build. notebook, marimo, and vscode stay until they are removed.
+# Do not `docker buildx bake --push` this group: specproc includes pPXF and
+# MOOG and must not land in the public astroai project. Use group "release"
+# or `make release-push`.
 group "default" {
-  targets = ["base", "terminal", "notebook", "vscode", "marimo", "openresearch", "openscience", "studio"]
+  targets = [
+    "base",
+    "studio",
+    "improc-studio",
+    "specproc",
+    "specproc-studio",
+    "notebook",
+    "marimo",
+    "vscode",
+  ]
+}
+
+# Public Harbor release. improc is the parent of improc-studio.
+group "release" {
+  targets = ["base", "improc", "studio", "improc-studio", "notebook", "marimo", "vscode"]
 }
 
 group "improc" {
-  targets = ["improc", "improc-terminal", "improc-notebook"]
+  targets = ["improc", "improc-studio"]
 }
 
 # Group spectroscopy stack. Not part of the public astroai catalog.
 group "specproc" {
-  targets = ["specproc", "specproc-terminal", "specproc-notebook"]
+  targets = ["specproc", "specproc-studio"]
 }
 
 # Untagged bake parent. Never a Harbor image.
@@ -148,7 +166,7 @@ target "ray-manager" {
   }
 }
 
-# Headless astronomy image-processing CLIs (FITS/HDF5). Not in default group.
+# Headless astronomy image-processing CLIs (FITS/HDF5). Parent of improc-studio.
 target "improc" {
   context    = "."
   dockerfile = "dockerfiles/improc/Dockerfile"
@@ -163,7 +181,23 @@ target "improc" {
   }
 }
 
-# Interactive browser terminal on improc (reuses terminal Dockerfile, BASE_NAME=improc).
+# Studio on improc. Same Dockerfile as studio; improc is the default Python.
+target "improc-studio" {
+  context    = "."
+  dockerfile = "dockerfiles/studio/Dockerfile"
+  contexts = {
+    "${REGISTRY}/${OWNER}/improc:${TAG}" = "target:improc"
+  }
+  tags = ["${REGISTRY}/${OWNER}/improc-studio:${TAG}"]
+  args = {
+    REGISTRY  = "${REGISTRY}"
+    OWNER     = "${OWNER}"
+    BASE_NAME = "improc"
+    TAG       = "${TAG}"
+  }
+}
+
+# Legacy. Not in the default build.
 target "improc-terminal" {
   context    = "."
   dockerfile = "dockerfiles/terminal/Dockerfile"
@@ -194,6 +228,23 @@ target "specproc" {
   }
 }
 
+# Studio on specproc. Same Dockerfile as studio; specproc is the default Python.
+target "specproc-studio" {
+  context    = "."
+  dockerfile = "dockerfiles/studio/Dockerfile"
+  contexts = {
+    "${REGISTRY}/${OWNER}/specproc:${TAG}" = "target:specproc"
+  }
+  tags = ["${REGISTRY}/${OWNER}/specproc-studio:${TAG}"]
+  args = {
+    REGISTRY  = "${REGISTRY}"
+    OWNER     = "${OWNER}"
+    BASE_NAME = "specproc"
+    TAG       = "${TAG}"
+  }
+}
+
+# Legacy. Not in the default build.
 target "specproc-terminal" {
   context    = "."
   dockerfile = "dockerfiles/terminal/Dockerfile"

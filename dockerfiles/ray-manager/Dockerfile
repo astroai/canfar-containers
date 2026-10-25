@@ -36,11 +36,11 @@ RUN uv venv /opt/astroai/venv/ray \
         | /opt/astroai/venv/ray/bin/canfar-lab mcp serve \
         | grep -q cluster_start
 
-# canfar-lab in this venv tracks the default branch. /opt/canfar already
+# canfar-lab in this venv tracks the latest PyPI release. /opt/canfar already
 # does, because it comes from the base image.
-ADD https://api.github.com/repos/astroai/canfar-lab/git/refs/heads/main /tmp/canfar-lab-head.json
-COPY scripts/install-canfar-lab-head.sh /tmp/install-canfar-lab-head.sh
-RUN bash /tmp/install-canfar-lab-head.sh /opt/astroai/venv/ray \
+ADD https://pypi.org/pypi/canfar-lab/json /tmp/canfar-lab-pypi.json
+COPY scripts/install-canfar-lab-latest.sh /tmp/install-canfar-lab-latest.sh
+RUN bash /tmp/install-canfar-lab-latest.sh /opt/astroai/venv/ray \
     && /opt/astroai/venv/ray/bin/canfar-lab cluster --help >/dev/null \
     && /opt/astroai/venv/ray/bin/canfar-lab autoscaler --help >/dev/null \
     && printf '%s\n' \
@@ -48,7 +48,7 @@ RUN bash /tmp/install-canfar-lab-head.sh /opt/astroai/venv/ray \
         '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
         | /opt/astroai/venv/ray/bin/canfar-lab mcp serve \
         | grep -q cluster_start \
-    && rm -f /tmp/install-canfar-lab-head.sh /tmp/canfar-lab-head.json
+    && rm -f /tmp/install-canfar-lab-latest.sh /tmp/canfar-lab-pypi.json
 
 ENV PATH="/opt/astroai/venv/ray/bin:/opt/canfar/bin:${PATH}"
 

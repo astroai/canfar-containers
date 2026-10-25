@@ -26,18 +26,17 @@ flowchart LR
 | Image | Harbor path | Skaha type | Port | Portal? |
 |-------|-------------|------------|------|---------|
 | `base` | `…/astroai/base:<tag>` | — | — | No (parent / headless verify) |
-| `terminal` | `…/astroai/terminal:<tag>` | Contributed | 5000 | Yes |
-| `vscode` | `…/astroai/vscode:<tag>` | Contributed | 5000 | Yes |
-| `notebook` | `…/astroai/notebook:<tag>` | Notebook | 8888 | Yes |
-| `marimo` | `…/astroai/marimo:<tag>` | Contributed | 5000 | Yes |
-| `openresearch` | `…/astroai/openresearch:<tag>` | Contributed | 5000 | Yes |
-| `openscience` | `…/astroai/openscience:<tag>` | Contributed | 5000 | Yes |
 | `studio` | `…/astroai/studio:<tag>` | Contributed | 5000 | Yes |
+| `improc` | `…/astroai/improc:<tag>` | Headless | — | Optional (batch parent of improc-studio) |
+| `improc-studio` | `…/astroai/improc-studio:<tag>` | Contributed | 5000 | Yes |
+| `notebook` | `…/astroai/notebook:<tag>` | Notebook | 8888 | Yes (legacy; will be removed) |
+| `marimo` | `…/astroai/marimo:<tag>` | Contributed | 5000 | Yes (legacy; will be removed) |
+| `vscode` | `…/astroai/vscode:<tag>` | Contributed | 5000 | Yes (legacy; will be removed) |
+| `terminal` | `…/astroai/terminal:<tag>` | Contributed | 5000 | Still buildable; not in the default build |
+| `openresearch` | `…/astroai/openresearch:<tag>` | Contributed | 5000 | Still buildable; not in the default build |
+| `openscience` | `…/astroai/openscience:<tag>` | Contributed | 5000 | Still buildable; not in the default build |
 | `ray-manager` | `…/astroai/ray-manager:<tag>` | Contributed | 5000 | Yes |
 | `ray-worker` | `…/astroai/ray-worker:<tag>` | Headless | — | No — manager launches |
-| `improc` | `…/astroai/improc:<tag>` | Headless | — | Optional (batch) |
-| `improc-terminal` | `…/astroai/improc-terminal:<tag>` | Contributed | 5000 | Yes |
-| `improc-notebook` | `…/astroai/improc-notebook:<tag>` | Notebook | 8888 | Yes |
 
 OCI label `io.canfar.skaha.session.type` marks `headless` / `contributed` / `notebook`.
 
@@ -46,21 +45,26 @@ OCI label `io.canfar.skaha.session.type` marks `headless` / `contributed` / `not
 > Science Portal; leave old Harbor tags until users migrate.
 
 Register **`ray-manager` only** for Ray. Workers stay headless. See [RAY.md](RAY.md).
-Register **`improc-terminal`** (Contributed) and **`improc-notebook`** (Notebook);
-leave **`improc`** headless for batch. Build/push: `make build-improc` /
-`make push-improc`.
+Register **`improc-studio`** (Contributed, 5000). Leave **`improc`** headless for
+batch. Build/push: `make build-improc` / `make push-improc`. `notebook`,
+`marimo`, and `vscode` are still built; drop them from the portal when those
+images are removed.
 
 **`specproc` is not an `astroai` catalog image.** It vendors pPXF and MOOG,
-which are not licensed for public redistribution. Build locally with
-`make build-specproc`. Publish only into the group Harbor project:
+which are not licensed for public redistribution. `make build-all` still
+builds it, tagged under `OWNER` like the other images. `make push-all` and
+`make push-specproc` retag `specproc` and `specproc-studio` to
+`SPECPROC_OWNER` (default **`k-pop`**) and push there:
 
 ```bash
-OWNER=<group> make push-specproc TAG=<tag> BUILD_TAG=<tag>
+make push-all TAG=<tag> BUILD_TAG=<tag>
+# same push, explicit:
+make push-specproc TAG=<tag> BUILD_TAG=<tag>
 ```
 
-Register that project's `specproc-terminal` (Contributed, 5000) and
-`specproc-notebook` (Notebook, 8888). Leave `specproc` headless. Do not add
-these names to the public `astroai` project or to `scripts/harbor-cleanup.sh`.
+Register that project's `specproc-studio` (Contributed, 5000). Leave
+`specproc` headless. Do not add these names to the public `astroai` project
+or to `scripts/harbor-cleanup.sh`.
 Mount the shared line lists, grids, and filters readonly at `/specproc-data`
 (see [USAGE](USAGE.md#spectroscopy-specproc)). The image does not contain them.
 
@@ -111,7 +115,7 @@ Session UIs listen at `/` on port **5000**.
 | `notebook` | Ingress keeps path; Jupyter `base_url=session/notebook/<id>`; `appName` = session name |
 | `openresearch` | Path-rewrite proxy on :5000 + HTML title stick; ghostty at `/astroai-terminal/` |
 | `openscience` | Loopback proxy on :5000 (bearer token, loopback Host/Origin, base path via `/__astroai/boot.js`); hub at `/astroai-agents/` |
-| `studio` | dsh `astroai` profile loopback + path-rewrite proxy on :5000 + HTML title stick |
+| `studio`, `improc-studio`, `specproc-studio` | dsh `astroai` profile loopback + path-rewrite proxy on :5000 + HTML title stick |
 | `ray-manager` | Server-rendered HTML `<title>` = session name |
 
 **Browser tab title:** Skaha sets the pod `hostname` to the session name (lowercase).
@@ -124,7 +128,7 @@ AstroAI images read it via `socket.gethostname()` (`scripts/lib/session_title.py
 | JupyterLab `page_config.json` `appName` | `notebook`, `improc-notebook` |
 | `astroai-html-proxy.py` | `marimo` |
 | `orx-canfar-proxy.py` / agent wizard / ghostty-web | `openresearch` |
-| `studio-canfar-proxy.py` / agent wizard | `studio` |
+| `studio-canfar-proxy.py` / agent wizard | `studio`, `improc-studio`, `specproc-studio` |
 | FastAPI HTML template | `ray-manager` |
 
 Platform stock sessions (**CARTA**, **Firefly**, **desktop**) use third-party
@@ -140,11 +144,11 @@ entrypoint, ask the science-platform team for a per-image override that sets
 ## Science Portal checklist
 
 1. Push `images.canfar.net/astroai/*:<tag>` (sessions + Ray + improc stack).
-2. Register Contributed: `terminal`, `vscode`, `marimo`, `openresearch`, `openscience`, `studio`, `ray-manager`, `improc-terminal` → port **5000**.
-3. Register Notebook: `notebook`, `improc-notebook` → port **8888**.
-4. Leave `base`, `ray-worker`, and `improc` (headless) off the interactive catalog (or list `improc` under headless only). `python` and `ray-base` are bake-only, never Harbor images.
+2. Register Contributed: `studio`, `improc-studio`, `ray-manager` → port **5000**. Keep `vscode` and `marimo` registered until those images are removed. `terminal`, `openresearch`, and `openscience` are no longer in the default build.
+3. Register Notebook: `notebook` → port **8888**, until that image is removed.
+4. Leave `base`, `ray-worker`, and `improc` (headless) off the interactive catalog (or list `improc` under headless only). `python` and `ray-base` are bake-only, never Harbor images. `specproc` and `specproc-studio` are group-project images, not `astroai`.
 5. Document the published tag for users (`YY.MM`).
-6. Smoke: `make test-canfar-session IMAGE=terminal TAG=…`, `IMAGE=studio`, `IMAGE=openresearch`, `IMAGE=openscience`, `IMAGE=improc-terminal`, and `make test-canfar-ray TAG=…`.
+6. Smoke: `make test-canfar-session IMAGE=studio TAG=…`, `IMAGE=improc-studio`, and `make test-canfar-ray TAG=…`. Group specproc: `IMAGE=specproc-studio` with `OWNER=<group>`.
 7. **Agent verbs:** `make test-canfar-agents TAG=…` (lightweight in-session probe of the full agent verb surface — required after every image push; see below).
 
 ## Local smoke
@@ -289,8 +293,8 @@ session record ages out. Prefer grepping `[astroai-boot]` for `common-init:ERR`,
   (`CANFAR_LAB_BIN_DIR`) — prefer that over baking agent binaries into images
   or installing onto `/arc` home (NFS is too slow). Skills:
   `npx skills add astroai/canfar-skills`.
-- **Plugins vs skills:** images install `config/astroai-lab.lock`, then reinstall `canfar-lab` from git `main`. That package's plugins are **MCP / tools / rules only**. Skill packs (`SKILL.md`) install via `npx skills add astroai/canfar-skills` (skills.sh), not `canfar-lab agent plugins`.
-- **Release order:** merge/push `canfar-lab` first, then rebuild/push images (the image build fetches `main`). Run `make lock-astroai-lab` when `lock-check` reports drift so CI stays green.
+- **Plugins vs skills:** images install `config/astroai-lab.lock`, then reinstall the latest `canfar-lab` from PyPI. That package's plugins are **MCP / tools / rules only**. Skill packs (`SKILL.md`) install via `npx skills add astroai/canfar-skills` (skills.sh), not `canfar-lab agent plugins`.
+- **Release order:** publish `canfar-lab` to PyPI first, then rebuild/push images (the image build installs the latest release). Run `make lock-astroai-lab` when `lock-check` reports drift so CI stays green.
 - Quota warnings fire at session start and via `canfar-lab status` (≈80 / 90 / 95%).
 - User data lifecycle (`canfar-lab save`, `canfar data`) is documented for users in [USAGE.md](USAGE.md).
 

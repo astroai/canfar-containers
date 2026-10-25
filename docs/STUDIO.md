@@ -2,6 +2,8 @@
 
 Contributed session image `images.canfar.net/astroai/studio:<tag>` — unified 5-in-1 development studio (AI Coding Agents, Web Terminal, JupyterLab 4, Marimo, VS Code Web) for CANFAR.
 
+`improc-studio` and `specproc-studio` are the same image with `improc` or `specproc` as the parent. On those images the science venv is the default Jupyter kernel, and marimo runs inside that venv. `specproc-studio` is a group image, not part of the public `astroai` catalog.
+
 ## Architecture
 
 | Process | Bind | Role | Public Path |

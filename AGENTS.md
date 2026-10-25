@@ -10,13 +10,14 @@ Operating guidance for coding agents and maintainers working in `astroai/canfar-
 
 - **Bake Graph (`docker-bake.hcl`):**
   - Untagged `python` stage (Python 3.13 + uv/pixi foundation).
-  - Fat `base` (compilers + session tools) → interactive sessions (`terminal`, `vscode`, `notebook`, `marimo`, `openresearch`, `openscience`, `studio`) and `improc` stack (`improc`, `improc-terminal`, `improc-notebook`).
-  - Group spectroscopy stack (`specproc`, `specproc-terminal`, `specproc-notebook`) is built the same way (`make build-specproc`) but is not part of `build-all` or the public `astroai` release. Push only with `OWNER=<group>` (`make push-specproc` refuses `OWNER=astroai`) because the image includes pPXF and MOOG.
+  - Default images: `base`, `studio`, `improc-studio`, `specproc`, `specproc-studio`. `notebook`, `marimo`, and `vscode` are still built and will be removed later. `terminal`, `openresearch`, and `openscience` remain buildable targets and are not in the default group.
+  - `studio` is the studio Dockerfile on `base`. `improc-studio` and `specproc-studio` reuse that Dockerfile with `improc` or `specproc` as the parent, and that science venv is the default Jupyter kernel and the marimo interpreter.
+  - `improc` is the headless parent of `improc-studio` (built with it, published on the public release). Group spectroscopy (`specproc`, `specproc-studio`) is part of `make build-all`, tagged under `OWNER`. `make push-all` retags those two to `SPECPROC_OWNER` (default `k-pop`) because the image includes pPXF and MOOG. `make release-push` bakes group `release`, not `default`.
   - Slim `ray-base` → `ray-worker`; fat `base` → `ray-manager`.
 - **Ray Stack (`ray/`):**
   - FastAPI-based Ray cluster manager app (`ray/manager/`) and worker lifecycle helpers (`ray/worker/`).
 - **In-Session Integrations:**
-  - `astroai` CLI and lab utilities: `config/astroai-lab.lock` pins the environment, then the image reinstalls `canfar-lab` from git `main`.
+  - `astroai` CLI and lab utilities: `config/astroai-lab.lock` pins the environment, then the image reinstalls the latest `canfar-lab` release from PyPI.
   - Writable CADC environment (`/opt/canfar`).
 
 ## Verification Commands and Tiers

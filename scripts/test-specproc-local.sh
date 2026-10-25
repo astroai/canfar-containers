@@ -1,8 +1,7 @@
 #!/bin/bash
 # Local smoke for the specproc image family:
 #   images.canfar.net/<owner>/specproc:<tag>
-#   .../specproc-terminal:<tag>
-#   .../specproc-notebook:<tag>
+#   .../specproc-studio:<tag>
 set -euo pipefail
 
 TAG="${1:-local}"
@@ -40,11 +39,19 @@ PY
 }
 
 check_image specproc ""
-check_image specproc-terminal "test -f /opt/ghostty-web/server.mjs && echo 'PASS: ghostty-web' || { echo 'FAIL: ghostty-web missing'; exit 1; }"
-check_image specproc-notebook "jupyter kernelspec list 2>/dev/null | grep -q specproc && echo 'PASS: specproc jupyter kernel' || { echo 'FAIL: specproc jupyter kernel not registered'; exit 1; }"
+check_image specproc-studio "
+        test -x /opt/astroai/bin/dsh && echo 'PASS: dsh' || { echo 'FAIL: dsh missing'; exit 1; }
+        test -f /opt/ghostty-web/server.mjs && echo 'PASS: ghostty-web' || { echo 'FAIL: ghostty-web missing'; exit 1; }
+        jupyter kernelspec list 2>/dev/null | grep -q specproc && echo 'PASS: specproc jupyter kernel' || { echo 'FAIL: specproc jupyter kernel not registered'; exit 1; }
+        marimo_bin=\$(readlink -f \"\$(command -v marimo)\")
+        case \"\${marimo_bin}\" in
+          /opt/astroai/venv/specproc/*) echo 'PASS: marimo is specproc venv' ;;
+          *) echo \"FAIL: marimo is \${marimo_bin}\"; exit 1 ;;
+        esac
+"
 
 if [[ "${missing}" -ne 0 ]]; then
     echo "${missing} specproc image(s) failed" >&2
     exit 1
 fi
-echo "specproc family local smoke passed (specproc, specproc-terminal, specproc-notebook)"
+echo "specproc family local smoke passed (specproc, specproc-studio)"

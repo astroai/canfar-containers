@@ -16,7 +16,6 @@ a clean slate; use a new image release for fleet-wide updates.
 Examples:
   upgrade-cadc-tools.sh list
   upgrade-cadc-tools.sh --upgrade canfar-lab
-  upgrade-cadc-tools.sh 'canfar-lab @ git+https://github.com/astroai/canfar-lab.git@main'
   upgrade-cadc-tools.sh --upgrade canfar cadcdata cadctap vos
   upgrade-cadc-tools.sh --upgrade 'vosfs @ git+https://github.com/shinybrar/vosfs.git' 'vos-sync @ git+https://github.com/drtobybrown/vos-sync.git'
 

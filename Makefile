@@ -3,6 +3,9 @@
 
 SHELL := bash
 OWNER ?= astroai
+# specproc vendors pPXF and MOOG. Build tags stay under OWNER; push retags
+# those images to this Harbor project (private k-pop).
+SPECPROC_OWNER ?= k-pop
 REGISTRY ?= images.canfar.net
 TAG ?= $(shell date -u +%y.%m)
 BUILD_TAG ?= local
@@ -10,31 +13,35 @@ PYTHON_VERSION ?= 3.13
 
 export OWNER REGISTRY PYTHON_VERSION
 
-SESSION_IMAGES := base terminal notebook vscode marimo openresearch openscience studio
+# `make build-all` / bake group "default". notebook, marimo, vscode are legacy.
+DEFAULT_IMAGES := base studio improc-studio specproc specproc-studio notebook marimo vscode
+# Public Harbor push. specproc* stays group-only (pPXF and MOOG).
+# improc is the parent of improc-studio and remains the headless batch image.
+SESSION_IMAGES := base improc studio improc-studio notebook marimo vscode
 RAY_IMAGES := ray-manager ray-worker
-IMPROC_IMAGES := improc improc-terminal improc-notebook
-SPECPROC_IMAGES := specproc specproc-terminal specproc-notebook
+IMPROC_IMAGES := improc improc-studio
+SPECPROC_IMAGES := specproc specproc-studio
 IMAGE_PREFIX := $(REGISTRY)/$(OWNER)
 
 help:
 	@echo "AstroAI session images (CANFAR Harbor: images.canfar.net/astroai)"
 	@echo "========================="
-	@echo "  make build-all          build session images (base → sessions)"
+	@echo "  make build-all          build default images (base, studio, improc-studio, specproc, specproc-studio, plus legacy notebook/marimo/vscode)"
 	@echo "  make build-ray          build ray-manager + ray-worker (+ base/slim chain)"
-	@echo "  make build-improc       build improc + improc-terminal + improc-notebook (+ base)"
-	@echo "  make build-specproc     build specproc family (+ base); group image, not public astroai"
+	@echo "  make build-improc       build improc + improc-studio (+ base)"
+	@echo "  make build-specproc     build specproc + specproc-studio (+ base); group image, not public astroai"
 	@echo "  make build/vscode       build one image (+ parents)"
-	@echo "  make push-all           push session images to Harbor"
+	@echo "  make push-all           push public images to OWNER and specproc* to SPECPROC_OWNER"
 	@echo "  make push-ray           push Ray images to Harbor"
-	@echo "  make push-improc        push improc stack to Harbor"
-	@echo "  make push-specproc      push specproc to a group Harbor project (OWNER must not be astroai)"
-	@echo "  make release-push       bake+push session stack to Harbor (no local load; disk-safe)"
+	@echo "  make push-improc        push improc + improc-studio to Harbor"
+	@echo "  make push-specproc      retag specproc* to SPECPROC_OWNER ($(SPECPROC_OWNER)) and push"
+	@echo "  make release-push       bake+push public session stack to Harbor (no local load; disk-safe)"
 	@echo "  make release-push-ray   bake+push Ray stack to Harbor (no local load; disk-safe)"
-	@echo "  make release-push-improc bake+push improc stack to Harbor (no local load; disk-safe)"
-	@echo "  make test-local         verify session images locally"
+	@echo "  make release-push-improc bake+push improc + improc-studio to Harbor (no local load; disk-safe)"
+	@echo "  make test-local         verify default images locally"
 	@echo "  make test-studio-local  Studio stamp+dangling .dsh boot → token → 200"
-	@echo "  make test-improc-local  verify improc family locally (improc/terminal/notebook)"
-	@echo "  make test-specproc-local verify specproc family locally"
+	@echo "  make test-improc-local  verify improc + improc-studio locally"
+	@echo "  make test-specproc-local verify specproc + specproc-studio locally"
 	@echo "  make test-base-local    run every base-image CLI (not just command -v)"
 	@echo "  make test-agent-local   agent command matrix + no ~/.local pollution (all session images)"
 	@echo "  make test-ray           Ray container + local cluster + UI tests"
@@ -58,7 +65,7 @@ help:
 	@echo "  make sync-desk-assets   vendor the Desk dock asset from ../canfar-lab"
 	@echo "  make desk-assets-check  fail if scripts/lib/astroai-dock.html drifts from its lock"
 	@echo ""
-	@echo "  OWNER=$(OWNER)  REGISTRY=$(REGISTRY)  BUILD_TAG=$(BUILD_TAG)  TAG=$(TAG)"
+	@echo "  OWNER=$(OWNER)  SPECPROC_OWNER=$(SPECPROC_OWNER)  REGISTRY=$(REGISTRY)  BUILD_TAG=$(BUILD_TAG)  TAG=$(TAG)"
 
 # Canonical starters live in canfar-lab / astroai-lab; containers copies are build artifacts.
 ASTROAI_LAB_DIR ?= $(shell test -d ../canfar-lab && echo ../canfar-lab || echo ../astroai-lab)
@@ -96,27 +103,22 @@ build-all: ## build session images into local docker
 build-ray: ## build Ray manager + worker (uses same base TAG)
 	TAG=$(BUILD_TAG) docker buildx bake $(BAKE_FLAGS) ray-manager ray-worker
 
-build-improc: ## build improc + improc-terminal + improc-notebook (+ base)
-	TAG=$(BUILD_TAG) docker buildx bake $(BAKE_FLAGS) improc improc-terminal improc-notebook
+build-improc: ## build improc + improc-studio (+ base)
+	TAG=$(BUILD_TAG) docker buildx bake $(BAKE_FLAGS) improc improc-studio
 
-build-specproc: ## build specproc + terminal + notebook (+ base)
-	TAG=$(BUILD_TAG) docker buildx bake $(BAKE_FLAGS) specproc specproc-terminal specproc-notebook
+build-specproc: ## build specproc + specproc-studio (+ base)
+	TAG=$(BUILD_TAG) docker buildx bake $(BAKE_FLAGS) specproc specproc-studio
 
 build/%:
 	TAG=$(BUILD_TAG) docker buildx bake $(BAKE_FLAGS) $(notdir $@)
 
-push-all: $(addprefix push/,$(SESSION_IMAGES))
+push-all: $(addprefix push/,$(SESSION_IMAGES)) $(addprefix push/,$(SPECPROC_IMAGES))
 
 push-ray: $(addprefix push/,$(RAY_IMAGES))
 
-push-improc: push/improc push/improc-terminal push/improc-notebook ## push improc stack
+push-improc: push/improc push/improc-studio ## push improc + improc-studio
 
-push-specproc: ## push specproc family; refuses the public astroai project
-	@if [ "$(OWNER)" = "astroai" ]; then \
-		echo "specproc includes pPXF and MOOG. Push to the group Harbor project: OWNER=<group> make push-specproc" >&2; \
-		exit 1; \
-	fi
-	$(MAKE) push/specproc push/specproc-terminal push/specproc-notebook OWNER=$(OWNER) TAG=$(TAG) BUILD_TAG=$(BUILD_TAG)
+push-specproc: $(addprefix push/,$(SPECPROC_IMAGES)) ## retag specproc* onto SPECPROC_OWNER and push
 
 # Production Ray push: bake TAG into manager env (RAY_IMAGE_TAG) — use BUILD_TAG=$(TAG).
 #   make build-ray BUILD_TAG=26.09 TAG=26.09 && make push-ray TAG=26.09 BUILD_TAG=26.09
@@ -135,33 +137,40 @@ push/ray-base:
 # the release tag. The guard fails loudly when the source image is missing, and
 # refuses to push when the source is OLDER than the local :$(TAG) image (a
 # downgrade — the exact stale-:local incident).
+# specproc* is built under OWNER (same bake as everything else) and pushed
+# to SPECPROC_OWNER. pPXF and MOOG stay out of the public astroai project.
 push/%:
-	@case "$(notdir $@)" in \
-		specproc|specproc-terminal|specproc-notebook) \
-			if [ "$(OWNER)" = "astroai" ]; then \
-				echo "specproc includes pPXF and MOOG. Set OWNER to the group Harbor project." >&2; \
+	@name="$(notdir $@)"; \
+	src_owner="$(OWNER)"; \
+	dst_owner="$(OWNER)"; \
+	case "$$name" in \
+		specproc|specproc-terminal|specproc-notebook|specproc-studio) \
+			dst_owner="$(SPECPROC_OWNER)"; \
+			if [ "$$dst_owner" = "astroai" ]; then \
+				echo "specproc includes pPXF and MOOG. SPECPROC_OWNER must not be astroai (default: k-pop)." >&2; \
 				exit 1; \
 			fi ;; \
-	esac
-	@src="$(IMAGE_PREFIX)/$(notdir $@):$(BUILD_TAG)"; \
-	dst="$(IMAGE_PREFIX)/$(notdir $@):$(TAG)"; \
+	esac; \
+	src="$(REGISTRY)/$$src_owner/$$name:$(BUILD_TAG)"; \
+	dst="$(REGISTRY)/$$dst_owner/$$name:$(TAG)"; \
+	latest="$(REGISTRY)/$$dst_owner/$$name:latest"; \
 	if ! docker image inspect "$$src" >/dev/null 2>&1; then \
-		echo "ERROR: $$src not found locally — build it first (make build/$(notdir $@) BUILD_TAG=$(BUILD_TAG))" >&2; \
+		echo "ERROR: $$src not found locally — build it first (make build/$$name BUILD_TAG=$(BUILD_TAG))" >&2; \
 		exit 1; \
 	fi; \
 	if docker image inspect "$$dst" >/dev/null 2>&1; then \
 		src_ts="$$(docker image inspect --format '{{.Created}}' "$$src")"; \
 		dst_ts="$$(docker image inspect --format '{{.Created}}' "$$dst")"; \
 		if [[ "$$src_ts" < "$$dst_ts" ]]; then \
-			echo "ERROR: $$src ($(BUILD_TAG)) is OLDER than local $$dst — push would downgrade $(notdir $@):$(TAG). Rebuild with BUILD_TAG=$(TAG) and push with the same." >&2; \
+			echo "ERROR: $$src ($(BUILD_TAG)) is OLDER than local $$dst — push would downgrade $$name:$(TAG). Rebuild with BUILD_TAG=$(TAG) and push with the same." >&2; \
 			exit 1; \
 		fi; \
 	fi; \
-	echo "Pushing $$src ($(BUILD_TAG)) as $(notdir $@):$(TAG) and :latest"
-	docker tag $(IMAGE_PREFIX)/$(notdir $@):$(BUILD_TAG) $(IMAGE_PREFIX)/$(notdir $@):$(TAG)
-	docker push $(IMAGE_PREFIX)/$(notdir $@):$(TAG)
-	docker tag $(IMAGE_PREFIX)/$(notdir $@):$(BUILD_TAG) $(IMAGE_PREFIX)/$(notdir $@):latest
-	docker push $(IMAGE_PREFIX)/$(notdir $@):latest
+	echo "Pushing $$src ($(BUILD_TAG)) as $$dst and $$latest"; \
+	docker tag "$$src" "$$dst"; \
+	docker push "$$dst"; \
+	docker tag "$$src" "$$latest"; \
+	docker push "$$latest"
 
 # Disk-safe Harbor release: bake streams straight to the registry (no --load).
 # Requires docker login to $(REGISTRY). TAG defaults to YY.MM.
@@ -174,25 +183,25 @@ push-latest-tags: ## point :latest at existing :$(TAG) digests in Harbor
 		docker buildx imagetools create -t "$$dst" "$$src"; \
 	done
 
-release-push: ## bake+push session images to Harbor as :$(TAG) and :latest
-	TAG=$(TAG) docker buildx bake --push
+release-push: ## bake+push the public release group to Harbor as :$(TAG) and :latest
+	TAG=$(TAG) docker buildx bake --push release
 	@$(MAKE) push-latest-tags IMAGES="$(SESSION_IMAGES)" TAG=$(TAG)
 
 release-push-ray: ## bake+push ray-manager + ray-worker as :$(TAG) and :latest
 	TAG=$(TAG) docker buildx bake --push ray-manager ray-worker
 	@$(MAKE) push-latest-tags IMAGES="$(RAY_IMAGES)" TAG=$(TAG)
 
-release-push-improc: ## bake+push improc + improc-terminal + improc-notebook as :$(TAG) and :latest
-	TAG=$(TAG) docker buildx bake --push improc improc-terminal improc-notebook
+release-push-improc: ## bake+push improc + improc-studio as :$(TAG) and :latest
+	TAG=$(TAG) docker buildx bake --push improc improc-studio
 	@$(MAKE) push-latest-tags IMAGES="$(IMPROC_IMAGES)" TAG=$(TAG)
 
-release-push-specproc: ## bake+push specproc family; refuses the public astroai project
-	@if [ "$(OWNER)" = "astroai" ]; then \
-		echo "specproc includes pPXF and MOOG. OWNER=<group> make release-push-specproc" >&2; \
+release-push-specproc: ## bake+push specproc* straight to SPECPROC_OWNER
+	@if [ "$(SPECPROC_OWNER)" = "astroai" ]; then \
+		echo "specproc includes pPXF and MOOG. SPECPROC_OWNER must not be astroai (default: k-pop)." >&2; \
 		exit 1; \
 	fi
-	TAG=$(TAG) docker buildx bake --push specproc specproc-terminal specproc-notebook
-	@$(MAKE) push-latest-tags IMAGES="$(SPECPROC_IMAGES)" TAG=$(TAG)
+	TAG=$(TAG) OWNER=$(SPECPROC_OWNER) docker buildx bake --push specproc specproc-studio
+	@$(MAKE) push-latest-tags IMAGES="$(SPECPROC_IMAGES)" OWNER=$(SPECPROC_OWNER) TAG=$(TAG)
 
 lock-ray: ## regenerate config/ray-deps.lock from config/ray-deps.txt (Python 3.13, Ray).
 	@tmp=$$(mktemp); \
@@ -222,7 +231,7 @@ lock-check: ## fail CI if a lockfile's package body drifts from its source. The 
 
 test-local: ## verify session images (parallel)
 	@fails=0; pids=(); \
-	for img in terminal notebook vscode marimo openresearch openscience studio base; do \
+	for img in $(DEFAULT_IMAGES); do \
 		./scripts/test-local.sh "$$img" --verify-only & pids+=($$!); \
 	done; \
 	for pid in "$${pids[@]}"; do wait "$$pid" || fails=$$((fails + 1)); done; \
@@ -230,16 +239,16 @@ test-local: ## verify session images (parallel)
 	./scripts/test-work-overlay.sh
 	./scripts/test-status-arc-project.sh
 
-# Runs ALL session images — SESSION_IMAGES is the canonical list (pass it so
+# Runs the default images — DEFAULT_IMAGES is the canonical list (pass it so
 # adding/removing an image stays single-sourced). For a single-image dev run
-# use the script directly after building it: make build/openresearch &&
-# ./scripts/test-agent-local.sh openresearch (no build-all dependency).
+# use the script directly after building it: make build/studio &&
+# ./scripts/test-agent-local.sh studio (no build-all dependency).
 # SKIP_BUILD=1 reuses already-loaded local tags (avoids a full bake).
 test-agent-local: ## agent command matrix on all session images (local, mounted fresh home)
 	@if [ "$(SKIP_BUILD)" != "1" ]; then $(MAKE) build-all BUILD_TAG=$(BUILD_TAG); fi
 	@chmod +x scripts/test-agent-local.sh
-	@TAG=$(BUILD_TAG) ./scripts/test-agent-local.sh $(if $(IMAGE),$(IMAGE),$(SESSION_IMAGES))
-	@echo "agent-local E2E passed for $(if $(IMAGE),$(IMAGE),all session images)"
+	@TAG=$(BUILD_TAG) ./scripts/test-agent-local.sh $(if $(IMAGE),$(IMAGE),$(DEFAULT_IMAGES))
+	@echo "agent-local E2E passed for $(if $(IMAGE),$(IMAGE),all default images)"
 
 test-studio-local: ## Studio Connect regression: stamp + dangling ~/.dsh → token → 200
 	@chmod +x scripts/test-studio-local.sh

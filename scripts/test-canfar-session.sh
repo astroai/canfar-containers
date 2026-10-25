@@ -5,18 +5,17 @@
 # kinds still schedule. Verifies: create → Running → connectURL HTTP healthy.
 #
 # Usage:
-#   ./scripts/test-canfar-session.sh terminal 26.08
 #   ./scripts/test-canfar-session.sh studio 26.08
+#   ./scripts/test-canfar-session.sh improc-studio 26.08
+#   ./scripts/test-canfar-session.sh specproc-studio 26.08
 #   ./scripts/test-canfar-session.sh notebook 26.08
 #   ./scripts/test-canfar-session.sh vscode 26.08
 #   ./scripts/test-canfar-session.sh marimo 26.08
-#   ./scripts/test-canfar-session.sh openresearch 26.08
-#   ./scripts/test-canfar-session.sh improc-notebook 26.08
 #
 # Environment:
 #   REGISTRY, OWNER, CANFAR_TEST_TIMEOUT (default 900)
 
-IMAGE="${1:?image name required (terminal|notebook|vscode|marimo|openresearch|openscience|studio|ray-manager|improc-terminal|improc-notebook)}"
+IMAGE="${1:?image name required (studio|improc-studio|specproc-studio|notebook|marimo|vscode|terminal|openresearch|openscience|ray-manager)}"
 TAG="${2:-${TAG:-latest}}"
 OWNER="${OWNER:-astroai}"
 REGISTRY="${REGISTRY:-images.canfar.net}"

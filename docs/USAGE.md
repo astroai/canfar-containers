@@ -14,7 +14,7 @@ This file ships inside images as `/opt/astroai/USAGE.md`.
 
 ## Scientist card
 
-1. Portal → launch **studio** (coding portal) or **openresearch** (autoresearch) as home base (or terminal/vscode/notebook/marimo/ray-manager as needed).
+1. Portal → launch **studio** (coding portal). Use **improc-studio** when the image-processing stack should be the default Python, or the group **specproc-studio** for spectroscopy. `notebook`, `marimo`, and `vscode` are still available and will be removed.
 2. Inside: `astroai` · `canfar-lab help` · `less /opt/astroai/USAGE.md`
 3. Work under `$SRCDIR` (same as `$WORK`; `/scratch/src` on CANFAR so container OOM does not wipe it) and `/scratch` (data/caches).
 4. Persist to `/arc/home` or `/arc/projects` before the session ends (`canfar-lab save` / `git push`).
@@ -143,10 +143,10 @@ Compilers and editors are in interactive images; put CUDA/ML stacks in your pixi
 | `openresearch` | Autoresearch UI (`orx`) on `:5000`; **Terminal** chip → `/astroai-terminal/` (ghostty-web); AstroAI hub at `/astroai-agents/` |
 | `openscience` | OpenScience research workspace on `:5000` with the astroai CADC/VO tools and astronomy Python; **AstroAI** chip → hub at `/astroai-agents/` (model keys, compute) |
 | `studio` | dsh coding portal on `:5000`; **Terminal** + **AstroAI** chips — see [STUDIO.md](STUDIO.md) |
+| `improc-studio` | Same studio on the improc stack. Default Jupyter kernel and marimo use `/opt/astroai/venv/improc` |
+| `specproc-studio` | Same studio on the specproc stack (group image). Default Jupyter kernel and marimo use `/opt/astroai/venv/specproc` |
 | `ray-manager` | Cluster UI + Ray head; see Ray section |
 | `improc` | Headless FITS/HDF5 image-processing CLIs — see [Image processing (`improc`)](#image-processing-improc) |
-| `improc-terminal` | Same tools + browser terminal (ghostty-web/tmux) |
-| `improc-notebook` | Same tools + JupyterLab (default kernel = science venv) |
 
 CADC clients (`cadcget`, `vls`, …) are on PATH from `/opt/canfar`.
 
@@ -157,8 +157,7 @@ CADC clients (`cadcget`, `vls`, …) are on PATH from `/opt/canfar`.
 | Image | Use |
 |-------|-----|
 | `improc` | Headless batch |
-| `improc-terminal` | Interactive CLI (Contributed, :5000) |
-| `improc-notebook` | JupyterLab (Notebook, :8888); kernel **Python 3 (improc)** has healpy/galsim/… |
+| `improc-studio` | Studio (Contributed, :5000). Kernel **Python 3 (improc)** and marimo use the science venv (healpy/galsim/…) |
 
 PATH includes `/opt/astroai/venv/improc/bin`, sourcextractor++, and SkyMaker.
 
@@ -195,14 +194,13 @@ synthetic galaxy field, render it, extract sources) is in
 
 Group image, not part of the public `astroai` catalog. A CANFAR account does
 not hide it: the public project allows anonymous pull. Push only to the
-group Harbor project (`OWNER=<group> make push-specproc`). The image includes
+group Harbor project (`k-pop`; `make push-all` retags it, or `SPECPROC_OWNER=<project> make push-specproc`). The image includes
 pPXF (no redistribution) and MOOG (no redistribution grant).
 
 | Image | Use |
 |-------|-----|
 | `specproc` | Headless batch |
-| `specproc-terminal` | Interactive CLI (Contributed, :5000) |
-| `specproc-notebook` | JupyterLab (Notebook, :8888); kernel **Python 3 (specproc)** |
+| `specproc-studio` | Studio (Contributed, :5000). Kernel **Python 3 (specproc)** and marimo use the science venv |
 
 Input is a reduced 1D spectrum. No instrument pipelines.
 

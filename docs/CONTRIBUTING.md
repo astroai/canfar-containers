@@ -55,7 +55,7 @@ git checkout -b my-change
 | Jupyter / Ray starters | **Edit in** lab `data/notebooks/`, then `make sync-notebook-starters` | `notebook` |
 | CADC client list | `config/cadc-tools.txt` | `base`+ |
 | First-shell what's new | `config/whats-new.txt` (bump the `# id:` line) | `base`+ |
-| **`astroai` CLI** | `config/astroai-lab.in` + lock, then git `main` at image build | `base`+ |
+| **`astroai` CLI** | `config/astroai-lab.in` + lock, then the latest PyPI `canfar-lab` at image build | `base`+ |
 | Ray | `config/ray-deps.txt`, `dockerfiles/ray-*`, `ray/`, `scripts/*ray*` | `make build-ray` |
 | Bake graph, tags | `docker-bake.hcl`, `Makefile` | Depends |
 
@@ -66,9 +66,9 @@ projects. Slim `ray-base` (workers only) stays minimal — see [RAY.md](RAY.md).
 ## Local build and test
 
 ```bash
-make build/terminal
+make build/studio
 make build-all
-./scripts/test-local.sh terminal 5000
+./scripts/test-local.sh studio 5000
 ./scripts/test-local.sh notebook 8888
 ```
 
@@ -84,7 +84,7 @@ uv run python -c "print('ok')"
 
 ## Refresh the `astroai-lab` lock
 
-`config/astroai-lab.in` tracks `canfar-lab` `main` unpinned. Images install the compiled lock, then reinstall `canfar-lab` from that git URL, so a rebuild follows `main` without a lock bump. `lock-check` still fails when the compiled lock drifts from `.in`; regenerate it then:
+`config/astroai-lab.in` tracks PyPI `canfar-lab` unpinned. Images install the compiled lock, then reinstall the latest `canfar-lab` release, so a rebuild follows PyPI without a lock bump. `lock-check` still fails when the compiled lock drifts from `.in`; regenerate it then:
 
 ```bash
 cd ../astroai-lab
@@ -98,7 +98,7 @@ make test-local BUILD_TAG=local
 make test-ray BUILD_TAG=local
 ```
 
-Same pattern for `make lock-ray` when unpinned Ray deps move. OpenResearch, OpenScience, OpenVSCode, dsh, and canfar-lab are resolved at image build time; there is no version bump to make in the Dockerfiles.
+Same pattern for `make lock-ray` when unpinned Ray deps move. OpenResearch, OpenScience, OpenVSCode, dsh, and canfar-lab are resolved at image build time; canfar-lab comes from PyPI. There is no version bump to make in the Dockerfiles.
 
 ## Writable CADC venv
 
