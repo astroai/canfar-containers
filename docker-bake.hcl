@@ -16,33 +16,43 @@ variable "PYTHON_VERSION" {
   default = "3.13"
 }
 
-# Default build. notebook, marimo, and vscode stay until they are removed.
-# Do not `docker buildx bake --push` this group: specproc includes pPXF and
-# MOOG and must not land in the public astroai project. Use group "release"
-# or `make release-push`.
+# make build-all. notebook, marimo, and vscode remain as targets and are
+# not in this group. ray-base and python are bake parents, not Harbor images.
 group "default" {
   targets = [
     "base",
+    "improc",
+    "specproc",
+    "openscience",
+    "openresearch",
+    "ray-worker",
+    "ray-manager",
     "studio",
     "improc-studio",
-    "specproc",
     "specproc-studio",
-    "notebook",
-    "marimo",
-    "vscode",
   ]
 }
 
-# Public Harbor release. improc is the parent of improc-studio.
+# Same set as default. release-push bakes this group straight to Harbor.
 group "release" {
-  targets = ["base", "improc", "studio", "improc-studio", "notebook", "marimo", "vscode"]
+  targets = [
+    "base",
+    "improc",
+    "specproc",
+    "openscience",
+    "openresearch",
+    "ray-worker",
+    "ray-manager",
+    "studio",
+    "improc-studio",
+    "specproc-studio",
+  ]
 }
 
 group "improc" {
   targets = ["improc", "improc-studio"]
 }
 
-# Group spectroscopy stack. Not part of the public astroai catalog.
 group "specproc" {
   targets = ["specproc", "specproc-studio"]
 }

@@ -14,7 +14,7 @@ This file ships inside images as `/opt/astroai/USAGE.md`.
 
 ## Scientist card
 
-1. Portal → launch **studio** (coding portal). Use **improc-studio** when the image-processing stack should be the default Python, or the group **specproc-studio** for spectroscopy. `notebook`, `marimo`, and `vscode` are still available and will be removed.
+1. Portal → launch **studio** (coding portal). Use **improc-studio** when the image-processing stack should be the default Python, or **specproc-studio** for spectroscopy. **openscience** and **openresearch** are the research workspaces.
 2. Inside: `astroai` · `canfar-lab help` · `less /opt/astroai/USAGE.md`
 3. Work under `$SRCDIR` (same as `$WORK`; `/scratch/src` on CANFAR so container OOM does not wipe it) and `/scratch` (data/caches).
 4. Persist to `/arc/home` or `/arc/projects` before the session ends (`canfar-lab save` / `git push`).
@@ -144,7 +144,7 @@ Compilers and editors are in interactive images; put CUDA/ML stacks in your pixi
 | `openscience` | OpenScience research workspace on `:5000` with the astroai CADC/VO tools and astronomy Python; **AstroAI** chip → hub at `/astroai-agents/` (model keys, compute) |
 | `studio` | dsh coding portal on `:5000`; **Terminal** + **AstroAI** chips — see [STUDIO.md](STUDIO.md) |
 | `improc-studio` | Same studio on the improc stack. Default Jupyter kernel and marimo use `/opt/astroai/venv/improc` |
-| `specproc-studio` | Same studio on the specproc stack (group image). Default Jupyter kernel and marimo use `/opt/astroai/venv/specproc` |
+| `specproc-studio` | Same studio on the specproc stack. Default Jupyter kernel and marimo use `/opt/astroai/venv/specproc` |
 | `ray-manager` | Cluster UI + Ray head; see Ray section |
 | `improc` | Headless FITS/HDF5 image-processing CLIs — see [Image processing (`improc`)](#image-processing-improc) |
 
@@ -192,9 +192,7 @@ synthetic galaxy field, render it, extract sources) is in
 
 ## Spectroscopy (`specproc`)
 
-Group image, not part of the public `astroai` catalog. A CANFAR account does
-not hide it: the public project allows anonymous pull. Push only to the
-group Harbor project (`k-pop`; `make push-all` retags it, or `SPECPROC_OWNER=<project> make push-specproc`). The image includes
+Published as `images.canfar.net/astroai/specproc`. The image includes
 pPXF (no redistribution) and MOOG (no redistribution grant).
 
 | Image | Use |

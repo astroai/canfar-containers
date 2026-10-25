@@ -3,9 +3,6 @@
 
 SHELL := bash
 OWNER ?= astroai
-# specproc vendors pPXF and MOOG. Build tags stay under OWNER; push retags
-# those images to this Harbor project (private k-pop).
-SPECPROC_OWNER ?= k-pop
 REGISTRY ?= images.canfar.net
 TAG ?= $(shell date -u +%y.%m)
 BUILD_TAG ?= local
@@ -13,11 +10,10 @@ PYTHON_VERSION ?= 3.13
 
 export OWNER REGISTRY PYTHON_VERSION
 
-# `make build-all` / bake group "default". notebook, marimo, vscode are legacy.
-DEFAULT_IMAGES := base studio improc-studio specproc specproc-studio notebook marimo vscode
-# Public Harbor push. specproc* stays group-only (pPXF and MOOG).
-# improc is the parent of improc-studio and remains the headless batch image.
-SESSION_IMAGES := base improc studio improc-studio notebook marimo vscode
+# make build-all / bake group "default", and make push-all.
+# Studios: studio (on base), improc-studio, specproc-studio.
+DEFAULT_IMAGES := base improc specproc openscience openresearch ray-worker ray-manager studio improc-studio specproc-studio
+SESSION_IMAGES := $(DEFAULT_IMAGES)
 RAY_IMAGES := ray-manager ray-worker
 IMPROC_IMAGES := improc improc-studio
 SPECPROC_IMAGES := specproc specproc-studio
@@ -26,15 +22,15 @@ IMAGE_PREFIX := $(REGISTRY)/$(OWNER)
 help:
 	@echo "AstroAI session images (CANFAR Harbor: images.canfar.net/astroai)"
 	@echo "========================="
-	@echo "  make build-all          build default images (base, studio, improc-studio, specproc, specproc-studio, plus legacy notebook/marimo/vscode)"
+	@echo "  make build-all          base improc specproc openscience openresearch ray-worker ray-manager studio improc-studio specproc-studio"
 	@echo "  make build-ray          build ray-manager + ray-worker (+ base/slim chain)"
 	@echo "  make build-improc       build improc + improc-studio (+ base)"
-	@echo "  make build-specproc     build specproc + specproc-studio (+ base); group image, not public astroai"
-	@echo "  make build/vscode       build one image (+ parents)"
-	@echo "  make push-all           push public images to OWNER and specproc* to SPECPROC_OWNER"
+	@echo "  make build-specproc     build specproc + specproc-studio (+ base)"
+	@echo "  make build/studio       build one image (+ parents)"
+	@echo "  make push-all           push the build-all images to Harbor ($(OWNER))"
 	@echo "  make push-ray           push Ray images to Harbor"
 	@echo "  make push-improc        push improc + improc-studio to Harbor"
-	@echo "  make push-specproc      retag specproc* to SPECPROC_OWNER ($(SPECPROC_OWNER)) and push"
+	@echo "  make push-specproc      push specproc + specproc-studio to Harbor"
 	@echo "  make release-push       bake+push public session stack to Harbor (no local load; disk-safe)"
 	@echo "  make release-push-ray   bake+push Ray stack to Harbor (no local load; disk-safe)"
 	@echo "  make release-push-improc bake+push improc + improc-studio to Harbor (no local load; disk-safe)"
@@ -65,7 +61,7 @@ help:
 	@echo "  make sync-desk-assets   vendor the Desk dock asset from ../canfar-lab"
 	@echo "  make desk-assets-check  fail if scripts/lib/astroai-dock.html drifts from its lock"
 	@echo ""
-	@echo "  OWNER=$(OWNER)  SPECPROC_OWNER=$(SPECPROC_OWNER)  REGISTRY=$(REGISTRY)  BUILD_TAG=$(BUILD_TAG)  TAG=$(TAG)"
+	@echo "  OWNER=$(OWNER)  REGISTRY=$(REGISTRY)  BUILD_TAG=$(BUILD_TAG)  TAG=$(TAG)"
 
 # Canonical starters live in canfar-lab / astroai-lab; containers copies are build artifacts.
 ASTROAI_LAB_DIR ?= $(shell test -d ../canfar-lab && echo ../canfar-lab || echo ../astroai-lab)
@@ -112,13 +108,13 @@ build-specproc: ## build specproc + specproc-studio (+ base)
 build/%:
 	TAG=$(BUILD_TAG) docker buildx bake $(BAKE_FLAGS) $(notdir $@)
 
-push-all: $(addprefix push/,$(SESSION_IMAGES)) $(addprefix push/,$(SPECPROC_IMAGES))
+push-all: $(addprefix push/,$(DEFAULT_IMAGES))
 
 push-ray: $(addprefix push/,$(RAY_IMAGES))
 
 push-improc: push/improc push/improc-studio ## push improc + improc-studio
 
-push-specproc: $(addprefix push/,$(SPECPROC_IMAGES)) ## retag specproc* onto SPECPROC_OWNER and push
+push-specproc: $(addprefix push/,$(SPECPROC_IMAGES)) ## push specproc + specproc-studio
 
 # Production Ray push: bake TAG into manager env (RAY_IMAGE_TAG) — use BUILD_TAG=$(TAG).
 #   make build-ray BUILD_TAG=26.09 TAG=26.09 && make push-ray TAG=26.09 BUILD_TAG=26.09
@@ -137,23 +133,11 @@ push/ray-base:
 # the release tag. The guard fails loudly when the source image is missing, and
 # refuses to push when the source is OLDER than the local :$(TAG) image (a
 # downgrade — the exact stale-:local incident).
-# specproc* is built under OWNER (same bake as everything else) and pushed
-# to SPECPROC_OWNER. pPXF and MOOG stay out of the public astroai project.
 push/%:
 	@name="$(notdir $@)"; \
-	src_owner="$(OWNER)"; \
-	dst_owner="$(OWNER)"; \
-	case "$$name" in \
-		specproc|specproc-terminal|specproc-notebook|specproc-studio) \
-			dst_owner="$(SPECPROC_OWNER)"; \
-			if [ "$$dst_owner" = "astroai" ]; then \
-				echo "specproc includes pPXF and MOOG. SPECPROC_OWNER must not be astroai (default: k-pop)." >&2; \
-				exit 1; \
-			fi ;; \
-	esac; \
-	src="$(REGISTRY)/$$src_owner/$$name:$(BUILD_TAG)"; \
-	dst="$(REGISTRY)/$$dst_owner/$$name:$(TAG)"; \
-	latest="$(REGISTRY)/$$dst_owner/$$name:latest"; \
+	src="$(REGISTRY)/$(OWNER)/$$name:$(BUILD_TAG)"; \
+	dst="$(REGISTRY)/$(OWNER)/$$name:$(TAG)"; \
+	latest="$(REGISTRY)/$(OWNER)/$$name:latest"; \
 	if ! docker image inspect "$$src" >/dev/null 2>&1; then \
 		echo "ERROR: $$src not found locally — build it first (make build/$$name BUILD_TAG=$(BUILD_TAG))" >&2; \
 		exit 1; \
@@ -195,13 +179,9 @@ release-push-improc: ## bake+push improc + improc-studio as :$(TAG) and :latest
 	TAG=$(TAG) docker buildx bake --push improc improc-studio
 	@$(MAKE) push-latest-tags IMAGES="$(IMPROC_IMAGES)" TAG=$(TAG)
 
-release-push-specproc: ## bake+push specproc* straight to SPECPROC_OWNER
-	@if [ "$(SPECPROC_OWNER)" = "astroai" ]; then \
-		echo "specproc includes pPXF and MOOG. SPECPROC_OWNER must not be astroai (default: k-pop)." >&2; \
-		exit 1; \
-	fi
-	TAG=$(TAG) OWNER=$(SPECPROC_OWNER) docker buildx bake --push specproc specproc-studio
-	@$(MAKE) push-latest-tags IMAGES="$(SPECPROC_IMAGES)" OWNER=$(SPECPROC_OWNER) TAG=$(TAG)
+release-push-specproc: ## bake+push specproc + specproc-studio as :$(TAG) and :latest
+	TAG=$(TAG) docker buildx bake --push specproc specproc-studio
+	@$(MAKE) push-latest-tags IMAGES="$(SPECPROC_IMAGES)" TAG=$(TAG)
 
 lock-ray: ## regenerate config/ray-deps.lock from config/ray-deps.txt (Python 3.13, Ray).
 	@tmp=$$(mktemp); \

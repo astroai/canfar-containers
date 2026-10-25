@@ -38,18 +38,17 @@ flowchart TB
 | Image | Use for | Skaha type |
 |-------|---------|------------|
 | `base` | Headless parent (CI / batch) | — |
+| `improc` | Astronomy FITS/HDF5 CLIs | Headless |
+| `specproc` | Spectroscopy stack (pPXF and MOOG) | Headless |
+| `openscience` | OpenScience research workspace | Contributed |
+| `openresearch` | OpenResearch (`orx`) autoresearch dashboard | Contributed |
+| `ray-worker` | Ray worker CPU or GPU (manager-launched) | Headless |
+| `ray-manager` | Ray head + control panel + Dashboard ([RAY.md](docs/RAY.md)) | Contributed |
 | `studio` | AstroAI Studio on base — [STUDIO.md](docs/STUDIO.md) | Contributed |
 | `improc-studio` | Same studio; improc is the default Python | Contributed |
-| `specproc` | Group spectroscopy stack (not public `astroai`) | Headless |
-| `specproc-studio` | Same studio; specproc is the default Python (group image) | Contributed |
-| `notebook` | JupyterLab. Still built; will be removed | Notebook |
-| `marimo` | Reactive notebooks. Still built; will be removed | Contributed |
-| `vscode` | Browser IDE. Still built; will be removed | Contributed |
-| `improc` | Astronomy FITS/HDF5 CLIs (parent of `improc-studio`) | Headless |
-| `ray-manager` | Ray head + control panel + Dashboard ([RAY.md](docs/RAY.md)) | Contributed |
-| `ray-worker` | Ray worker CPU or GPU (manager-launched) | Headless |
+| `specproc-studio` | Same studio; specproc is the default Python | Contributed |
 
-`terminal`, `openresearch`, and `openscience` still have Dockerfiles. They are not part of `make build-all`.
+`notebook`, `marimo`, `vscode`, and `terminal` still have Dockerfiles. They are not part of `make build-all`.
 
 ## Documentation
 
@@ -68,10 +67,10 @@ In-session: `canfar-lab help` · `less /opt/astroai/USAGE.md`
 Requires Docker with buildx. Full loop: [CONTRIBUTING.md](docs/CONTRIBUTING.md).
 
 ```bash
-make build-all              # base, studio, improc-studio, specproc, specproc-studio, plus legacy notebook/marimo/vscode
+make build-all              # base, improc, specproc, openscience, openresearch, ray-worker, ray-manager, studio, improc-studio, specproc-studio
 make build-ray              # ray-manager + ray-worker
 make build-improc           # improc + improc-studio (+ base)
-make build-specproc         # specproc + specproc-studio (+ base); not public astroai
+make build-specproc         # specproc + specproc-studio (+ base)
 make build/studio           # one image (+ parents)
 make test-local             # local smokes
 make test-improc-local      # improc CLI smoke
@@ -84,12 +83,7 @@ See [OPERATORS.md](docs/OPERATORS.md). The `astroai` Harbor project is **public*
 (anonymous pull); push still needs `docker login images.canfar.net`.
 
 ```bash
-make push/studio TAG=26.10
-make push-all TAG=26.10
-make push-ray TAG=26.10
-make push-improc TAG=26.10
-# specproc* is built with the other images, then push-all retags it to k-pop
-# (pPXF and MOOG). Override with SPECPROC_OWNER=<project>.
+make push-all TAG=26.10 BUILD_TAG=26.10
 ```
 
 Default `TAG` is current UTC `YY.MM` (for example `26.10`).
@@ -108,7 +102,7 @@ examples/ray/  container-local Ray smokes
 ## Design
 
 - **Same images for CPU and GPU** — choose the node in the portal; CUDA/ML stacks via pixi/uv in the project.
-- **Bake graph:** untagged `python` stage → fat `base` (compilers + session tools) → `studio`, and → `improc` → `improc-studio` / `specproc` → `specproc-studio`. Legacy `notebook`, `marimo`, and `vscode` are still in the default build. Slim `ray-base` (from that python stage) → `ray-worker`; fat `base` → `ray-manager`. `python` is not published to Harbor. Images install the latest PyPI `canfar-lab`.
+- **Bake graph:** untagged `python` stage → fat `base` → `studio`, `openscience`, `openresearch`, `improc` → `improc-studio`, `specproc` → `specproc-studio`, and `ray-manager`. Slim `ray-base` (from that python stage, not published) → `ray-worker`. `notebook`, `marimo`, and `vscode` are outside `build-all`. Images install the latest PyPI `canfar-lab`.
 - **Fast session disks:** `WORK` is `$SCRATCH/src` when `/srcdir` is the container overlay (OOM-fragile) and `/scratch` is a volume; `SCRATCH` (`/scratch`) holds data and caches. Both are session-private. `/arc/home` and `/arc/projects` are shared across sessions. Persist with `canfar-lab save` / `git push`.
 - **Skaha types:** Contributed listen on **5000**; Notebook on **8888**.
 - **Auth at the edge:** Session UIs trust CANFAR TLS + portal login. Use these images only behind an authenticating reverse proxy.
