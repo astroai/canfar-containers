@@ -385,14 +385,15 @@ COMMAND_DOCK_TEMPLATE = (
         <button class="help-btn" data-help title="What can I do here?">?</button>
       </div>
       <a class="nokey" href="{prefix}/hub/#agents" data-nokey hidden
-         title="The assistant needs a model API key before it can answer">Add a model key to start chatting</a>
+         title="The assistant is set to the free DeepSeek model. It needs an OpenCode API key">Add an OpenCode key to start chatting</a>
       <button class="handle" title="Switch Studio tool"><img src="{prefix}/__studio/logo.svg" alt=""/>Studio</button>
     </div>
     <div class="overlay" role="dialog" aria-modal="true" aria-label="Welcome to AstroAI Studio">
       <div class="card">
         <div class="card-head"><img src="{prefix}/__studio/logo.svg" alt=""/><h2>Welcome to AstroAI Studio</h2></div>
         <p class="lead">One CANFAR session, several tools sharing the same files. Switch tools from the
-          Studio bar. <b>First step:</b> add a model API key so the assistant and agents can work.</p>
+          Studio bar. The assistant is already set to the free DeepSeek model on OpenCode Zen.
+          <b>First step:</b> add an OpenCode API key so it can answer.</p>
         <ul class="tools">
           """
     + _welcome_items()
@@ -404,7 +405,7 @@ COMMAND_DOCK_TEMPLATE = (
         </div>
         <div class="actions">
           <button class="ok" data-close>Close</button>
-          <a class="primary" href="{prefix}/hub/#agents" data-close-go>Add a model key</a>
+          <a class="primary" href="{prefix}/hub/#agents" data-close-go>Add an OpenCode key</a>
         </div>
       </div>
     </div>
@@ -509,24 +510,27 @@ DESK_TOKEN = secrets.token_urlsafe(24)
 _DESK_DOCK_PATH = _LIB / "astroai-dock.html"
 _DESK_DOCK_CACHE: str | None = None
 
-#: Session-side buttons only add what the Studio command dock lacks; navigation
-#: stays there to avoid duplicating it. "Desktop sync" is §6.2 of desk-sync.md.
+#: Same two buttons as the laptop card. Off unless CANFAR_LAB_DESK is set.
 SESSION_DESK_BUTTONS: tuple[dict[str, Any], ...] = (
     {
-        "id": "desktop-sync",
-        "label": "Desktop sync",
-        "action": "sync_to_desktop",
+        "id": "sync",
+        "label": "Sync to CANFAR",
+        "action": "sync_to_canfar",
         "kind": "primary",
-        "title": "Commit + push this session's work, then ask the desk to pull",
+        "title": "Commit and push, then ring the other side through canfar data",
     },
     {
-        "id": "cluster",
-        "label": "Launch cluster",
-        "action": "cluster",
-        "payload": {"mode": "start"},
-        "title": "Start the CANFAR Ray cluster (never a local one)",
+        "id": "launch-studio",
+        "label": "Launch Studio",
+        "action": "launch_studio",
+        "title": "Open a running AstroAI Studio session, or create one",
     },
 )
+
+
+def desk_enabled() -> bool:
+    """True when ``CANFAR_LAB_DESK`` is 1, true, or yes. Default off."""
+    return os.environ.get("CANFAR_LAB_DESK", "").strip().lower() in {"1", "true", "yes"}
 
 
 def desk_dock_html() -> str:
@@ -541,7 +545,9 @@ def desk_dock_html() -> str:
 
 
 def desk_dock_snippet() -> str:
-    """Dock config + asset injected into dsh pages (empty when not vendored)."""
+    """Dock config + asset injected into dsh pages (empty unless the desk is on)."""
+    if not desk_enabled():
+        return ""
     asset = desk_dock_html()
     if not asset:
         return ""
@@ -1184,18 +1190,19 @@ def _parse_stdout_json(stdout: str) -> dict[str, Any] | None:
     return data if isinstance(data, dict) else None
 
 
-def run_desktop_sync(payload: dict[str, Any]) -> dict[str, Any]:
-    """Publish the session's repos and drop the desk an event (§6.2)."""
+def _run_exchange(payload: dict[str, Any], to: str) -> dict[str, Any]:
+    """Publish repos and ring the other side. ``to`` is ``canfar`` or ``desktop``."""
     binary = _lab_binary()
     if not binary:
         raise SyncUnavailable("canfar-lab CLI not found on PATH in this image")
     if not _SYNC_LOCK.acquire(blocking=False):
         raise SyncBusy("an exchange is already running")
+    action = "sync_to_canfar" if to == "canfar" else "sync_to_desktop"
     try:
         args = [binary, "--json"]
         if payload.get("dry_run"):
             args.append("--dry-run")
-        args += ["sync", "exchange", "--to", "desktop"]
+        args += ["sync", "exchange", "--to", to]
         proc = subprocess.run(
             args,
             cwd=_studio_workdir() or None,
@@ -1209,8 +1216,8 @@ def run_desktop_sync(payload: dict[str, Any]) -> dict[str, Any]:
     parsed = _parse_stdout_json(proc.stdout or "")
     result: dict[str, Any] = {
         "ok": proc.returncode == 0,
-        "action": "sync_to_desktop",
-        "to": "desktop",
+        "action": action,
+        "to": to,
         "returncode": proc.returncode,
         "cmd": args,
     }
@@ -1222,6 +1229,100 @@ def run_desktop_sync(payload: dict[str, Any]) -> dict[str, Any]:
     else:
         result["output"] = ((proc.stdout or "") + (proc.stderr or ""))[-4000:]
     return result
+
+
+def run_desktop_sync(payload: dict[str, Any]) -> dict[str, Any]:
+    """Publish the session's repos and drop the desk an event (§6.2)."""
+    return _run_exchange(payload, "desktop")
+
+
+def run_sync_to_canfar(payload: dict[str, Any]) -> dict[str, Any]:
+    """Same Sync to CANFAR action the laptop desk runs."""
+    return _run_exchange(payload, "canfar")
+
+
+def _canfar_json(args: list[str]) -> tuple[int, Any, str]:
+    """Run ``canfar`` and parse stdout as JSON. ``(code, data, error)``."""
+    try:
+        proc = subprocess.run(
+            ["canfar", *args],
+            capture_output=True,
+            text=True,
+            timeout=180,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return 1, None, str(exc)
+    if proc.returncode != 0:
+        return proc.returncode, None, (proc.stderr or proc.stdout or "").strip()
+    try:
+        return 0, json.loads(proc.stdout or "null"), ""
+    except json.JSONDecodeError:
+        return 1, None, "canfar did not return JSON"
+
+
+def run_launch_studio(payload: dict[str, Any]) -> dict[str, Any]:
+    """Open a running Studio session for this image, or create one."""
+    del payload
+    image = os.environ.get(
+        "CANFAR_LAB_SESSION_IMAGE", "images.canfar.net/astroai/studio:latest"
+    ).strip()
+    name = os.environ.get("CANFAR_LAB_SESSION_NAME", "astroai-studio").strip() or "astroai-studio"
+    code, sessions, err = _canfar_json(["ps", "--kind", "contributed", "--output", "json"])
+    if code != 0:
+        return {"ok": False, "action": "launch_studio", "error": err}
+    if not isinstance(sessions, list):
+        sessions = []
+    for item in sessions:
+        if not isinstance(item, dict):
+            continue
+        if str(item.get("image") or "") != image:
+            continue
+        if str(item.get("status") or "") not in ("Running", "Pending"):
+            continue
+        sid = str(item.get("id") or "")
+        if not sid:
+            continue
+        try:
+            opened = subprocess.run(["canfar", "open", sid], check=False, timeout=180)
+            err = ""
+            code = opened.returncode
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            err = str(exc)
+            code = 1
+        return {
+            "ok": code == 0,
+            "action": "launch_studio",
+            "id": sid,
+            "created": False,
+            "error": err,
+        }
+    code, created, err = _canfar_json(
+        ["create", "--name", name, "--output", "json", "contributed", image]
+    )
+    if code != 0:
+        return {"ok": False, "action": "launch_studio", "error": err}
+    if not isinstance(created, list) or not created:
+        return {
+            "ok": False,
+            "action": "launch_studio",
+            "error": "canfar create returned no session id",
+        }
+    sid = str(created[0])
+    try:
+        opened = subprocess.run(["canfar", "open", sid], check=False, timeout=180)
+        err = ""
+        code = opened.returncode
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        err = str(exc)
+        code = 1
+    return {
+        "ok": code == 0,
+        "action": "launch_studio",
+        "id": sid,
+        "created": True,
+        "error": err,
+    }
 
 
 def _cluster_log_path() -> Path:
@@ -1279,6 +1380,8 @@ def run_cluster(payload: dict[str, Any]) -> dict[str, Any]:
 
 SYNC_ACTIONS: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
     "sync_to_desktop": run_desktop_sync,
+    "sync_to_canfar": run_sync_to_canfar,
+    "launch_studio": run_launch_studio,
     "cluster": run_cluster,
 }
 
