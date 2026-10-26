@@ -102,9 +102,6 @@ if [[ -n "${_LAB_BIN}" ]] && command -v "${_LAB_BIN}" >/dev/null 2>&1; then
             >>"${_state}/studio-prepare.log" 2>&1; then
         astroai_boot_log "WARN: ${_LAB_BIN} studio --prepare returned non-zero — check ${_state}/studio-prepare.log"
     fi
-    if command -v npx >/dev/null 2>&1; then
-        (npx --yes skills add astroai/canfar-skills >/dev/null 2>&1 || true) &
-    fi
 else
     astroai_boot_log "INFO: canfar-lab CLI not pre-installed — proceeding with core services"
 fi
