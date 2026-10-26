@@ -190,7 +190,7 @@ lock-ray: ## regenerate config/ray-deps.lock from config/ray-deps.txt (Python 3.
 
 lock-astroai-lab: ## regenerate config/astroai-lab.lock from unpinned main in config/astroai-lab.in.
 	@tmp=$$(mktemp); \
-	uv pip compile --python-version 3.13 --output-file "$$tmp" config/astroai-lab.in >/dev/null; \
+	UV_NO_CACHE=1 uv pip compile --python-version 3.13 --output-file "$$tmp" config/astroai-lab.in >/dev/null; \
 	mv -f "$$tmp" config/astroai-lab.lock
 
 lock-check: ## fail CI if a lockfile's package body drifts from its source. The uv-generated header (3 lines) is stripped before comparison so output paths in the embedded command line don't cause false-positive drift.
@@ -202,7 +202,7 @@ lock-check: ## fail CI if a lockfile's package body drifts from its source. The 
 	tail -n +4 config/ray-deps.lock > /tmp/__ray.committed.body; \
 	rm -f "$$tmp_ray"; \
 	cmp -s /tmp/__ray.body /tmp/__ray.committed.body || { echo "ray-deps.lock drift — run make lock-ray" >&2; exit 1; }; \
-	uv pip compile --python-version 3.13 --output-file "$$tmp_lab" config/astroai-lab.in >/dev/null; \
+	UV_NO_CACHE=1 uv pip compile --python-version 3.13 --output-file "$$tmp_lab" config/astroai-lab.in >/dev/null; \
 	tail -n +4 "$$tmp_lab" > /tmp/__lab.body; \
 	tail -n +4 config/astroai-lab.lock > /tmp/__lab.committed.body; \
 	rm -f "$$tmp_lab"; \
