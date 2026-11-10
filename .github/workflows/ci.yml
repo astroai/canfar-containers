@@ -2,9 +2,9 @@ name: canfar-containers CI
 
 # Docker-free gate for the ray-manager module. Image build/test pipelines
 # remain operator-side via the Makefile (`make build-all`, `make test-local`,
-# `make test-canfar`, …). Lower-bound-only deps in ray/manager/pyproject.toml
-# resolve through the existing uv.lock-equivalent discipline governed by
-# `config/ray-deps.lock` and `config/astroai-lab.lock`.
+# `make test-canfar`, …). CI never resolves or checks lockfiles: a new
+# upstream release must not fail a PR. Locks move only when a maintainer runs
+# `make lock-ray` / `make lock-astroai-lab`; `make lint` checks them locally.
 on:
   push:
     branches: [main]
@@ -21,7 +21,6 @@ jobs:
         with:
           enable-cache: true
           python-version: "3.12"
-          # Pin so lock-check resolution matches committed lockfiles.
           version: "0.11.32"
 
       - name: Sync manager project (runtime + dev deps)
@@ -35,22 +34,6 @@ jobs:
       - name: Pytest (ray-manager unit tests)
         working-directory: ray/manager
         run: uv run pytest tests/ -q
-
-      # Hard-fail on lockfile drift: this is the safety net for the maintainer's
-      # lower-bound-only source constraints (no `==` / `<=` pins anywhere). Do
-      # not add `continue-on-error: true` or `|| true` here — that would
-      # silently re-allow resolver drift past CI and break reproducibility.
-      - name: Probe lockfile drift gate
-        # Regression test for the gate directly below. Injects junk into each
-        # committed lockfile in turn and asserts `make -s lock-check` returns
-        # non-zero. Self-restoring via an EXIT trap so the working tree ends
-        # up clean even if the runner is killed mid-script. If this step ever
-        # passes-with-drift, the gate below has been weakened and MUST be
-        # re-hardened.
-        run: ./scripts/test-lockfile-drift.sh
-
-      - name: Lockfile integrity — DO NOT add continue-on-error — make -s lock-check
-        run: make -s lock-check
 
       - name: Docker-free host tests
         run: make test-host

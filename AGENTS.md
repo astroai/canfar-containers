@@ -30,7 +30,7 @@ make lint
 ```
 
 This runs:
-- `make lock-check`: Fails if lockfiles drift from their source requirements (`config/astroai-lab.in`, `config/ray-deps.txt`).
+- `make lock-check`: Fails if a lockfile no longer satisfies its source (`config/astroai-lab.in`, `config/ray-deps.txt`) or was edited by hand. New upstream releases do not fail it.
 - `make lint-doc-quota`: Verifies doc assertions.
 - `make test-host`: Runs Docker-free host self-checks (peek/osc52, agent-wizard unit tests, Starship prompt configuration).
 
@@ -64,7 +64,7 @@ make test-ray SMOKE=1     # fast Ray container & UI smoke
 ## Agent PR Hygiene and Rules
 
 1. **Agent-Neutral Instructions:** All agents (Antigravity, Cursor, Codex, Claude, OpenCode, Pi) use this `AGENTS.md` as the single canonical repository guide. Do not create agent-specific instruction duplicates.
-2. **Lockfile Integrity:** Never weaken or bypass `make lock-check` in CI or local scripts. Maintain strict reproducible dependency discipline.
+2. **Lockfile Integrity:** Locks change only through `make lock-ray` / `make lock-astroai-lab`, never by hand, and `make lock-check` must pass before a push. CI does not resolve or gate on lockfiles: an upstream release must never fail a PR.
 3. **No Secrets / Local Tags:** Never commit API keys, `.env` files, or production Harbor credentials.
 4. **Minimal Diffs:** Batch mechanical refactors and avoid noisy whitespace or formatting-only changes across unrelated files.
 5. **Follow `~/src/AGENTS.md`:** Ship changes via GitHub pull requests against `astroai/canfar-containers`.

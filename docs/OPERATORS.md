@@ -282,7 +282,7 @@ session record ages out. Prefer grepping `[astroai-boot]` for `common-init:ERR`,
   or installing onto `/arc` home (NFS is too slow). Skills:
   `npx skills add astroai/canfar-skills`.
 - **Plugins vs skills:** images install `config/astroai-lab.lock`, then reinstall the latest `canfar-lab` from PyPI. That package's plugins are **MCP / tools / rules only**. Skill packs (`SKILL.md`) install via `npx skills add astroai/canfar-skills` (skills.sh), not `canfar-lab agent plugins`.
-- **Release order:** publish `canfar-lab` to PyPI first, then rebuild/push images (the image build installs the latest release). Run `make lock-astroai-lab` when `lock-check` reports drift so CI stays green.
+- **Release order:** publish `canfar-lab` to PyPI first, then rebuild/push images (the image build installs the latest release). Run `make lock-astroai-lab` when you want newer transitive pins; CI does not check locks, and a new upstream release never fails `make lock-check`.
 - Quota warnings fire at session start and via `canfar-lab status` (≈80 / 90 / 95%).
 - User data lifecycle (`canfar-lab save`, `canfar data`) is documented for users in [USAGE.md](USAGE.md).
 
