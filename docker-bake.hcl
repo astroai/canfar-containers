@@ -133,6 +133,15 @@ target "studio" {
   tags       = ["${REGISTRY}/${OWNER}/studio:${TAG}"]
 }
 
+# astroai/dsh: dsh + Lab tab (scripts/startup-dsh.sh). Not in default/release
+# until verified on CANFAR. An unreleased canfar-lab wheel:
+#   --set dsh.contexts.canfar-lab-dist=../canfar-lab/dist
+target "dsh" {
+  inherits   = ["_interface"]
+  dockerfile = "dockerfiles/dsh/Dockerfile"
+  tags       = ["${REGISTRY}/${OWNER}/dsh:${TAG}"]
+}
+
 # Ray cluster images
 # - ray-base: slim (from python) → ray-worker
 # - ray-manager: fat (from base) + Ray runtime

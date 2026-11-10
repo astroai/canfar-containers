@@ -1,4 +1,4 @@
-.PHONY: help build-all build/% build-ray build-improc build-specproc push-all push/% push-ray push-improc push-specproc push-latest-tags release-push release-push-ray release-push-improc release-push-specproc test-local test-agent-local test-studio-local test-ray test-improc-local test-specproc-local test-base-local test-host test-canfar test-canfar-agents test-canfar-session test-canfar-ray test-canfar-ray-gpu test-canfar-ray-autoscale clean clean-all lock-ray lock-astroai-lab lock-check lint lint-doc-quota sync-marimo-starter sync-notebook-starters sync-desk-assets desk-assets-check
+.PHONY: help build-all build/% build-ray build-improc build-specproc push-all push/% push-ray push-improc push-specproc push-latest-tags release-push release-push-ray release-push-improc release-push-specproc test-local test-agent-local test-studio-local test-dsh-local test-ray test-improc-local test-specproc-local test-base-local test-host test-canfar test-canfar-agents test-canfar-session test-canfar-ray test-canfar-ray-gpu test-canfar-ray-autoscale clean clean-all lock-ray lock-astroai-lab lock-check lint lint-doc-quota sync-marimo-starter sync-notebook-starters sync-desk-assets desk-assets-check
 
 
 SHELL := bash
@@ -36,6 +36,7 @@ help:
 	@echo "  make release-push-improc bake+push improc + improc-studio to Harbor (no local load; disk-safe)"
 	@echo "  make test-local         verify default images locally"
 	@echo "  make test-studio-local  Studio stamp+dangling .dsh boot → token → 200"
+	@echo "  make test-dsh-local     dsh image: Connect, Agent + Lab tabs, onboarding API"
 	@echo "  make test-improc-local  verify improc + improc-studio locally"
 	@echo "  make test-specproc-local verify specproc + specproc-studio locally"
 	@echo "  make test-base-local    run every base-image CLI (not just command -v)"
@@ -234,6 +235,10 @@ test-studio-local: ## Studio Connect regression: stamp + dangling ~/.dsh → tok
 	@chmod +x scripts/test-studio-local.sh
 	@TAG=$(BUILD_TAG) ./scripts/test-studio-local.sh
 
+test-dsh-local: ## dsh image: Connect token, Agent + Lab tabs, Lab auth via proxy, onboarding
+	@chmod +x scripts/test-dsh-local.sh
+	@TAG=$(BUILD_TAG) ./scripts/test-dsh-local.sh
+
 test-ray: build-ray build/base ## Ray image checks + local cluster join + UI
 	chmod +x scripts/test-ray-*.sh scripts/test-astroai-lab-loop.sh scripts/ray-head-start.sh \
 		scripts/startup-ray-manager.sh scripts/ray-network-probe.sh ray/worker/start-worker.sh
@@ -306,6 +311,7 @@ test-host: ## docker-free checks (selfchecks + agent-wizard unit tests)
 	python3 scripts/lib/test_agent_wizard_verbs.py
 	python3 scripts/lib/test_orx_canfar_proxy.py
 	python3 scripts/lib/test_studio_canfar_proxy.py
+	python3 scripts/lib/test_dsh_canfar_proxy.py
 	python3 scripts/lib/test_astroai_html_proxy.py
 	python3 scripts/lib/test_session_title.py
 	python3 scripts/lib/test_canfar_marimo_env.py

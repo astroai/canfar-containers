@@ -1,0 +1,7 @@
+{
+  "_comment": "astroai/dsh tab strip and routes (scripts/lib/dsh-canfar-proxy.py). Add a tool: install it in one Dockerfile layer, start it on a loopback port in startup-dsh.sh, add one line here. strip=false for tools that serve under their own base path (/session/contrib/<id>/<prefix>).",
+  "tabs": [
+    {"id": "agent", "label": "Agent", "prefix": "/", "port": 3080, "port_env": "DSH_PORT"},
+    {"id": "lab", "label": "Lab", "prefix": "/lab", "port": 4792, "port_env": "CANFAR_LAB_WEB_PORT", "bearer_env": "CANFAR_LAB_WEB_TOKEN", "badge": "api/onboarding"}
+  ]
+}
