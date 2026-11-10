@@ -84,7 +84,7 @@ uv run python -c "print('ok')"
 
 ## Refresh the `astroai-lab` lock
 
-`config/astroai-lab.in` tracks PyPI `canfar-lab` unpinned. Images install the compiled lock, then reinstall the latest `canfar-lab` release, so a rebuild follows PyPI without a lock bump. `lock-check` still fails when the compiled lock drifts from `.in`; regenerate it then:
+`config/astroai-lab.in` tracks PyPI `canfar-lab` unpinned. Images install the compiled lock, then reinstall the latest `canfar-lab` release, so a rebuild follows PyPI without a lock bump. `lock-check` fails only when the lock no longer satisfies `.in` or was edited by hand, never because of a new upstream release, and CI does not run it. To move the pins:
 
 ```bash
 cd ../astroai-lab
