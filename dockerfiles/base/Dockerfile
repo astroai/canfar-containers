@@ -23,21 +23,27 @@ RUN printf '%s\n' \
       'path-exclude=/usr/share/lintian/*' \
       > /etc/dpkg/dpkg.cfg.d/01-nodoc \
     && apt-get update && apt-get install -y --no-install-recommends \
+    7zip \
     acl \
+    aria2 \
     autoconf \
     automake \
     bash-completion \
     bat \
+    bc \
     bind9-dnsutils \
     bison \
     bsdextrautils \
+    btop \
     build-essential \
     bzip2 \
     ca-certificates \
     cargo \
     cmake \
     curl \
+    direnv \
     emacs-nox \
+    entr \
     fd-find \
     file \
     flex \
@@ -47,34 +53,44 @@ RUN printf '%s\n' \
     git \
     git-delta \
     git-lfs \
+    gnupg \
     htop \
     hyperfine \
     iproute2 \
+    iputils-ping \
     jq \
     less \
     libcfitsio-dev \
     libfftw3-dev \
     libgsl-dev \
+    libmagic1 \
     libtool \
     locales \
     lsof \
     make \
     nano \
     ncdu \
+    netcat-openbsd \
     ninja-build \
     nvtop \
     openssh-client \
+    parallel \
     patch \
     pigz \
     pkg-config \
     procps \
+    pv \
     ripgrep \
     rsync \
     rustc \
+    screen \
     shellcheck \
+    sqlite3 \
+    strace \
     tealdeer \
+    tig \
+    tmux \
     tree \
-    libmagic1 \
     universal-ctags \
     unzip \
     vim \
@@ -92,6 +108,20 @@ RUN printf '%s\n' \
     && git config --system core.pager delta \
     && git config --system interactive.diffFilter 'delta --color-only' \
     && git config --system delta.navigate true
+
+# rclone from its own release: Debian's (1.60, 2022) lacks current backends.
+# The ADD busts the cache when a release is published; the .deb is checked
+# against the release SHA256SUMS.
+ADD https://api.github.com/repos/rclone/rclone/releases/latest /tmp/rclone-release.json
+RUN tag="$(jq -r .tag_name /tmp/rclone-release.json)" \
+    && test -n "${tag}" && test "${tag}" != null \
+    && cd /tmp \
+    && curl -fsSLO "https://github.com/rclone/rclone/releases/download/${tag}/rclone-${tag}-linux-amd64.deb" \
+    && curl -fsSL "https://github.com/rclone/rclone/releases/download/${tag}/SHA256SUMS" \
+        | grep " rclone-${tag}-linux-amd64.deb\$" | sha256sum -c - \
+    && dpkg -i "rclone-${tag}-linux-amd64.deb" \
+    && rclone version | head -1 \
+    && rm -f /tmp/rclone-*.deb /tmp/rclone-release.json
 
 # Node.js LTS (official tarball + sha256 supply-chain check) so every session
 # image ships node/npm/npx on PATH — the single Node version across images.

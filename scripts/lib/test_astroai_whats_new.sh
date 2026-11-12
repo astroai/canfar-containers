@@ -6,7 +6,10 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 NEWS="${ROOT}/config/whats-new.txt"
 SCRIPT="${ROOT}/scripts/astroai-whats-new.sh"
 
-grep -q '^# id: 26.10-vos$' "${NEWS}"
+# The note must start with an id line; the stamp records it.
+NEWS_ID="$(sed -n 's/^# id: //p' "${NEWS}" | head -1)"
+[[ -n "${NEWS_ID}" ]] || { echo "FAIL: ${NEWS} has no '# id:' line" >&2; exit 1; }
+export NEWS_ID
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "${TMP}"' EXIT
@@ -73,7 +76,7 @@ if "# id:" in first:
 stamp = f"{home_root}/first/.astroai/lab/whats-new-seen"
 with open(stamp, encoding="utf-8") as fh:
     seen = fh.read().strip()
-if seen != "26.10-vos":
+if seen != os.environ["NEWS_ID"]:
     sys.stderr.write(f"FAIL: stamp is {seen!r}\n")
     sys.exit(1)
 

@@ -63,9 +63,8 @@ RUN bash /tmp/patch-dsh-skip-deepseek-onboarding.sh /opt/astroai \
 # opencode-session) ship inside canfar-lab; `studio --prepare` installs them
 # into the profile at boot without a network fetch.
 
-# 2. Terminal tab: ghostty-web over a persistent tmux session.
-RUN apt-get update && apt-get install -y --no-install-recommends tmux \
-    && rm -rf /var/lib/apt/lists/* \
+# 2. Terminal tab: ghostty-web over a persistent tmux session (tmux from base).
+RUN command -v tmux \
     && printf '%s\n' \
         'set -g default-shell /bin/bash' \
         'set -g mouse on' \

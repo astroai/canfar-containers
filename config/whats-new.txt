@@ -1,16 +1,17 @@
-# id: 26.10-vos
+# id: 26.11-tools
 
 What's new in this AstroAI image
 ────────────────────────────────
-vos-sync and vosfs are installed in /opt/canfar (on PATH).
+More command-line tools on every AstroAI image:
 
-  vos-sync SRC DEST
-      Parallel copy between this session and CANFAR VOSpace.
-      Preview:  vos-sync -n vos:vault/<user>/data/ ./data/
+  tmux, screen          keep a shell running when the page closes
+  rclone                copy to and from cloud storage (current release)
+  parallel, pv, aria2   run jobs in parallel, watch progress, fast downloads
+  sqlite3, bc, 7z       quick databases, arithmetic, archives
+  btop, strace, tig     system monitor, syscall tracing, git browser
+  direnv, entr          per-folder environments, rerun on file change
+  ping, nc, gpg         network checks, signing
 
-  vosfs
-      Read and write VOSpace from Python (fsspec protocol "vos").
-      import fsspec
-      fsspec.filesystem("vos")
+Still here: vos-sync (parallel VOSpace copy) and vosfs (VOSpace from Python).
 
 Shown once for this image. Again: cat /opt/astroai/whats-new.txt
