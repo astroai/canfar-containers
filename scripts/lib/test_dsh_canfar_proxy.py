@@ -119,6 +119,11 @@ def _load_proxy(dsh_port: int, lab_port: int, token_file: Path):
             "CANFAR_LAB_WEB_PORT": str(lab_port),
             "CANFAR_LAB_WEB_TOKEN": "labsecret",
             "ASTROAI_DSH_TOKEN_FILE": str(token_file),
+            # On-demand tools: ports nothing listens on, and a state dir for requests.
+            "ASTROAI_TERMINAL_PORT": str(_free_port()),
+            "ASTROAI_JUPYTER_PORT": str(_free_port()),
+            "ASTROAI_VSCODE_PORT": str(_free_port()),
+            "ASTROAI_STUDIO_STATE": STATE_DIR,
         }
     )
     spec = importlib.util.spec_from_file_location("dsh_canfar_proxy", ROOT / "dsh-canfar-proxy.py")
@@ -128,9 +133,11 @@ def _load_proxy(dsh_port: int, lab_port: int, token_file: Path):
     return mod
 
 
+STATE_DIR = tempfile.mkdtemp()
 DSH_PORT, LAB_PORT, PROXY_PORT = _free_port(), _free_port(), _free_port()
 TOKEN_FILE = Path(tempfile.mkdtemp()) / "dsh-web-token"
 proxy = _load_proxy(DSH_PORT, LAB_PORT, TOKEN_FILE)
+LAB_TAB = next(t for t in proxy.TABS if t["id"] == "lab")
 
 
 def _get(path: str, headers: dict[str, str] | None = None, method: str = "GET", body=None):
@@ -146,7 +153,12 @@ def _get(path: str, headers: dict[str, str] | None = None, method: str = "GET", 
 
 def test_tab_table_and_matching() -> None:
     ids = [t["id"] for t in proxy.TABS]
-    assert ids == ["agent", "lab"], ids
+    assert ids == ["agent", "terminal", "jupyter", "vscode", "lab"], ids
+    starts = {t["id"] for t in proxy.TABS if t["start"]}
+    assert starts == {"terminal", "jupyter", "vscode"}
+    assert [t["id"] for t in proxy.TABS if t["align"] == "end"] == ["lab"]
+    assert proxy.match_tab("/terminal/ws")["id"] == "terminal"
+    assert not next(t for t in proxy.TABS if t["id"] == "jupyter")["strip"]
     assert proxy.match_tab("/lab/api/state")["id"] == "lab"
     assert proxy.match_tab("/lab")["id"] == "lab"
     assert proxy.match_tab("/laboratory")["id"] == "agent"
@@ -198,8 +210,15 @@ def test_dsh_page_rewritten_with_tabs() -> None:
     assert b'id="astroai-tabs-config"' in data
     cfg = json.loads(data.split(b'type="application/json">')[1].split(b"</script>")[0])
     assert cfg["active"] == "agent"
-    assert [t["href"] for t in cfg["tabs"]] == [f"{P}/", f"{P}/lab/"]
-    assert cfg["tabs"][1]["badge"] == "api/onboarding"
+    assert [t["href"] for t in cfg["tabs"]] == [
+        f"{P}/",
+        f"{P}/terminal/",
+        f"{P}/jupyter/",
+        f"{P}/vscode/",
+        f"{P}/lab/",
+    ]
+    lab = cfg["tabs"][-1]
+    assert lab["badge"] == "api/onboarding" and lab["end"] is True
     assert f'src="{P}/__dsh/tabs.js"'.encode() in data
     assert "SameSite=Lax" in resp.getheader("Set-Cookie")
     assert SEEN["dsh"]["Host"] == "workloads.canfar.net"
@@ -313,19 +332,103 @@ def test_early_redirect_closes_connection() -> None:
     assert resp.status == 302 and resp.getheader("Connection") == "close"
 
 
+def test_opening_a_stopped_tool_requests_its_start() -> None:
+    request = Path(STATE_DIR) / "tools" / "jupyter"
+    request.unlink(missing_ok=True)
+    resp, data = _get(f"{P}/jupyter/lab", {"Sec-Fetch-Dest": "document"})
+    assert resp.status == 503 and b"Opening JupyterLab" in data
+    assert b"first time" in data and b"astroai-tabs-config" in data
+    assert request.exists()
+    # A tool without "start" (the Lab) never drops a request.
+    saved = LAB_TAB["port"]
+    LAB_TAB["port"] = _free_port()
+    try:
+        _get(f"{P}/lab/")
+        assert not (Path(STATE_DIR) / "tools" / "lab").exists()
+    finally:
+        LAB_TAB["port"] = saved
+
+
+def test_unstripped_tool_keeps_its_base_path() -> None:
+    """JupyterLab serves under /session/contrib/<id>/jupyter itself."""
+    seen: dict[str, str] = {}
+
+    class FakeJupyter(BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+
+        def log_message(self, *a) -> None:
+            pass
+
+        def do_GET(self) -> None:  # noqa: N802
+            seen["path"] = self.path
+            seen["prefix"] = self.headers.get("X-Forwarded-Prefix") or ""
+            self.send_response(200)
+            self.send_header("Content-Length", "2")
+            self.end_headers()
+            self.wfile.write(b"ok")
+
+    tab = next(t for t in proxy.TABS if t["id"] == "jupyter")
+    port = _free_port()
+    srv = _serve(FakeJupyter, port)
+    saved, tab["port"] = tab["port"], port
+    try:
+        resp, _ = _get(f"{P}/jupyter/api/status")
+        assert resp.status == 200 and seen["path"] == f"{P}/jupyter/api/status"
+        assert seen["prefix"] == ""
+    finally:
+        tab["port"] = saved
+        srv.shutdown()
+
+
+def test_html_navigation_without_fetch_metadata_gets_tabs() -> None:
+    """Plain-http origins get no Sec-Fetch-*; a request asking for HTML is a page view."""
+    page = {
+        "Accept": "text/html,application/xhtml+xml",
+        "Cookie": "dsh-auth-1=v; astroai-onboarded=1",
+    }
+    _, data = _get(f"{P}/deep/route", page)
+    assert b"astroai-tabs-config" in data
+    _, data = _get(f"{P}/api/file?p=x.html", {"Accept": "*/*", "Cookie": "dsh-auth-1=v"})
+    assert b"astroai-tabs-config" not in data
+
+
+def test_vscode_trust_patch() -> None:
+    settings = Path(tempfile.mkdtemp()) / "settings.json"
+    settings.write_text(
+        json.dumps({"security.workspace.trust.enabled": False, "editor.fontSize": 14})
+    )
+    proxy.VSCODE_SETTINGS = str(settings)
+    cfg = json.dumps({"remoteAuthority": "x", "configurationDefaults": {"a": 1}})
+    page = (
+        '<html><head><meta id="vscode-workbench-web-configuration" data-settings="'
+        + proxy.html.escape(cfg, quote=True)
+        + '"></head><body></body></html>'
+    ).encode()
+    out = proxy.patch_vscode(page, "text/html").decode()
+    raw = out.split('data-settings="')[1].split('"')[0]
+    patched = json.loads(proxy.html.unescape(raw))
+    assert patched["enableWorkspaceTrust"] is False
+    assert patched["configurationDefaults"] == {
+        "a": 1,
+        "security.workspace.trust.enabled": False,
+        "editor.fontSize": 14,
+    }
+    assert proxy.patch_vscode(b"{}", "application/json") == b"{}"
+
+
 def test_tabs_js_served() -> None:
     resp, data = _get(f"{P}/__dsh/tabs.js")
     assert resp.status == 200 and b"attachShadow" in data
 
 
 def test_lab_down_says_starting() -> None:
-    saved = proxy.TABS[1]["port"]
-    proxy.TABS[1]["port"] = _free_port()
+    saved = LAB_TAB["port"]
+    LAB_TAB["port"] = _free_port()
     try:
         resp, data = _get(f"{P}/lab/")
-        assert resp.status == 503 and b"Lab is starting" in data
+        assert resp.status == 503 and b"Opening Lab" in data
     finally:
-        proxy.TABS[1]["port"] = saved
+        LAB_TAB["port"] = saved
 
 
 if __name__ == "__main__":

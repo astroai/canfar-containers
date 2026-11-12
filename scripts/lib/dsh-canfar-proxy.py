@@ -11,6 +11,13 @@ keys; the ``/`` tab is dsh, everything else is matched by path prefix:
 * ``badge``      path under the tab polled by the tab strip; a JSON
                  ``{"pending": n, "ready": bool, "kind": ...}`` puts a count on the tab.
 * ``port_env``   env var that overrides ``port``.
+* ``start``      (default false) start the tool the first time its tab is opened:
+                 the proxy drops ``$ASTROAI_STUDIO_STATE/tools/<id>`` and
+                 startup-dsh.sh's supervisor starts (and keeps) it.
+* ``align``      ``"end"`` puts the tab at the right end of the strip.
+* ``patch``      ``"vscode"``: apply the image's VS Code machine settings as
+                 embedder defaults, so workspace trust stays off (VS Code for
+                 the Web keeps user settings in the browser).
 
 Adding a tool later is one Dockerfile layer plus one line in tabs.json.
 
@@ -24,6 +31,7 @@ answers ``/api/studio/status`` for the image healthcheck. Stdlib only.
 from __future__ import annotations
 
 import contextlib
+import html
 import json
 import os
 import re
@@ -90,6 +98,9 @@ def _clean_tab(raw: Any) -> dict[str, Any] | None:
         "strip": bool(raw.get("strip", True)),
         "bearer_env": str(raw.get("bearer_env") or ""),
         "badge": str(raw.get("badge") or "").lstrip("/"),
+        "start": bool(raw.get("start")),
+        "align": "end" if raw.get("align") == "end" else "",
+        "patch": str(raw.get("patch") or ""),
     }
 
 
@@ -118,6 +129,20 @@ def match_tab(route: str, tabs: list[dict[str, Any]] | None = None) -> dict[str,
         if p != "/" and (route == p or route.startswith(p + "/")) and len(p) > len(best["prefix"]):
             best = tab
     return best
+
+
+def request_start(tab: dict[str, Any]) -> bool:
+    """Ask startup-dsh.sh to start *tab*'s tool; False when there is no supervisor."""
+    state = os.environ.get("ASTROAI_STUDIO_STATE", "").strip()
+    if not state or not tab["start"] or not re.fullmatch(r"[a-z0-9-]+", tab["id"]):
+        return False
+    try:
+        tools = Path(state) / "tools"
+        tools.mkdir(parents=True, exist_ok=True)
+        (tools / tab["id"]).touch()
+    except OSError:
+        return False
+    return True
 
 
 def tab_href(tab: dict[str, Any]) -> str:
@@ -343,10 +368,12 @@ TABS_JS = r"""(function () {
     ":host{all:initial}" +
     "nav{box-sizing:border-box;height:" + H + "px;display:flex;align-items:stretch;gap:2px;" +
     "padding:0 8px;font:500 13px/1 system-ui,-apple-system,'Segoe UI',sans-serif;" +
-    "background:#0f1222;color:#a6accd;border-bottom:1px solid #262a40}" +
+    "background:#0f1222;color:#a6accd;border-bottom:1px solid #262a40;" +
+    "overflow-x:auto;scrollbar-width:none}" +
     ".brand{display:flex;align-items:center;padding:0 10px 0 2px;color:#e4e6f5;font-weight:650}" +
     "a{display:flex;align-items:center;gap:6px;padding:0 12px;color:inherit;text-decoration:none;" +
-    "border-bottom:2px solid transparent}" +
+    "border-bottom:2px solid transparent;white-space:nowrap;flex:none}" +
+    "@media (max-width:540px){.brand{display:none}a{padding:0 9px}}" +
     "a:hover{color:#e4e6f5;background:#1a1e33}" +
     "a:focus-visible{outline:2px solid #7aa2f7;outline-offset:-2px}" +
     "a[aria-current=page]{color:#fff;border-bottom-color:#7aa2f7}" +
@@ -364,8 +391,14 @@ TABS_JS = r"""(function () {
   brand.className = "brand";
   brand.textContent = cfg.brand;
   nav.appendChild(brand);
-  var badges = {};
+  var badges = {}, spaced = false;
   cfg.tabs.forEach(function (t) {
+    if (t.end && !spaced) {
+      var gap = document.createElement("span");
+      gap.style.flex = "1 1 auto";
+      nav.appendChild(gap);
+      spaced = true;
+    }
     var a = document.createElement("a");
     a.href = t.href;
     a.textContent = t.label;
@@ -384,7 +417,9 @@ TABS_JS = r"""(function () {
     "html{scroll-padding-top:" + H + "px}" +
     "body{margin-top:" + H + "px!important;height:calc(100% - " + H + "px)!important}" +
     "body>#root,body>#app,body>main{height:calc(100dvh - " + H + "px)!important;" +
-    "min-height:0!important;max-height:calc(100dvh - " + H + "px)!important}";
+    "min-height:0!important;max-height:calc(100dvh - " + H + "px)!important}" +
+    // JupyterLab pins its shell to the viewport; move it below the strip.
+    "body>#main.jp-LabShell{top:" + H + "px!important}";
   (document.head || document.documentElement).appendChild(style);
   function mount() { document.body.insertBefore(host, document.body.firstChild); }
   if (document.body) mount(); else document.addEventListener("DOMContentLoaded", mount);
@@ -419,7 +454,13 @@ def tabs_snippet(active: str) -> str:
         "height": TAB_HEIGHT,
         "active": active,
         "tabs": [
-            {"id": t["id"], "label": t["label"], "href": tab_href(t), "badge": t["badge"]}
+            {
+                "id": t["id"],
+                "label": t["label"],
+                "href": tab_href(t),
+                "badge": t["badge"],
+                "end": t["align"] == "end",
+            }
             for t in TABS
         ],
     }
@@ -428,6 +469,39 @@ def tabs_snippet(active: str) -> str:
         f'<script id="astroai-tabs-config" type="application/json">{payload}</script>'
         f'<script src="{PREFIX}{ASSET_ROUTE}" defer></script>'
     )
+
+
+VSCODE_SETTINGS = os.environ.get(
+    "ASTROAI_VSCODE_SETTINGS", "/opt/openvscode-server/data/Machine/settings.json"
+)
+_VSCODE_CONFIG_RE = re.compile(
+    r'(<meta id="vscode-workbench-web-configuration" data-settings=")([^"]*)(")'
+)
+
+
+def patch_vscode(data: bytes, content_type: str) -> bytes:
+    """Machine settings as ``configurationDefaults``; workspace trust off."""
+    if content_type.split(";", 1)[0].strip().lower() != "text/html":
+        return data
+    try:
+        text = data.decode("utf-8")
+        defaults = json.loads(Path(VSCODE_SETTINGS).read_text(encoding="utf-8"))
+    except (UnicodeDecodeError, OSError, ValueError):
+        return data
+    if not isinstance(defaults, dict):
+        return data
+
+    def patch(m: re.Match[str]) -> str:
+        try:
+            cfg = json.loads(html.unescape(m.group(2)))
+        except ValueError:
+            return m.group(0)
+        cfg["configurationDefaults"] = {**cfg.get("configurationDefaults", {}), **defaults}
+        if defaults.get("security.workspace.trust.enabled") is False:
+            cfg["enableWorkspaceTrust"] = False
+        return m.group(1) + html.escape(json.dumps(cfg), quote=True) + m.group(3)
+
+    return _VSCODE_CONFIG_RE.sub(patch, text, count=1).encode("utf-8")
 
 
 def inject_tabs(data: bytes, content_type: str, active: str) -> bytes:
@@ -472,15 +546,22 @@ STARTING_HTML = (
 )
 
 
-def unavailable_html(label: str) -> bytes:
+def unavailable_html(label: str, *, first_start: bool = False) -> bytes:
+    note = (
+        "Starting it for the first time in this session. This takes a few seconds."
+        if first_start
+        else "It is starting or restarting."
+    )
     return (
         "<!DOCTYPE html><html><head><meta charset='utf-8'/>"
-        "<meta http-equiv='refresh' content='5'/></head>"
-        "<body style='font-family:system-ui,sans-serif;padding:2rem;background:#0f1222;"
-        f"color:#e4e6f5'><h1>{label} is starting</h1>"
-        "<p>This page refreshes by itself.</p>"
-        f"<p><a href='{PREFIX}/' style='color:#7aa2f7'>Back to the Agent tab</a></p>"
-        "</body></html>"
+        "<meta name='viewport' content='width=device-width,initial-scale=1'/>"
+        f"<meta http-equiv='refresh' content='2'/><title>{label}</title></head>"
+        "<body style='margin:0;font:15px/1.5 system-ui,sans-serif;"
+        "background:#0f1222;color:#e4e6f5'>"
+        "<div style='max-width:520px;margin:18vh auto 0;padding:0 16px'>"
+        f"<h1 style='font-size:20px;margin:0 0 8px'>Opening {label}…</h1>"
+        f"<p style='color:#a6accd;margin:0'>{note} This page refreshes by itself.</p>"
+        "</div></body></html>"
     ).encode()
 
 
@@ -617,11 +698,18 @@ def forward_websocket(
 
 
 def wants_tabs(handler: BaseHTTPRequestHandler, tab_route: str) -> bool:
-    """Only top-level pages get the strip, never iframes or previewed user files."""
+    """Only top-level pages get the strip, never iframes or previewed user files.
+
+    Browsers send ``Sec-Fetch-Dest`` to secure origins only; without it, a
+    request that asks for HTML first is a page view.
+    """
     dest = handler.headers.get("Sec-Fetch-Dest")
     if dest:
         return dest == "document"
-    return tab_route in ("", "/")
+    return (handler.headers.get("Accept") or "").lstrip().startswith("text/html") or tab_route in (
+        "",
+        "/",
+    )
 
 
 def forward(
@@ -659,8 +747,11 @@ def forward(
         handler.log_message('"unavailable" %s %s (%s)', tab["id"], path, exc)
         if is_dsh and is_index_path(handler.path):
             _send(handler, 200, STARTING_HTML, "text/html; charset=utf-8")
-        else:
-            _send(handler, 503, unavailable_html(tab["label"]), "text/html; charset=utf-8")
+            return
+        page = unavailable_html(tab["label"], first_start=request_start(tab))
+        if wants_tabs(handler, tab_route):
+            page = inject_tabs(page, "text/html", tab["id"])
+        _send(handler, 503, page, "text/html; charset=utf-8")
         return
 
     ctype = upstream.getheader("Content-Type") or ""
@@ -684,6 +775,8 @@ def forward(
         raw = upstream.read()
         if is_dsh:
             raw = rewrite_dsh_body(raw, ctype)
+        elif tab["patch"] == "vscode" and 200 <= upstream.status < 300:
+            raw = patch_vscode(raw, ctype)
         if 200 <= upstream.status < 300 and wants_tabs(handler, tab_route):
             raw = inject_tabs(raw, ctype, tab["id"])
 

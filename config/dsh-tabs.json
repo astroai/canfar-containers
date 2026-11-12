@@ -1,7 +1,10 @@
 {
-  "_comment": "astroai/dsh tab strip and routes (scripts/lib/dsh-canfar-proxy.py). Add a tool: install it in one Dockerfile layer, start it on a loopback port in startup-dsh.sh, add one line here. strip=false for tools that serve under their own base path (/session/contrib/<id>/<prefix>).",
+  "_comment": "astroai/dsh tab strip and routes (scripts/lib/dsh-canfar-proxy.py). Add a tool: install it in one Dockerfile layer, add a case to _start_tool in startup-dsh.sh, add one line here. strip=false for tools that serve under their own base path (/session/contrib/<id>/<prefix>). start=true starts the tool the first time its tab is opened.",
   "tabs": [
     {"id": "agent", "label": "Agent", "prefix": "/", "port": 3080, "port_env": "DSH_PORT"},
-    {"id": "lab", "label": "Lab", "prefix": "/lab", "port": 4792, "port_env": "CANFAR_LAB_WEB_PORT", "bearer_env": "CANFAR_LAB_WEB_TOKEN", "badge": "api/onboarding"}
+    {"id": "terminal", "label": "Terminal", "prefix": "/terminal", "port": 4793, "port_env": "ASTROAI_TERMINAL_PORT", "start": true},
+    {"id": "jupyter", "label": "JupyterLab", "prefix": "/jupyter", "port": 8888, "port_env": "ASTROAI_JUPYTER_PORT", "strip": false, "start": true},
+    {"id": "vscode", "label": "VS Code", "prefix": "/vscode", "port": 8080, "port_env": "ASTROAI_VSCODE_PORT", "strip": false, "start": true, "patch": "vscode"},
+    {"id": "lab", "label": "Lab", "prefix": "/lab", "port": 4792, "port_env": "CANFAR_LAB_WEB_PORT", "bearer_env": "CANFAR_LAB_WEB_TOKEN", "badge": "api/onboarding", "align": "end"}
   ]
 }
