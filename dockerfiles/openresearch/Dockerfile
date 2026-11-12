@@ -14,15 +14,25 @@ ARG GHOSTTY_WEB_VERSION=0.4.0-next.20.g1858a59
 ARG NODE_PTY_VERSION=1.1.0
 ARG WS_VERSION=8.21.3
 
-FROM rust:1-bookworm AS orx
-RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
-# Rebuild this stage when the default branch moves.
+# orx embeds its web UI (ui/dist), so build that first, as upstream CI does:
+# node 22, the pnpm pinned in ui/package.json, frozen lockfile, vite build.
+FROM node:22-bookworm AS orx-src
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+# Rebuild these stages when the default branch moves.
 ADD https://api.github.com/repos/alphaXiv/openresearch-cli/git/refs/heads/main /tmp/orx-head.json
 RUN test -s /tmp/orx-head.json \
     && git clone --depth 1 https://github.com/alphaXiv/openresearch-cli.git /tmp/orx \
     && git -C /tmp/orx rev-parse HEAD \
-    && cargo build --release --locked --manifest-path /tmp/orx/Cargo.toml \
+    && cd /tmp/orx/ui \
+    && corepack enable \
+    && pnpm install --frozen-lockfile \
+    && pnpm exec vite build \
+    && test -f dist/index.html \
+    && rm -rf node_modules
+
+FROM rust:1-bookworm AS orx
+COPY --from=orx-src /tmp/orx /tmp/orx
+RUN cargo build --release --locked --manifest-path /tmp/orx/Cargo.toml \
     && install -D -m 0755 /tmp/orx/target/release/orx /out/orx
 
 FROM ${REGISTRY}/${OWNER}/${BASE_NAME}:${TAG}
