@@ -12,33 +12,34 @@ export OWNER REGISTRY PYTHON_VERSION
 
 # make build-all / bake group "default", and make push-all.
 # Studios: studio (on base), improc-studio, specproc-studio.
-DEFAULT_IMAGES := base improc specproc openscience openresearch ray-worker ray-manager studio improc-studio specproc-studio
+# Terminal/notebook: base + improc/specproc science parents.
+DEFAULT_IMAGES := base improc specproc openscience openresearch ray-worker ray-manager studio improc-studio specproc-studio terminal notebook improc-terminal improc-notebook specproc-terminal specproc-notebook
 SESSION_IMAGES := $(DEFAULT_IMAGES)
 RAY_IMAGES := ray-manager ray-worker
-IMPROC_IMAGES := improc improc-studio
-SPECPROC_IMAGES := specproc specproc-studio
+IMPROC_IMAGES := improc improc-studio improc-terminal improc-notebook
+SPECPROC_IMAGES := specproc specproc-studio specproc-terminal specproc-notebook
 IMAGE_PREFIX := $(REGISTRY)/$(OWNER)
 
 help:
 	@echo "AstroAI session images (CANFAR Harbor: images.canfar.net/astroai)"
 	@echo "========================="
-	@echo "  make build-all          base improc specproc openscience openresearch ray-worker ray-manager studio improc-studio specproc-studio"
+	@echo "  make build-all          default bake group (studios + terminal/notebook + science variants + Ray)"
 	@echo "  make build-ray          build ray-manager + ray-worker (+ base/slim chain)"
-	@echo "  make build-improc       build improc + improc-studio (+ base)"
-	@echo "  make build-specproc     build specproc + specproc-studio (+ base)"
+	@echo "  make build-improc       build improc + improc-studio/terminal/notebook (+ base)"
+	@echo "  make build-specproc     build specproc + specproc-studio/terminal/notebook (+ base)"
 	@echo "  make build/studio       build one image (+ parents)"
 	@echo "  make push-all           push the build-all images to Harbor ($(OWNER))"
 	@echo "  make push-ray           push Ray images to Harbor"
-	@echo "  make push-improc        push improc + improc-studio to Harbor"
-	@echo "  make push-specproc      push specproc + specproc-studio to Harbor"
+	@echo "  make push-improc        push improc family to Harbor"
+	@echo "  make push-specproc      push specproc family to Harbor"
 	@echo "  make release-push       bake+push public session stack to Harbor (no local load; disk-safe)"
 	@echo "  make release-push-ray   bake+push Ray stack to Harbor (no local load; disk-safe)"
-	@echo "  make release-push-improc bake+push improc + improc-studio to Harbor (no local load; disk-safe)"
+	@echo "  make release-push-improc bake+push improc family to Harbor (no local load; disk-safe)"
 	@echo "  make test-local         verify default images locally"
 	@echo "  make test-studio-local  Studio stamp+dangling .dsh boot → token → 200"
 	@echo "  make test-dsh-local     dsh image: Connect, Agent + Lab tabs, onboarding API"
-	@echo "  make test-improc-local  verify improc + improc-studio locally"
-	@echo "  make test-specproc-local verify specproc + specproc-studio locally"
+	@echo "  make test-improc-local  verify improc family locally"
+	@echo "  make test-specproc-local verify specproc family locally"
 	@echo "  make test-base-local    run every base-image CLI (not just command -v)"
 	@echo "  make test-agent-local   agent command matrix + no ~/.local pollution (all session images)"
 	@echo "  make test-ray           Ray container + local cluster + UI tests"
@@ -100,11 +101,11 @@ build-all: ## build session images into local docker
 build-ray: ## build Ray manager + worker (uses same base TAG)
 	TAG=$(BUILD_TAG) docker buildx bake $(BAKE_FLAGS) ray-manager ray-worker
 
-build-improc: ## build improc + improc-studio (+ base)
-	TAG=$(BUILD_TAG) docker buildx bake $(BAKE_FLAGS) improc improc-studio
+build-improc: ## build improc family (+ base)
+	TAG=$(BUILD_TAG) docker buildx bake $(BAKE_FLAGS) $(IMPROC_IMAGES)
 
-build-specproc: ## build specproc + specproc-studio (+ base)
-	TAG=$(BUILD_TAG) docker buildx bake $(BAKE_FLAGS) specproc specproc-studio
+build-specproc: ## build specproc family (+ base)
+	TAG=$(BUILD_TAG) docker buildx bake $(BAKE_FLAGS) $(SPECPROC_IMAGES)
 
 build/%:
 	TAG=$(BUILD_TAG) docker buildx bake $(BAKE_FLAGS) $(notdir $@)
@@ -113,9 +114,9 @@ push-all: $(addprefix push/,$(DEFAULT_IMAGES))
 
 push-ray: $(addprefix push/,$(RAY_IMAGES))
 
-push-improc: push/improc push/improc-studio ## push improc + improc-studio
+push-improc: $(addprefix push/,$(IMPROC_IMAGES)) ## push improc family
 
-push-specproc: $(addprefix push/,$(SPECPROC_IMAGES)) ## push specproc + specproc-studio
+push-specproc: $(addprefix push/,$(SPECPROC_IMAGES)) ## push specproc family
 
 # Production Ray push: bake TAG into manager env (RAY_IMAGE_TAG) — use BUILD_TAG=$(TAG).
 #   make build-ray BUILD_TAG=26.09 TAG=26.09 && make push-ray TAG=26.09 BUILD_TAG=26.09
@@ -176,12 +177,12 @@ release-push-ray: ## bake+push ray-manager + ray-worker as :$(TAG) and :latest
 	TAG=$(TAG) docker buildx bake --push ray-manager ray-worker
 	@$(MAKE) push-latest-tags IMAGES="$(RAY_IMAGES)" TAG=$(TAG)
 
-release-push-improc: ## bake+push improc + improc-studio as :$(TAG) and :latest
-	TAG=$(TAG) docker buildx bake --push improc improc-studio
+release-push-improc: ## bake+push improc family as :$(TAG) and :latest
+	TAG=$(TAG) docker buildx bake --push $(IMPROC_IMAGES)
 	@$(MAKE) push-latest-tags IMAGES="$(IMPROC_IMAGES)" TAG=$(TAG)
 
-release-push-specproc: ## bake+push specproc + specproc-studio as :$(TAG) and :latest
-	TAG=$(TAG) docker buildx bake --push specproc specproc-studio
+release-push-specproc: ## bake+push specproc family as :$(TAG) and :latest
+	TAG=$(TAG) docker buildx bake --push $(SPECPROC_IMAGES)
 	@$(MAKE) push-latest-tags IMAGES="$(SPECPROC_IMAGES)" TAG=$(TAG)
 
 lock-ray: ## regenerate config/ray-deps.lock from config/ray-deps.txt (Python 3.13, Ray).

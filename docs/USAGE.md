@@ -145,9 +145,11 @@ Compilers and editors are in interactive images; put CUDA/ML stacks in your pixi
 | Image | Notes |
 |-------|-------|
 | `terminal` | ghostty-web + tmux on `:5000` |
-| `vscode` | OpenVSCode on `:5000` |
-| `marimo` | Reactive `.py` notebooks; starter seeded once under `$SRCDIR/notebooks` |
 | `notebook` | JupyterLab `:8888`. Stock Skaha may run platform Jupyter CMD — AstroAI `startup-notebook.sh` only with a platform override ([OPERATORS.md](OPERATORS.md)) |
+| `improc-terminal` / `specproc-terminal` | Same as `terminal` on the improc/specproc science PATH |
+| `improc-notebook` / `specproc-notebook` | Same as `notebook`; default kernel is the science venv |
+| `vscode` | OpenVSCode on `:5000` (not in `build-all`) |
+| `marimo` | Reactive `.py` notebooks; starter seeded once under `$SRCDIR/notebooks` (not in `build-all`) |
 | `openresearch` | Autoresearch UI (`orx`) on `:5000`; top-right pill → Terminal (`/astroai-terminal/`), AstroAI hub (`/astroai-agents/`), Compute |
 | `openscience` | OpenScience research workspace on `:5000` with the astroai CADC/VO tools and astronomy Python; bottom-right pill → hub (`/astroai-agents/`) and Compute |
 | `studio` | dsh coding portal on `:5000`; **Terminal** + **AstroAI** chips — see [STUDIO.md](STUDIO.md) |
@@ -166,6 +168,8 @@ CADC clients (`cadcget`, `vls`, …) are on PATH from `/opt/canfar`.
 |-------|-----|
 | `improc` | Headless batch |
 | `improc-studio` | Studio (Contributed, :5000). Kernel **Python 3 (improc)** and marimo use the science venv (healpy/galsim/…) |
+| `improc-terminal` | ghostty-web + tmux on `:5000` with improc on PATH |
+| `improc-notebook` | JupyterLab `:8888`; default kernel is the improc science venv |
 
 PATH includes `/opt/astroai/venv/improc/bin`, sourcextractor++, and SkyMaker.
 
@@ -209,6 +213,8 @@ pPXF (no redistribution) and MOOG (no redistribution grant).
 |-------|-----|
 | `specproc` | Headless batch |
 | `specproc-studio` | Studio (Contributed, :5000). Kernel **Python 3 (specproc)** and marimo use the science venv |
+| `specproc-terminal` | ghostty-web + tmux on `:5000` with specproc on PATH |
+| `specproc-notebook` | JupyterLab `:8888`; default kernel is the specproc science venv |
 
 Input is a reduced 1D spectrum. No instrument pipelines.
 

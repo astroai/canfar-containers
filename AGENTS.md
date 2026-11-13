@@ -10,8 +10,8 @@ Operating guidance for coding agents and maintainers working in `astroai/canfar-
 
 - **Bake Graph (`docker-bake.hcl`):**
   - Untagged `python` stage (Python 3.13 + uv/pixi foundation). `PYTHON_VERSION` (Make/bake, default `3.13`) is the single shared CPython for `base`, `ray-worker`, `ray-manager`, `improc`, and `specproc` — one ABI, no uv-managed second interpreter (`UV_PYTHON_DOWNLOADS=never`).
-  - `make build-all` publishes `base`, `improc`, `specproc`, `openscience`, `openresearch`, `ray-worker`, `ray-manager`, plus studios `studio`, `improc-studio`, and `specproc-studio`. `notebook`, `marimo`, `vscode`, and `terminal` remain buildable targets and are not in that group.
-  - `studio` is the studio Dockerfile on `base`. `improc-studio` and `specproc-studio` reuse that Dockerfile with `improc` or `specproc` as the parent, and that science venv is the default Jupyter kernel and the marimo interpreter.
+  - `make build-all` publishes `base`, `improc`, `specproc`, `openscience`, `openresearch`, `ray-worker`, `ray-manager`, studios `studio` / `improc-studio` / `specproc-studio`, plus `terminal` / `notebook` and science variants `improc-terminal` / `improc-notebook` / `specproc-terminal` / `specproc-notebook`. `marimo` and `vscode` remain buildable targets and are not in that group.
+  - `studio` is the studio Dockerfile on `base`. `improc-studio` and `specproc-studio` reuse that Dockerfile with `improc` or `specproc` as the parent, and that science venv is the default Jupyter kernel and the marimo interpreter. `terminal` / `notebook` use the same pattern on `base`, `improc`, and `specproc`.
   - Slim `ray-base` (not a Harbor image) → `ray-worker`; fat `base` → `ray-manager`. Both Ray images are in `build-all`.
 - **Ray Stack (`ray/`):**
   - FastAPI-based Ray cluster manager app (`ray/manager/`) and worker lifecycle helpers (`ray/worker/`).

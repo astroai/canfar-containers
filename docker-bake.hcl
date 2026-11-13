@@ -16,7 +16,7 @@ variable "PYTHON_VERSION" {
   default = "3.13"
 }
 
-# make build-all. notebook, marimo, and vscode remain as targets and are
+# make build-all / release-push. marimo and vscode remain as targets and are
 # not in this group. ray-base and python are bake parents, not Harbor images.
 group "default" {
   targets = [
@@ -30,6 +30,12 @@ group "default" {
     "studio",
     "improc-studio",
     "specproc-studio",
+    "terminal",
+    "notebook",
+    "improc-terminal",
+    "improc-notebook",
+    "specproc-terminal",
+    "specproc-notebook",
   ]
 }
 
@@ -46,15 +52,21 @@ group "release" {
     "studio",
     "improc-studio",
     "specproc-studio",
+    "terminal",
+    "notebook",
+    "improc-terminal",
+    "improc-notebook",
+    "specproc-terminal",
+    "specproc-notebook",
   ]
 }
 
 group "improc" {
-  targets = ["improc", "improc-studio"]
+  targets = ["improc", "improc-studio", "improc-terminal", "improc-notebook"]
 }
 
 group "specproc" {
-  targets = ["specproc", "specproc-studio"]
+  targets = ["specproc", "specproc-studio", "specproc-terminal", "specproc-notebook"]
 }
 
 # Untagged bake parent. Never a Harbor image.
@@ -216,7 +228,7 @@ target "improc-studio" {
   }
 }
 
-# Legacy. Not in the default build.
+# Terminal on improc (ghostty-web + science PATH).
 target "improc-terminal" {
   context    = "."
   dockerfile = "dockerfiles/terminal/Dockerfile"
@@ -263,7 +275,7 @@ target "specproc-studio" {
   }
 }
 
-# Legacy. Not in the default build.
+# Terminal on specproc (ghostty-web + science PATH).
 target "specproc-terminal" {
   context    = "."
   dockerfile = "dockerfiles/terminal/Dockerfile"
