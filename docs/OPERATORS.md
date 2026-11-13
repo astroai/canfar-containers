@@ -102,8 +102,8 @@ Session UIs listen at `/` on port **5000**.
 | `vscode` | `--server-base-path /session/contrib/<id>` for URL generation |
 | `marimo` | Listen `/` — **no** `--base-url`; HTML proxy on :5000 sticks session name in tab |
 | `notebook` | Ingress keeps path; Jupyter `base_url=session/notebook/<id>`; `appName` = session name |
-| `openresearch` | Path-rewrite proxy on :5000 + HTML title stick; ghostty at `/astroai-terminal/` |
-| `openscience` | Loopback proxy on :5000 (bearer token, loopback Host/Origin, base path via `/__astroai/boot.js`); hub at `/astroai-agents/` |
+| `openresearch` | Path-rewrite proxy on :5000 + HTML title stick; AstroAI pill (Terminal, hub, Compute); ghostty at `/astroai-terminal/` |
+| `openscience` | Loopback proxy on :5000 (bearer token, loopback Host/Origin, base path via `/__astroai/boot.js`); AstroAI pill (hub, Compute) at `/astroai-agents/` |
 | `studio`, `improc-studio`, `specproc-studio` | dsh `astroai` profile loopback + path-rewrite proxy on :5000 + HTML title stick |
 | `ray-manager` | Server-rendered HTML `<title>` = session name |
 
@@ -200,7 +200,7 @@ dsh bundle into the profile and enables it (override the directory with
 `ASTROAI_STUDIO_BAKED_PLUGINS`). On CANFAR the profile layer sets the
 market's `allowRestart: false`, since the startup supervisor restarts dsh.
 
-**Home quota readings:** Prefer CephFS xattrs over raw `df` (`astroai` `disk_usage`). `ceph.dir.rbytes` can lag after writes — expected Ceph behavior.
+**Home quota readings:** Prefer CephFS xattrs over raw `df` (`astroai` `disk_usage`). `ceph.dir.rbytes` can lag after writes — expected Ceph behavior. Base ships `getfattr`/`setfattr`, `getfacl`/`setfacl`, `dust`, `eza` (`-@` xattrs), `ncdu`, and `findmnt` for session-side probes (see USAGE Storage).
 
 **Headless in-image verify** (`canfar-verify.sh`):
 

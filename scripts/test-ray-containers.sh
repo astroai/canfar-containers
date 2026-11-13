@@ -46,6 +46,15 @@ check "worker has no ASTROAI_LAB_RESUME hook" \
 check "ray-manager startup.sh" docker run --rm --entrypoint test "${MGR}" -x /skaha/startup.sh
 check "ray-worker entrypoint" docker run --rm --entrypoint test "${WRK}" -x /opt/astroai/bin/start-ray-worker.sh
 check "ray installed" docker run --rm --entrypoint python "${WRK}" -c "import ray; print(ray.__version__)"
+check "shared image python (worker)" docker run --rm --entrypoint assert-image-python "${WRK}" \
+    /opt/astroai/venv/ray/bin/python
+check "shared image python (manager)" docker run --rm --entrypoint assert-image-python "${MGR}" \
+    /opt/astroai/venv/ray/bin/python
+check "manager/worker python minor match" bash -c '
+  w=$(docker run --rm --entrypoint python3 "'"${WRK}"'" -c "import sys; print(\"%d.%d\" % sys.version_info[:2])")
+  m=$(docker run --rm --entrypoint python3 "'"${MGR}"'" -c "import sys; print(\"%d.%d\" % sys.version_info[:2])")
+  [[ "$w" == "$m" ]] && [[ "$w" == "${PYTHON_VERSION:-3.13}" ]]
+'
 check "ray version stamp" docker run --rm --entrypoint bash "${WRK}" -c \
     'test -f /opt/astroai/ray-version.txt && \
      [[ "$(tr -d "[:space:]" </opt/astroai/ray-version.txt)" == "$(python -c "import ray; print(ray.__version__)")" ]]'

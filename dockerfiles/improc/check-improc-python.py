@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""One science interpreter, one CUDA 12.9 toolkit.
+"""One science interpreter, one CUDA 12 toolkit (torch cu126).
 
 Do not require a GPU device. The image build has no driver, so
 torch.cuda.is_available() and a JAX device are not asserted.
@@ -74,7 +74,7 @@ def main() -> None:
     import ngmix
 
     print(
-        "PASS: one CUDA 12.9",
+        "PASS: one CUDA 12",
         torch.__version__,
         "ngmix",
         ngmix.__file__,

@@ -26,6 +26,7 @@ RUN printf '%s\n' \
     7zip \
     acl \
     aria2 \
+    attr \
     autoconf \
     automake \
     bash-completion \
@@ -42,8 +43,10 @@ RUN printf '%s\n' \
     cmake \
     curl \
     direnv \
+    du-dust \
     emacs-nox \
     entr \
+    eza \
     fd-find \
     file \
     flex \
@@ -191,7 +194,11 @@ RUN mkdir -p /opt/astroai/{bin,cache,lib,venv} /cadc "${WORK}" \
 COPY config/cadc-tools.txt /opt/astroai/cadc-tools.txt
 COPY scripts/patch-clint-py313.sh /tmp/patch-clint-py313.sh
 COPY config/astroai-lab.in config/astroai-lab.lock /tmp/
-RUN uv venv /opt/canfar \
+COPY scripts/lib/assert-image-python.sh /opt/astroai/lib/assert-image-python.sh
+RUN chmod a+rx /opt/astroai/lib/assert-image-python.sh \
+    && ln -sf /opt/astroai/lib/assert-image-python.sh /usr/local/bin/assert-image-python \
+    && uv venv --python python3 /opt/canfar \
+    && assert-image-python /opt/canfar/bin/python \
     && uv pip install --python /opt/canfar -r /opt/astroai/cadc-tools.txt \
     && uv pip install --python /opt/canfar --requirements /tmp/astroai-lab.lock \
     && /opt/canfar/bin/canfar-lab cluster --help >/dev/null \
@@ -235,7 +242,8 @@ COPY scripts/lib/astroai-env-common.sh scripts/lib/astroai-ui.sh scripts/lib/ska
      scripts/lib/session_title.py scripts/astroai-whats-new.sh /opt/astroai/lib/
 COPY scripts/canfar-verify.sh scripts/canfar-verify-agents.sh scripts/bootstrap-canfar-registry.sh scripts/bootstrap-ray-manager-env.sh scripts/upgrade-cadc-tools.sh scripts/peek /opt/astroai/bin/
 RUN chmod a+rx /opt/astroai/bin/* /opt/astroai/lib/* \
-    && ln -sf /opt/astroai/bin/peek /usr/local/bin/peek
+    && ln -sf /opt/astroai/bin/peek /usr/local/bin/peek \
+    && test -x /usr/local/bin/assert-image-python
 
 COPY docs/USAGE.md /opt/astroai/USAGE.md
 COPY config/whats-new.txt /opt/astroai/whats-new.txt

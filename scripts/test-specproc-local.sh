@@ -33,6 +33,7 @@ b = sp / 'synspec' / 'linelists'
 assert a.is_symlink() and b.is_symlink(), (a, b)
 assert a.readlink() == b.readlink() == pathlib.Path('/specproc-data/linelists/synspec')
 PY
+        assert-image-python /opt/astroai/venv/specproc/bin/python
         HOME=/opt/astroai/pymoog-home /opt/astroai/venv/specproc/bin/python /opt/astroai/specproc-smoke.py
         ${extra}
     " || missing=$((missing + 1))

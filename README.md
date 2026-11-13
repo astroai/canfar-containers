@@ -103,6 +103,7 @@ examples/ray/  container-local Ray smokes
 
 - **Same images for CPU and GPU** — choose the node in the portal; CUDA/ML stacks via pixi/uv in the project.
 - **Bake graph:** untagged `python` stage → fat `base` → `studio`, `openscience`, `openresearch`, `improc` → `improc-studio`, `specproc` → `specproc-studio`, and `ray-manager`. Slim `ray-base` (from that python stage, not published) → `ray-worker`. `notebook`, `marimo`, and `vscode` are outside `build-all`. Images install the latest PyPI `canfar-lab`.
+- **One Python:** `PYTHON_VERSION` (default `3.13`) is shared by `base`, `ray-worker`, `ray-manager`, `improc`, and `specproc`. uv is forbidden from downloading a second interpreter (`UV_PYTHON_DOWNLOADS=never`); science/Ray venvs use `uv venv --python python3` and `assert-image-python`.
 - **Fast session disks:** `WORK` is `$SCRATCH/src` when `/srcdir` is the container overlay (OOM-fragile) and `/scratch` is a volume; `SCRATCH` (`/scratch`) holds data and caches. Both are session-private. `/arc/home` and `/arc/projects` are shared across sessions. Persist with `canfar-lab save` / `git push`.
 - **Skaha types:** Contributed listen on **5000**; Notebook on **8888**.
 - **Auth at the edge:** Session UIs trust CANFAR TLS + portal login. Use these images only behind an authenticating reverse proxy.

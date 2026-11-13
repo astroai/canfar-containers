@@ -55,6 +55,8 @@ def test_index_gets_absolute_assets_boot_script_and_hub_chip() -> None:
     assert out.index(boot) < out.index("openscience-theme-preload.js")
     assert "window.__OPENSCIENCE" not in out
     assert f'id="astroai-agents-chip" href="{PREFIX}/astroai-agents/" rel="external"' in out
+    assert f'id="astroai-compute-chip" href="{PREFIX}/astroai-agents/#compute"' in out
+    assert 'id="astroai-lab-dock"' in out
     assert out.index("astroai-agents-chip") < out.index("</body>")
     assert b"./assets" in proxy.inject_html(b'import("./assets/a.js")', "text/javascript")
 

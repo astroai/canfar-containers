@@ -80,6 +80,7 @@ ENV PATH="/opt/astroai/bin:${PATH}" \
     ASTROAI_SESSION_KIND=openresearch
 
 COPY scripts/lib/skaha-proxy.sh scripts/lib/orx-canfar-proxy.py \
+     scripts/lib/astroai_lab_dock.py \
      scripts/lib/agent-wizard.py scripts/lib/orx-wire-compute.py \
      scripts/lib/session_title.py /opt/astroai/lib/
 COPY scripts/common-init.sh scripts/startup-openresearch.sh /cadc/
