@@ -1,9 +1,10 @@
 # syntax=docker/dockerfile:1
 # AstroAI improc: astronomy FITS/HDF5 image-processing CLIs on base.
 # Headless. Apt for native CLIs; source/binaries where Debian lags; one uv
-# venv (Python 3.13, CUDA 12.9) for science Python, including MaxiMask,
-# torchfits, scarlet2, and ngmix. SkyMaker and sourcextractor++ are built
-# from source. Versions float at build time — no lockfiles, no pin ARGs.
+# venv (Python 3.13, CUDA 12 / torch cu126) for science Python, including
+# MaxiMask, torchfits/torchsky/torchregress, weightmask, scarlet2, and ngmix.
+# SkyMaker and sourcextractor++ are built from source. Versions float at
+# build time — no lockfiles, no pin ARGs.
 
 ARG REGISTRY=images.canfar.net
 ARG OWNER=astroai
@@ -230,28 +231,28 @@ RUN TARBALL=topcat-full.jar \
     && chmod 644 "/usr/local/bin/${TARBALL}" \
     && chmod 755 /usr/local/bin/stilts /usr/local/bin/topcat
 
-# Science Python (uv) — one venv, one CUDA 12.9 toolkit.
-# torch (cu129 index), tensorflow[and-cuda] (MaxiMask), and jax[cuda12]
+# Science Python (uv) — one venv, one CUDA 12 toolkit.
+# torch (cu126 index), tensorflow[and-cuda] (MaxiMask), and jax[cuda12]
 # (scarlet2) are one transaction so a single nvidia-*-cu12 set is kept.
-# Pin the cu129 local version. PyPI torch 2.13 is CUDA 13, and uv's
-# first-index strategy stops on that wheel. unsafe-best-match lets the
-# pin select cu129; that wheel's nvidia-*-cu12 pins are the only toolkit.
+# torchfits/torchsky need torch>=2.14;<2.15; torchregress needs >=2.14.1.
+# There is no cu129 wheel for 2.14.x — pin cu126. PyPI's default torch is
+# often CUDA 13; unsafe-best-match + the local version pin select cu126.
 # ngmix is not on PyPI. scarlet + tractor have no usable wheels; build from git.
 # Do not assert torch.cuda.is_available() here — builds have no GPU.
 RUN apt-get update && apt-get install -y --no-install-recommends swig \
     && rm -rf /var/lib/apt/lists/*
 COPY config/improc-py.txt /opt/astroai/improc-py.txt
 COPY dockerfiles/improc/check-improc-python.py /opt/astroai/check-improc-python.py
-RUN uv venv /opt/astroai/venv/improc \
+RUN uv venv --python python3 /opt/astroai/venv/improc \
+    && assert-image-python /opt/astroai/venv/improc/bin/python \
     && uv pip install --python /opt/astroai/venv/improc \
          --index-strategy unsafe-best-match \
-         --index-url https://download.pytorch.org/whl/cu129 \
+         --index-url https://download.pytorch.org/whl/cu126 \
          --extra-index-url https://pypi.org/simple \
          -r /opt/astroai/improc-py.txt \
-         "torch==2.13.0+cu129" \
+         "torch==2.14.1+cu126" \
          "tensorflow[and-cuda]" \
          "jax[cuda12]" \
-         torchfits \
          numba \
          "ngmix @ git+https://github.com/esheldon/ngmix" \
          numpy cython setuptools pybind11 peigen \
@@ -263,7 +264,8 @@ RUN uv venv /opt/astroai/venv/improc \
     && uv cache clean \
     && chmod -R a+rX /opt/astroai/venv/improc \
     && chmod a+r /opt/astroai/improc-py.txt /opt/astroai/check-improc-python.py \
-    && for c in maximask maxitrack weightmask torchfits weightmask-reconstruct-sky; do \
+    && for c in maximask maxitrack weightmask weightmask-reconstruct-sky \
+                torchfits torchsky torchregress-health; do \
          [[ -x "/opt/astroai/venv/improc/bin/${c}" ]] \
            && ln -sf "/opt/astroai/venv/improc/bin/${c}" "/usr/local/bin/${c}"; \
        done
@@ -295,9 +297,10 @@ RUN set -euo pipefail; \
       weightwatcher montage theli \
       galfit imfit pqrs topcat stilts fits2idia imcore \
       astconvertt astnoisechisel astscript-psf-stamp \
-      h5dump maximask maxitrack sky skymaker stuff torchfits weightmask; do \
+      h5dump maximask maxitrack sky skymaker stuff \
+      torchfits torchsky torchregress-health weightmask weightmask-reconstruct-sky; do \
         command -v "$c" >/dev/null || { echo "MISSING: $c" >&2; exit 1; }; \
-    done; \
+      done; \
     command -v sourcextractor++ >/dev/null \
       || { echo "MISSING: sourcextractor++" >&2; exit 1; }; \
     command -v sourcextractor >/dev/null \
@@ -306,5 +309,5 @@ RUN set -euo pipefail; \
     sky -v >/dev/null; \
     timeout 180 sourcextractor++ --version >/dev/null; \
     /opt/astroai/venv/improc/bin/python /opt/astroai/check-improc-python.py; \
-    /opt/astroai/venv/improc/bin/python -c "import ccdproc, photutils, galsim, piff, astroscrappy, lacosmic, sfft, zogyp, healpy, healsparse, astropy_healpix, mocpy, hpgeom, scarlet, scarlet2, twirl, skimage, astroquery, cv2, petrofit, montage_wrapper, galight, lenstronomy, tractor, torch, torchfits, tensorflow, maximask_and_maxitrack, weightmask, ngmix, sourcextractor; assert '+cu' in torch.__version__, torch.__version__"; \
+    /opt/astroai/venv/improc/bin/python -c "import ccdproc, photutils, galsim, piff, astroscrappy, lacosmic, sfft, zogyp, healpy, healsparse, astropy_healpix, mocpy, hpgeom, scarlet, scarlet2, twirl, skimage, astroquery, cv2, petrofit, montage_wrapper, galight, lenstronomy, tractor, torch, torchfits, torchsky, torchregress, tensorflow, maximask_and_maxitrack, weightmask, ngmix, sourcextractor; assert '+cu' in torch.__version__, torch.__version__"; \
     echo "improc smoke OK"

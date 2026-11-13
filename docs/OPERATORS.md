@@ -35,10 +35,14 @@ flowchart LR
 | `studio` | `…/astroai/studio:<tag>` | Contributed | 5000 | Yes |
 | `ray-manager` | `…/astroai/ray-manager:<tag>` | Contributed | 5000 | Yes |
 | `ray-worker` | `…/astroai/ray-worker:<tag>` | Headless | — | No — manager launches |
-| `notebook` | `…/astroai/notebook:<tag>` | Notebook | 8888 | Not in `build-all` |
+| `notebook` | `…/astroai/notebook:<tag>` | Notebook | 8888 | Yes |
+| `terminal` | `…/astroai/terminal:<tag>` | Contributed | 5000 | Yes |
+| `improc-notebook` | `…/astroai/improc-notebook:<tag>` | Notebook | 8888 | Yes |
+| `improc-terminal` | `…/astroai/improc-terminal:<tag>` | Contributed | 5000 | Yes |
+| `specproc-notebook` | `…/astroai/specproc-notebook:<tag>` | Notebook | 8888 | Yes |
+| `specproc-terminal` | `…/astroai/specproc-terminal:<tag>` | Contributed | 5000 | Yes |
 | `marimo` | `…/astroai/marimo:<tag>` | Contributed | 5000 | Not in `build-all` |
 | `vscode` | `…/astroai/vscode:<tag>` | Contributed | 5000 | Not in `build-all` |
-| `terminal` | `…/astroai/terminal:<tag>` | Contributed | 5000 | Not in `build-all` |
 
 OCI label `io.canfar.skaha.session.type` marks `headless` / `contributed` / `notebook`.
 
@@ -47,9 +51,10 @@ OCI label `io.canfar.skaha.session.type` marks `headless` / `contributed` / `not
 > Science Portal; leave old Harbor tags until users migrate.
 
 Register **`ray-manager` only** for Ray. Workers stay headless. See [RAY.md](RAY.md).
-Register **`improc-studio`** (Contributed, 5000). Leave **`improc`** headless for
-batch. Build/push: `make build-improc` / `make push-improc`. `notebook`,
-`marimo`, and `vscode` stay buildable and are outside `build-all`.
+Register **`improc-studio`** (Contributed, 5000) and optionally **`improc-terminal`** /
+**`improc-notebook`**. Leave **`improc`** headless for batch. Build/push:
+`make build-improc` / `make push-improc`. `terminal` / `notebook` (and science
+variants) are in `build-all`; `marimo` and `vscode` stay outside that group.
 
 **`specproc` and `specproc-studio` are `astroai` catalog images.** The stack
 vendors pPXF and MOOG. `make build-all` and `make push-all` include them.
@@ -102,8 +107,8 @@ Session UIs listen at `/` on port **5000**.
 | `vscode` | `--server-base-path /session/contrib/<id>` for URL generation |
 | `marimo` | Listen `/` — **no** `--base-url`; HTML proxy on :5000 sticks session name in tab |
 | `notebook` | Ingress keeps path; Jupyter `base_url=session/notebook/<id>`; `appName` = session name |
-| `openresearch` | Path-rewrite proxy on :5000 + HTML title stick; ghostty at `/astroai-terminal/` |
-| `openscience` | Loopback proxy on :5000 (bearer token, loopback Host/Origin, base path via `/__astroai/boot.js`); hub at `/astroai-agents/` |
+| `openresearch` | Path-rewrite proxy on :5000 + HTML title stick; AstroAI pill (Terminal, hub, Compute); ghostty at `/astroai-terminal/` |
+| `openscience` | Loopback proxy on :5000 (bearer token, loopback Host/Origin, base path via `/__astroai/boot.js`); AstroAI pill (hub, Compute) at `/astroai-agents/` |
 | `studio`, `improc-studio`, `specproc-studio` | dsh `astroai` profile loopback + path-rewrite proxy on :5000 + HTML title stick |
 | `ray-manager` | Server-rendered HTML `<title>` = session name |
 
@@ -134,7 +139,7 @@ entrypoint, ask the science-platform team for a per-image override that sets
 
 1. Push `images.canfar.net/astroai/*:<tag>` (sessions + Ray + improc stack).
 2. Register Contributed: `studio`, `improc-studio`, `specproc-studio`, `openscience`, `openresearch`, `ray-manager` → port **5000**.
-3. Leave `base`, `improc`, `specproc`, and `ray-worker` headless. `python` and `ray-base` are bake-only, never Harbor images. `notebook`, `marimo`, and `vscode` are not in `build-all`.
+3. Leave `base`, `improc`, `specproc`, and `ray-worker` headless. `python` and `ray-base` are bake-only, never Harbor images. Register `terminal` / `notebook` (and improc/specproc variants) as needed. `marimo` and `vscode` are not in `build-all`.
 4. Document the published tag for users (`YY.MM`).
 5. Smoke: `make test-canfar-session IMAGE=studio TAG=…`, `IMAGE=improc-studio`, `IMAGE=specproc-studio`, and `make test-canfar-ray TAG=…`.
 6. **Agent verbs:** `make test-canfar-agents TAG=…` (lightweight in-session probe of the full agent verb surface — required after every image push; see below).
@@ -200,7 +205,7 @@ dsh bundle into the profile and enables it (override the directory with
 `ASTROAI_STUDIO_BAKED_PLUGINS`). On CANFAR the profile layer sets the
 market's `allowRestart: false`, since the startup supervisor restarts dsh.
 
-**Home quota readings:** Prefer CephFS xattrs over raw `df` (`astroai` `disk_usage`). `ceph.dir.rbytes` can lag after writes — expected Ceph behavior.
+**Home quota readings:** Prefer CephFS xattrs over raw `df` (`astroai` `disk_usage`). `ceph.dir.rbytes` can lag after writes — expected Ceph behavior. Base ships `getfattr`/`setfattr`, `getfacl`/`setfacl`, `dust`, `eza` (`-@` xattrs), `ncdu`, and `findmnt` for session-side probes (see USAGE Storage).
 
 **Headless in-image verify** (`canfar-verify.sh`):
 

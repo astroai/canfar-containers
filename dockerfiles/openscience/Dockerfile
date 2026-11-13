@@ -63,7 +63,8 @@ COPY scripts/openscience-canfar.sh /opt/astroai/bin/openscience
 COPY config/science-py.txt /tmp/science-py.txt
 RUN chmod a+rx /opt/openscience/bin/openscience /opt/astroai/bin/openscience \
     && /opt/openscience/bin/openscience --version \
-    && uv venv /opt/astroai/venv/science \
+    && uv venv --python python3 /opt/astroai/venv/science \
+    && assert-image-python /opt/astroai/venv/science/bin/python \
     && uv pip install --python /opt/astroai/venv/science -r /tmp/science-py.txt \
     && /opt/astroai/venv/science/bin/python -c \
         "import numpy, pandas, scipy, matplotlib, seaborn, PIL, sklearn, astropy, astroquery, pyvo, photutils, specutils, lightkurve, ccdproc, astroscrappy, astroplan, spectral_cube, radio_beam, dust_extinction, zero_point, emcee, dynesty, corner" \
@@ -75,6 +76,7 @@ ENV PATH="/opt/astroai/bin:${PATH}" \
     ASTROAI_SESSION_KIND=openscience
 
 COPY scripts/lib/skaha-proxy.sh scripts/lib/openscience-canfar-proxy.py \
+     scripts/lib/astroai_lab_dock.py \
      scripts/lib/agent-wizard.py scripts/lib/orx-wire-compute.py \
      scripts/lib/session_title.py /opt/astroai/lib/
 COPY scripts/common-init.sh scripts/startup-openscience.sh /cadc/

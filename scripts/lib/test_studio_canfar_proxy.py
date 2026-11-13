@@ -66,7 +66,8 @@ def test_injects_api_shim_and_chips() -> None:
     assert b'href="/session/contrib/abc/vscode/"' in out
     assert b"astroai-resource-banner" not in out
     assert b'data-astroai-proxy-rev="16"' in out
-    assert b'id="astroai-dock-config"' not in out  # floating desk is off by default
+    assert b'id="astroai-dock-config"' in out  # handle always present; bar starts collapsed
+    assert b'"enabled": false' in out
     assert b"data-astroai-tab" in out  # branded tab stick
     assert b"data-astroai-brand" in out  # boot splash wordmark
     assert out.index(b"data-astroai-brand") < out.index(b"</head>")
@@ -312,12 +313,17 @@ def test_vendored_desk_dock_asset_matches_its_lock() -> None:
     assert "dock_sha256=" in lock and "dock_revision=" in lock
 
 
-def test_desk_dock_off_by_default() -> None:
+def test_desk_dock_starts_collapsed_by_default() -> None:
     proxy.PREFIX = "/session/contrib/abc"
     html = b"<html><head></head><body><h1>dsh</h1></body></html>"
-    out = proxy.rewrite_body(html, "text/html")
-    assert b"astroai-dock-config" not in out
-    assert proxy.desk_dock_snippet() == ""
+    env = {k: v for k, v in os.environ.items() if k != "CANFAR_LAB_DESK"}
+    with mock.patch.dict(os.environ, env, clear=True):
+        out = proxy.rewrite_body(html, "text/html")
+        snippet = proxy.desk_dock_snippet()
+    assert b"astroai-dock-config" in out
+    assert b'"enabled": false' in out
+    assert '"enabled": false' in snippet
+    assert "Sync to CANFAR" in snippet
     proxy.PREFIX = ""
 
 
@@ -328,6 +334,7 @@ def test_desk_dock_injected_when_enabled() -> None:
         out = proxy.rewrite_body(html, "text/html")
         snippet = proxy.desk_dock_snippet()
     assert b'id="astroai-dock-config"' in out
+    assert b'"enabled": true' in out
     assert b"astroai-dock-revision" in out
     assert b"Sync to CANFAR" in out
     assert b"Launch Studio" in out
@@ -337,6 +344,7 @@ def test_desk_dock_injected_when_enabled() -> None:
     assert b"astroai-dock-config" not in proxy.inject_dock(html, "text/html")
     assert proxy.DESK_TOKEN in snippet
     assert '"mode": "session"' in snippet
+    assert '"enabled": true' in snippet
     assert '"action": "sync_to_canfar"' in snippet
     assert '"action": "launch_studio"' in snippet
     proxy.PREFIX = ""
@@ -559,7 +567,7 @@ if __name__ == "__main__":
         proxy.PREFIX = ""
         assert proxy.index_token_redirect("/", None) == "/?token=sekrit"
     test_vendored_desk_dock_asset_matches_its_lock()
-    test_desk_dock_off_by_default()
+    test_desk_dock_starts_collapsed_by_default()
     test_desk_dock_injected_when_enabled()
     test_sync_authorized_token_or_loopback()
     with tempfile.TemporaryDirectory() as td:

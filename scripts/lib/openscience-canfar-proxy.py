@@ -10,6 +10,7 @@ wants a bearer token on every route, so this proxy:
   * serves ``/__astroai/boot.js`` (base path for the patched workspace; the CSP
     forbids inline scripts) and ``/__astroai/health`` (container healthcheck)
   * routes ``/astroai-agents/*`` to the AstroAI hub (model keys, CANFAR compute)
+  * injects the AstroAI pill (Agents, Compute) into workspace HTML
   * streams server-sent events unbuffered and splices the terminal websocket
   * shows a starting page while startup-openscience.sh (re)starts the server
 """
@@ -28,6 +29,11 @@ from http.client import HTTPConnection
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urlsplit
+
+_LIB = Path(__file__).resolve().parent
+if str(_LIB) not in sys.path:
+    sys.path.insert(0, str(_LIB))
+from astroai_lab_dock import OPENSCIENCE_TOOLS, lab_dock_html  # noqa: E402
 
 PUBLIC_PORT = int(os.environ.get("ASTROAI_PUBLIC_PORT", "5000"))
 OPENSCIENCE_HOST = os.environ.get("ASTROAI_OPENSCIENCE_HOST", "127.0.0.1")
@@ -66,24 +72,6 @@ MODEL_KEYS = (
 )
 SCRATCH_HISTORY_FLAG = "history-on-scratch"
 
-_CHIP_BASE = (
-    "position:fixed;z-index:2147483646;right:14px;bottom:14px;padding:6px 11px;"
-    "border-radius:999px;font:600 12px/1.2 system-ui,sans-serif;text-decoration:none;"
-)
-# rel=external: the workspace router otherwise claims same-origin links under its base.
-HUB_CHIP = (
-    '<a id="astroai-agents-chip" href="{href}" rel="external" '
-    'title="Model keys and CANFAR compute" style="'
-    + _CHIP_BASE
-    + 'background:rgba(30,32,48,.92);border:1px solid #494d64;color:#cad3f5">AstroAI</a>'
-)
-KEY_CHIP = (
-    '<a id="astroai-agents-chip" href="{href}" rel="external" data-needs-key '
-    'title="OpenScience needs a model key before it can answer. Add one in the AstroAI hub '
-    '(OpenRouter is the simplest)." style="'
-    + _CHIP_BASE
-    + 'background:#3d8bfd;border:1px solid #8aadf4;color:#fff">Add a model key</a>'
-)
 SCRATCH_BANNER = (
     '<div data-astroai-banner role="status" style="position:fixed;z-index:2147483646;left:14px;'
     "bottom:14px;max-width:26rem;padding:10px 12px;border-radius:8px;background:#363a4f;"
@@ -168,7 +156,7 @@ def boot_js() -> bytes:
 def inject_html(data: bytes, content_type: str) -> bytes:
     """Absolute asset URLs (index.html is also served for deep links, where ``./``
     would resolve under the route), the boot script ahead of the deferred module
-    bundle, the hub chip (a call to add a key while OpenScience has no model) and a
+    bundle, the AstroAI pill (a call to add a key while OpenScience has no model) and a
     notice when this session's history lives on scratch."""
     if content_type.split(";", 1)[0].strip().lower() != "text/html":
         return data
@@ -182,9 +170,23 @@ def inject_html(data: bytes, content_type: str) -> bytes:
     gt = text.find(">", head) if head >= 0 else -1
     text = text[: gt + 1] + boot + text[gt + 1 :] if gt >= 0 else boot + text
     extra = ""
-    if "astroai-agents-chip" not in text:
-        chip = HUB_CHIP if has_model_key() else KEY_CHIP
-        extra += chip.format(href=f"{PREFIX}{WIZARD_MOUNT}/")
+    if "data-astroai-dock" not in text and "astroai-agents-chip" not in text:
+        tools = OPENSCIENCE_TOOLS
+        emphasize = None
+        if not has_model_key():
+            agents, compute = tools
+            tools = (
+                (
+                    agents[0],
+                    agents[1],
+                    "Add a model key",
+                    "OpenScience needs a model key before it can answer. "
+                    "OpenRouter in the AstroAI hub is the simplest.",
+                ),
+                compute,
+            )
+            emphasize = agents[0]
+        extra += lab_dock_html(PREFIX, tools, place="bottom", emphasize=emphasize)
     holder = scratch_history_holder()
     if holder and "data-astroai-banner" not in text:
         extra += SCRATCH_BANNER.format(holder=html.escape(holder))

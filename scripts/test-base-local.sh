@@ -45,7 +45,10 @@ run "less --version" less --version
 run "htop --version" htop --version
 run "nvtop --version" nvtop --version
 run "ncdu -v" ncdu -v
+run "dust --version" dust --version
+run "eza --version" eza --version
 run "tree --version" tree --version
+run "findmnt --version" findmnt --version
 run "tldr --version" tldr --version
 
 # Search / fuzzy / pager helpers
@@ -113,6 +116,10 @@ run "ps --version" ps --version
 run "lsof -v" lsof -v
 run "getfacl --version" getfacl --version
 run "setfacl --version" setfacl --version
+run "chacl present" test -x /usr/bin/chacl
+run "getfattr --version" getfattr --version
+run "setfattr --version" setfattr --version
+run "attr present" test -x /usr/bin/attr
 run "hyperfine --version" hyperfine --version
 
 # Node + package managers
@@ -126,6 +133,9 @@ run "pip --version" pip --version
 run "pixi --version" pixi --version
 run "micromamba --version" micromamba --version
 run "mamba --version" mamba --version
+
+# Shared image Python (same minor as ray/improc/specproc)
+run "assert-image-python" assert-image-python /opt/canfar/bin/python
 
 # AstroAI / CADC (help/version only — no network auth)
 run "canfar-lab --help" canfar-lab --help

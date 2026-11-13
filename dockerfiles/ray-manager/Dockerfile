@@ -19,7 +19,8 @@ ENV BUILD_TAG=${TAG}
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 COPY config/ray-deps.txt config/ray-deps.lock config/astroai-lab.lock /tmp/
-RUN uv venv /opt/astroai/venv/ray \
+RUN uv venv --python python3 /opt/astroai/venv/ray \
+    && assert-image-python /opt/astroai/venv/ray/bin/python \
     && uv pip install --python /opt/astroai/venv/ray --requirements /tmp/ray-deps.lock \
     && uv pip install --python /opt/astroai/venv/ray --requirements /tmp/astroai-lab.lock \
     && rm /tmp/ray-deps.txt /tmp/ray-deps.lock /tmp/astroai-lab.lock \

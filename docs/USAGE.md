@@ -39,18 +39,17 @@ canfar create --name studio contributed images.canfar.net/astroai/studio:26.10
 ### Alternate home base: AstroAI hub (openresearch)
 
 1. Launch **`openresearch`** with tag `26.10` / `latest`.
-2. Open the connect URL, then either:
-   - click the blue **AstroAI** chip (top-right), or
-   - append `/astroai-agents/` (e.g. `…/session/contrib/<id>/astroai-agents/`).
-3. For a shell in the same session: click **Terminal** (left of AstroAI) or open
-   `/astroai-terminal/` — ghostty-web + tmux. **← OpenResearch** returns to orx.
-4. In the hub (one screen):
+2. Open the connect URL. The top-right **AstroAI** pill links to:
+   - **Terminal** — ghostty-web + tmux (`/astroai-terminal/`; **← OpenResearch** returns)
+   - **AstroAI** — hub at `/astroai-agents/` (or append that path yourself)
+   - **Compute** — batch jobs and Ray on the hub (`/astroai-agents/#compute`)
+3. In the hub (one screen):
    - **Start batch compute** — autoscaling ray-manager, wires OpenResearch (when on openresearch)
    - Agent table — same columns as `canfar-lab agent list` (Agent, Bin, Cfg, Where, Ver). **Install** puts the CLI on `$SCRATCH/.local/bin`; **Setup** writes that agent's config, skills dirs, and default MCP/rules/tools on `/arc/home`. Skill packs: `npx skills add astroai/canfar-skills`
    - Status shows CANFAR auth, manager Running/Pending, wire state, Jobs URL
    - **← Back** returns to the main UI
-5. Run experiments in OpenResearch — default compute is already CANFAR batch. Put shared I/O on `/arc` (`/scratch` is per-pod only).
-6. Power users: `canfar-lab agent …` in the Terminal chip; cluster ops on ray-manager.
+4. Run experiments in OpenResearch — default compute is already CANFAR batch. Put shared I/O on `/arc` (`/scratch` is per-pod only).
+5. Power users: `canfar-lab agent …` from the Terminal link; cluster ops on ray-manager.
 
 ```bash
 canfar login   # once, from terminal — persists under /arc/home
@@ -72,10 +71,19 @@ canfar open <session-id>
 
 `/scratch` is fast and private to **this** session. Use `/arc/projects/…` (or home) when another session needs the same files live; move with `canfar data` (platform archive I/O).
 
-**Home quota %:** CANFAR homes use CephFS directory quotas (`ceph.quota.max_bytes`). `canfar-lab status` prefers those xattrs; `ceph.dir.rbytes` can lag a few seconds after large writes — that is Ceph MDS accounting, not a frozen UI cache. Refresh with `canfar-lab status`.
+**Home quota %:** CANFAR homes use CephFS directory quotas (`ceph.quota.max_bytes`). `canfar-lab status` prefers those xattrs; `ceph.dir.rbytes` can lag a few seconds after large writes — that is Ceph MDS accounting, not a frozen UI cache. Refresh with `canfar-lab status`. Classic `quota`/`repquota` do **not** see Ceph directory quotas — use `getfattr` or `canfar-lab status`.
 
 ```bash
 canfar-lab status
+# CephFS home quota (prefer over df on /arc/home)
+getfattr -n ceph.quota.max_bytes -n ceph.dir.rbytes "$HOME"
+# Shared project: who can write + ACL + space
+id; groups
+getfacl /arc/projects/mygroup
+eza -la@ /arc/projects/mygroup    # -@ shows xattrs; use getfacl for ACLs
+df -h /scratch /arc/projects/mygroup
+dust -d 1 /arc/projects/mygroup   # or: ncdu /arc/projects/mygroup
+findmnt /arc /scratch
 canfar data stage /arc/projects/mygroup/raw
 canfar data sync /scratch/out /arc/projects/mygroup/out
 ```
@@ -137,11 +145,13 @@ Compilers and editors are in interactive images; put CUDA/ML stacks in your pixi
 | Image | Notes |
 |-------|-------|
 | `terminal` | ghostty-web + tmux on `:5000` |
-| `vscode` | OpenVSCode on `:5000` |
-| `marimo` | Reactive `.py` notebooks; starter seeded once under `$SRCDIR/notebooks` |
 | `notebook` | JupyterLab `:8888`. Stock Skaha may run platform Jupyter CMD — AstroAI `startup-notebook.sh` only with a platform override ([OPERATORS.md](OPERATORS.md)) |
-| `openresearch` | Autoresearch UI (`orx`) on `:5000`; **Terminal** chip → `/astroai-terminal/` (ghostty-web); AstroAI hub at `/astroai-agents/` |
-| `openscience` | OpenScience research workspace on `:5000` with the astroai CADC/VO tools and astronomy Python; **AstroAI** chip → hub at `/astroai-agents/` (model keys, compute) |
+| `improc-terminal` / `specproc-terminal` | Same as `terminal` on the improc/specproc science PATH |
+| `improc-notebook` / `specproc-notebook` | Same as `notebook`; default kernel is the science venv |
+| `vscode` | OpenVSCode on `:5000` (not in `build-all`) |
+| `marimo` | Reactive `.py` notebooks; starter seeded once under `$SRCDIR/notebooks` (not in `build-all`) |
+| `openresearch` | Autoresearch UI (`orx`) on `:5000`; top-right pill → Terminal (`/astroai-terminal/`), AstroAI hub (`/astroai-agents/`), Compute |
+| `openscience` | OpenScience research workspace on `:5000` with the astroai CADC/VO tools and astronomy Python; bottom-right pill → hub (`/astroai-agents/`) and Compute |
 | `studio` | dsh coding portal on `:5000`; **Terminal** + **AstroAI** chips — see [STUDIO.md](STUDIO.md) |
 | `improc-studio` | Same studio on the improc stack. Default Jupyter kernel and marimo use `/opt/astroai/venv/improc` |
 | `specproc-studio` | Same studio on the specproc stack. Default Jupyter kernel and marimo use `/opt/astroai/venv/specproc` |
@@ -158,6 +168,8 @@ CADC clients (`cadcget`, `vls`, …) are on PATH from `/opt/canfar`.
 |-------|-----|
 | `improc` | Headless batch |
 | `improc-studio` | Studio (Contributed, :5000). Kernel **Python 3 (improc)** and marimo use the science venv (healpy/galsim/…) |
+| `improc-terminal` | ghostty-web + tmux on `:5000` with improc on PATH |
+| `improc-notebook` | JupyterLab `:8888`; default kernel is the improc science venv |
 
 PATH includes `/opt/astroai/venv/improc/bin`, sourcextractor++, and SkyMaker.
 
@@ -169,19 +181,21 @@ PATH includes `/opt/astroai/venv/improc/bin`, sourcextractor++, and SkyMaker.
 | Cosmic rays / clean | `astroscrappy`, `lacosmic`, `ccdproc` helpers |
 | Contaminant masks | `maximask`, `maxitrack` (same science venv; pulls TensorFlow) |
 | DIA (difference imaging) | **`sfft`**, `zogyp` (modern; not HOTPANTS) |
-| Mask / weight | `weightmask`, `weightwatcher`, `missfits`, gnuastro `astnoisechisel` / `astsegment` |
-| Astrometry / WCS | `twirl`, `astrometry.net`, `tweakwcs` |
+| Mask / weight | `weightmask`, `weightmask-reconstruct-sky`, `weightwatcher`, `missfits`, gnuastro `astnoisechisel` / `astsegment` |
+| Astrometry / WCS | `twirl`, `astrometry.net`, `tweakwcs`, `torchsky` (torch-native WCS / sky geometry) |
 | PSF | `psfex`, `piff`, gnuastro `astscript-psf-*`, `galfit`, `imfit` |
 | Morphology / galaxy fitting | `statmorph`, `petrofit`, `galight` (+ `lenstronomy`) |
 | Mosaic / coadd | `swarp`, `montage`, `theli`, `reproject` |
-| Spherical / HEALPix | `healpy`, `healsparse`, `astropy-healpix`, `mocpy`, `hpgeom` |
+| Spherical / HEALPix | `healpy`, `healsparse`, `astropy-healpix`, `mocpy`, `hpgeom`, `torchsky` |
+| Regression / UQ | `torchregress` (losses, calibration, conformal; `torchregress-health`) |
 | General imaging / archives | `scikit-image`, `opencv` (`cv2`), `astroquery`, `montage-wrapper` |
 | Pretty pictures | `stiff`, `fitspng`, `fitscut`, `astconvertt`, ImageMagick |
 | FITS / HDF5 / tables | cfitsio utils, `fitsverify`, `topcat`/`stilts`, `pqrs`, `h5dump`, `torchfits` (FITS↔tensor; CUDA torch for GPU reads) |
 
 Science Python lives in `/opt/astroai/venv/improc` (on PATH): one Python 3.13
-environment. torch (torchfits), TensorFlow (MaxiMask), and JAX (scarlet2) share
-one CUDA 12.9 toolkit. ngmix is imported with that same interpreter.
+environment. torch (`torchfits` / `torchsky` / `torchregress`), TensorFlow
+(MaxiMask), and JAX (scarlet2) share one CUDA 12 toolkit (`torch==2.14.1+cu126`).
+ngmix is imported with that same interpreter.
 sourcextractor++ and SkyMaker (`sky`, `skymaker`) are binaries on PATH.
 
 A complete Stuff → SkyMaker → SExtractor simulation workflow (generate a
@@ -199,6 +213,8 @@ pPXF (no redistribution) and MOOG (no redistribution grant).
 |-------|-----|
 | `specproc` | Headless batch |
 | `specproc-studio` | Studio (Contributed, :5000). Kernel **Python 3 (specproc)** and marimo use the science venv |
+| `specproc-terminal` | ghostty-web + tmux on `:5000` with specproc on PATH |
+| `specproc-notebook` | JupyterLab `:8888`; default kernel is the specproc science venv |
 
 Input is a reduced 1D spectrum. No instrument pipelines.
 
@@ -301,7 +317,7 @@ canfar-lab status --json
 |---------|--------|
 | Other session missing `/scratch` files | Expected — scratch is session-private; use `/arc/projects` or `canfar data` |
 | Lost files after session end | Persist to `/arc` next time (`canfar-lab save` / `git push` / `canfar data`) |
-| Home quota full | `canfar-lab status` (quota %) — prune caches under `/scratch` manually |
+| Home quota full | `canfar-lab status` / `getfattr -n ceph.quota.max_bytes -n ceph.dir.rbytes "$HOME"` — prune home; large data → project or `/scratch` |
 | Session stuck **Pending** | `canfar ps` / events; contributed quota ≈3; headless Pending is often a Skaha flake ([OPERATORS](OPERATORS.md#platform-notes-headless-pending)) |
 | Session **Failed** / UI never opens | `canfar logs <id>` — grep `[astroai-boot]`; also `~/.astroai/lab/boot.log` on home |
 

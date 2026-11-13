@@ -545,9 +545,11 @@ def desk_dock_html() -> str:
 
 
 def desk_dock_snippet() -> str:
-    """Dock config + asset injected into dsh pages (empty unless the desk is on)."""
-    if not desk_enabled():
-        return ""
+    """Dock config + asset for dsh pages.
+
+    Always inject when the asset is present. ``enabled`` only sets the initial
+    Hide/Show state so the Studio handle can open the bar without a restart.
+    """
     asset = desk_dock_html()
     if not asset:
         return ""
@@ -558,6 +560,7 @@ def desk_dock_snippet() -> str:
         "state_url": state_url,
         "action_url": state_url,
         "version": PROXY_REVISION,
+        "enabled": desk_enabled(),
         "buttons": list(SESSION_DESK_BUTTONS),
     }
     payload = json.dumps(config).replace("</", "<\\/")

@@ -12,7 +12,7 @@ This proxy:
   * routes ``/astroai-terminal/*`` to ghostty-web (WebSocket splice)
   * rewrites HTML/JS/CSS so absolute ``/api``, ``/_orx``, ``/assets``, ``/favicon``,
     ``/astroai-agents``, ``/astroai-terminal`` URLs include the session prefix
-  * injects AstroAI + Terminal chips into HTML (proxy-only; no upstream fork)
+  * injects the AstroAI pill (Terminal, Agents, Compute) into HTML
 """
 
 from __future__ import annotations
@@ -31,6 +31,7 @@ from urllib.parse import urlsplit
 _LIB = Path(__file__).resolve().parent
 if str(_LIB) not in sys.path:
     sys.path.insert(0, str(_LIB))
+from astroai_lab_dock import OPENRESEARCH_TOOLS, lab_dock_html  # noqa: E402
 from session_title import stick_html_title  # noqa: E402
 
 PUBLIC_PORT = int(os.environ.get("ASTROAI_OPENRESEARCH_PORT", "5000"))
@@ -63,25 +64,6 @@ ABS_PREFIXES = (
     "/astroai-agents",
     "/astroai-terminal",
 )
-
-CHIP_STYLE = (
-    "position:fixed;z-index:2147483646;padding:10px 14px;border-radius:8px;"
-    "color:#fff;font:600 14px/1.2 system-ui,sans-serif;text-decoration:none;"
-    "box-shadow:0 4px 16px rgba(0,0,0,.4)"
-)
-
-AGENTS_CHIP = (
-    f'<a id="astroai-agents-chip" href="{{href}}" '
-    f'style="{CHIP_STYLE};right:16px;top:16px;background:#3d8bfd;border:1px solid #5aa0ff">'
-    "AstroAI</a>"
-)
-
-TERMINAL_CHIP = (
-    f'<a id="astroai-terminal-chip" href="{{href}}" '
-    f'style="{CHIP_STYLE};right:110px;top:16px;background:#1e3a2f;border:1px solid #3d6b54">'
-    "Terminal</a>"
-)
-
 
 def rewrite_body(data: bytes, content_type: str) -> bytes:
     ctype = content_type.split(";", 1)[0].strip().lower()
@@ -130,17 +112,11 @@ def rewrite_body(data: bytes, content_type: str) -> bytes:
             text = text.replace(".js'", f".js?astroai_bp=1'")
             text = text.replace(".css\"", f'.css?astroai_bp=1"')
             text = text.replace(".css'", f".css?astroai_bp=1'")
-        chips = ""
-        if "astroai-terminal-chip" not in text:
-            thref = f"{PREFIX}{TERMINAL_MOUNT}/" if PREFIX else f"{TERMINAL_MOUNT}/"
-            chips += TERMINAL_CHIP.format(href=thref)
-        if "astroai-agents-chip" not in text:
-            href = f"{PREFIX}{WIZARD_MOUNT}/" if PREFIX else f"{WIZARD_MOUNT}/"
-            chips += AGENTS_CHIP.format(href=href)
-        if chips:
+        if "data-astroai-dock" not in text and "astroai-agents-chip" not in text:
+            dock = lab_dock_html(PREFIX, OPENRESEARCH_TOOLS, place="top")
             lower = text.lower()
             idx = lower.rfind("</body>")
-            text = text[:idx] + chips + text[idx:] if idx >= 0 else text + chips
+            text = text[:idx] + dock + text[idx:] if idx >= 0 else text + dock
     return text.encode("utf-8")
 
 

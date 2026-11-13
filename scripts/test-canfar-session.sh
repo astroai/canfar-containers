@@ -344,6 +344,10 @@ if [[ "${FAILURES}" -eq 0 && "${IMAGE}" == "openresearch" ]]; then
         echo "Terminal chip missing from root HTML." >&2
         FAILURES=$((FAILURES + 1))
     fi
+    if ! grep -q 'astroai-compute-chip' <<<"${ROOT_HTML}"; then
+        echo "Compute chip missing from root HTML." >&2
+        FAILURES=$((FAILURES + 1))
+    fi
     term_code="$(curl -sk -o /dev/null -w '%{http_code}' --max-time 20 "${BASE}/astroai-terminal/" || true)"
     echo "Terminal HTML HTTP ${term_code}"
     if [[ "${term_code}" != "200" ]]; then
@@ -389,7 +393,7 @@ if [[ "${FAILURES}" -eq 0 && "${IMAGE}" == "openscience" ]]; then
         FAILURES=$((FAILURES + 1))
     fi
     ROOT_HTML="$(curl -sk --max-time 20 "${BASE}/" || true)"
-    for want in '__astroai/boot.js' 'astroai-agents-chip'; do
+    for want in '__astroai/boot.js' 'astroai-agents-chip' 'astroai-compute-chip'; do
         if ! grep -q "${want}" <<<"${ROOT_HTML}"; then
             echo "OpenScience root HTML missing ${want}." >&2
             FAILURES=$((FAILURES + 1))

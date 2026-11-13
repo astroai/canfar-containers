@@ -48,6 +48,25 @@ from ui import (
 )
 
 
+def _ensure_configuration_get_credential() -> None:
+    """canfar 1.5+ dropped Configuration.get_credential; canfar_workload still calls it."""
+    from canfar.models.config import Configuration
+
+    if hasattr(Configuration, "get_credential"):
+        return
+
+    def get_credential(self: Any, idp: str) -> Any:
+        try:
+            return self.authentication[idp]
+        except KeyError as exc:
+            raise KeyError(idp) from exc
+
+    Configuration.get_credential = get_credential  # type: ignore[attr-defined, method-assign]
+
+
+_ensure_configuration_get_credential()
+
+
 def _tab_title() -> str:
     lib = "/opt/astroai/lib"
     if lib not in sys.path:

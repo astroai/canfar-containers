@@ -40,7 +40,11 @@ RUN mkdir -p /opt/astroai/{bin,cache,lib,venv} /cadc "${WORK}" \
 
 # Minimal lab install (resume/save/paths) — no full CADC kitchen sink on workers.
 COPY config/astroai-lab.in config/astroai-lab.lock /tmp/
-RUN uv venv /opt/canfar \
+COPY scripts/lib/assert-image-python.sh /opt/astroai/lib/assert-image-python.sh
+RUN chmod a+rx /opt/astroai/lib/assert-image-python.sh \
+    && ln -sf /opt/astroai/lib/assert-image-python.sh /usr/local/bin/assert-image-python \
+    && uv venv --python python3 /opt/canfar \
+    && assert-image-python /opt/canfar/bin/python \
     && uv pip install --python /opt/canfar --requirements /tmp/astroai-lab.lock \
     && chmod -R a+rwX /opt/canfar \
     && mkdir -p /etc/astroai-lab \
@@ -62,7 +66,8 @@ RUN bash /tmp/install-canfar-lab-latest.sh /opt/canfar \
 
 COPY scripts/lib/astroai-env-common.sh scripts/lib/astroai-ui.sh /opt/astroai/lib/
 COPY config/ray-deps.txt config/ray-deps.lock /tmp/
-RUN uv venv /opt/astroai/venv/ray \
+RUN uv venv --python python3 /opt/astroai/venv/ray \
+    && assert-image-python /opt/astroai/venv/ray/bin/python \
     && uv pip install --python /opt/astroai/venv/ray --requirements /tmp/ray-deps.lock \
     && uv pip install --python /opt/astroai/venv/ray --requirements /tmp/astroai-lab.lock \
     && rm /tmp/ray-deps.txt /tmp/ray-deps.lock /tmp/astroai-lab.in /tmp/astroai-lab.lock \

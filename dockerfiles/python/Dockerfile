@@ -3,10 +3,15 @@
 # uv/pixi: official install scripts (latest at build time).
 
 ARG PYTHON_VERSION=3.13
-# Stay on 3.13 until CADC/clint is clean on 3.14. Ray venvs use this same
-# image Python (Ray ships cp313 wheels). uv/pixi/micromamba are latest-at-build below.
+# Single shared interpreter for base, ray-*, improc, specproc (and studios).
+# Stay on 3.13 until CADC/clint is clean on 3.14. Ray ships cp313 wheels.
+# uv/pixi/micromamba are latest-at-build below. Never let uv download a second
+# Python into the image — that would fork ABIs and bloat every child.
 
 FROM python:${PYTHON_VERSION}-slim
+
+# Re-declare after FROM so ENV can see the bake/Make value.
+ARG PYTHON_VERSION=3.13
 
 LABEL org.opencontainers.image.title="AstroAI Python Runtime" \
       org.opencontainers.image.vendor="AstroAI"
@@ -19,14 +24,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-ENV UV_PYTHON_INSTALL_DIR=/usr/local/share/uv/python \
-    UV_PYTHON_BIN_DIR=/usr/local/bin \
+# Bake/Make PYTHON_VERSION is the only supported minor. Child images assert
+# science/Ray venvs match this (see scripts/lib/assert-image-python.sh).
+ENV ASTROAI_PYTHON_VERSION=${PYTHON_VERSION} \
+    UV_PYTHON=${PYTHON_VERSION} \
+    UV_PYTHON_DOWNLOADS=never \
+    UV_NO_MANAGED_PYTHON=1 \
     UV_TOOL_DIR=/usr/local/share/uv/tools \
     UV_TOOL_BIN_DIR=/usr/local/bin \
     PIXI_HOME=/usr/local/share/pixi \
     PIXI_BIN_DIR=/usr/local/bin \
     PIXI_CACHE_DIR=/usr/local/share/pixi/cache
-# ^ build-time paths for `uv pip install --system` only.
+# ^ UV_PYTHON_DOWNLOADS=never keeps one system CPython (the official image).
 # Session users: /etc/astroai-lab/profile.sh via canfar-lab env export overrides
 # runtime and cache dirs to scratch when /scratch is mounted.
 
@@ -51,4 +60,5 @@ RUN curl -LsSf https://astral.sh/uv/install.sh \
     && uv --version \
     && pixi --version \
     && micromamba --version \
-    && command -v uvx >/dev/null
+    && command -v uvx >/dev/null \
+    && python3 -c "import os, sys; w=os.environ['ASTROAI_PYTHON_VERSION']; assert f'{sys.version_info[0]}.{sys.version_info[1]}'==w, (sys.version, w)"

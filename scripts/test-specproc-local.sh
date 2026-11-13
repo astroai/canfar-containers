@@ -33,6 +33,7 @@ b = sp / 'synspec' / 'linelists'
 assert a.is_symlink() and b.is_symlink(), (a, b)
 assert a.readlink() == b.readlink() == pathlib.Path('/specproc-data/linelists/synspec')
 PY
+        assert-image-python /opt/astroai/venv/specproc/bin/python
         HOME=/opt/astroai/pymoog-home /opt/astroai/venv/specproc/bin/python /opt/astroai/specproc-smoke.py
         ${extra}
     " || missing=$((missing + 1))
@@ -49,9 +50,17 @@ check_image specproc-studio "
           *) echo \"FAIL: marimo is \${marimo_bin}\"; exit 1 ;;
         esac
 "
+check_image specproc-terminal "
+        test -f /opt/ghostty-web/server.mjs && echo 'PASS: ghostty-web' || { echo 'FAIL: ghostty-web missing'; exit 1; }
+        test -x /skaha/startup.sh && echo 'PASS: skaha startup' || { echo 'FAIL: skaha startup missing'; exit 1; }
+"
+check_image specproc-notebook "
+        jupyter kernelspec list 2>/dev/null | grep -q specproc && echo 'PASS: specproc jupyter kernel' || { echo 'FAIL: specproc jupyter kernel not registered'; exit 1; }
+        test -x /skaha/startup.sh && echo 'PASS: skaha startup' || { echo 'FAIL: skaha startup missing'; exit 1; }
+"
 
 if [[ "${missing}" -ne 0 ]]; then
     echo "${missing} specproc image(s) failed" >&2
     exit 1
 fi
-echo "specproc family local smoke passed (specproc, specproc-studio)"
+echo "specproc family local smoke passed (specproc, specproc-studio, specproc-terminal, specproc-notebook)"

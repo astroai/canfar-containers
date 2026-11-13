@@ -49,7 +49,7 @@ git checkout -b my-change
 | Shell env, caches, `uv`/`pixi` paths | `scripts/astroai-profile.sh` | Yes — `base`+ |
 | Session startup | `scripts/common-init.sh`, `scripts/startup-*.sh` | Yes |
 | System packages | `dockerfiles/base/Dockerfile` | Yes — `base`+ |
-| Python / uv / pixi foundation | `dockerfiles/python/Dockerfile` (untagged bake parent, not a Harbor image) | Full stack |
+| Python / uv / pixi foundation | `dockerfiles/python/Dockerfile` (untagged bake parent, not a Harbor image; `PYTHON_VERSION` shared by base/ray/improc/specproc) | Full stack |
 | Jupyter config | `config/jupyter_server_config.py` | `notebook` |
 | Marimo starter notebook | **Edit in** [astroai-lab](https://github.com/astroai/canfar-lab) `data/notebooks/starter.py`, then `make sync-marimo-starter` | `marimo` |
 | Jupyter / Ray starters | **Edit in** lab `data/notebooks/`, then `make sync-notebook-starters` | `notebook` |

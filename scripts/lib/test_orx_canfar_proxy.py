@@ -32,10 +32,13 @@ def test_injects_terminal_and_agents_chips() -> None:
     proxy.PREFIX = "/session/contrib/abc"
     html = b"<html><body><h1>orx</h1></body></html>"
     out = proxy.rewrite_body(html, "text/html")
+    assert b'id="astroai-lab-dock"' in out
     assert b'id="astroai-terminal-chip"' in out
     assert b'href="/session/contrib/abc/astroai-terminal/"' in out
     assert b'id="astroai-agents-chip"' in out
     assert b'href="/session/contrib/abc/astroai-agents/"' in out
+    assert b'id="astroai-compute-chip"' in out
+    assert b'href="/session/contrib/abc/astroai-agents/#compute"' in out
 
 
 def test_rewrite_prefixes_astroai_terminal() -> None:

@@ -1,7 +1,8 @@
 # Science Python for /opt/astroai/venv/improc (uv). Unpinned — resolve at image build.
 # Not installed into the CADC venv.
-# torch (cu129), tensorflow[and-cuda], jax[cuda12], torchfits, numba, and ngmix
-# are installed in the same Dockerfile transaction so one CUDA 12.9 toolkit is shared.
+# torch (cu126), tensorflow[and-cuda], jax[cuda12], torchfits/torchsky/torchregress,
+# numba, and ngmix are installed in the same Dockerfile transaction so one CUDA 12
+# toolkit is shared (torch 2.14.x has no cu129 wheel).
 
 # Core image processing
 astropy
@@ -23,6 +24,11 @@ astroimtools
 astroalign
 tweakwcs
 weightmask
+
+# Torch astronomy / regression stack (needs torch>=2.14.1; pinned in Dockerfile)
+torchfits
+torchsky
+torchregress
 
 # Modern difference-image analysis (DIA)
 sfft

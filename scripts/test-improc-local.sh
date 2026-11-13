@@ -22,7 +22,8 @@ check_image() {
       source-extractor sextractor swarp psfex scamp stiff missfits \\
       fitscut fitspng fitsverify weightwatcher montage \\
       galfit imfit pqrs topcat stilts fits2idia imcore \\
-      astconvertt astnoisechisel h5dump maximask maxitrack sky skymaker stuff torchfits weightmask; do
+      astconvertt astnoisechisel h5dump maximask maxitrack sky skymaker stuff \
+      torchfits torchsky torchregress-health weightmask weightmask-reconstruct-sky; do
       if ! command -v \"\$c\" >/dev/null; then
         echo \"FAIL: missing \$c\"
         missing=\$((missing + 1))
@@ -52,8 +53,9 @@ check_image() {
     else
       echo \"PASS: sourcextractor++ --version\"
     fi
+    assert-image-python /opt/astroai/venv/improc/bin/python
     /opt/astroai/venv/improc/bin/python /opt/astroai/check-improc-python.py
-    /opt/astroai/venv/improc/bin/python -c \"import ccdproc, photutils, galsim, piff, astroscrappy, lacosmic, sfft, zogyp, healpy, healsparse, mocpy, hpgeom, scarlet, scarlet2, twirl, skimage, astroquery, cv2, petrofit, montage_wrapper, galight, lenstronomy, tractor, torch, torchfits, tensorflow, maximask_and_maxitrack, weightmask, ngmix, sourcextractor; assert '+cu' in torch.__version__, torch.__version__; print('PASS: improc python imports')\"
+    /opt/astroai/venv/improc/bin/python -c \"import ccdproc, photutils, galsim, piff, astroscrappy, lacosmic, sfft, zogyp, healpy, healsparse, mocpy, hpgeom, scarlet, scarlet2, twirl, skimage, astroquery, cv2, petrofit, montage_wrapper, galight, lenstronomy, tractor, torch, torchfits, torchsky, torchregress, tensorflow, maximask_and_maxitrack, weightmask, ngmix, sourcextractor; assert '+cu' in torch.__version__, torch.__version__; print('PASS: improc python imports')\"
     ${extra}
     exit \"\$missing\"
     "
@@ -74,4 +76,14 @@ check_image improc-studio "
     esac
 "
 
-echo "improc family local smoke passed (improc, improc-studio)"
+check_image improc-terminal "
+    test -f /opt/ghostty-web/server.mjs && echo 'PASS: ghostty-web' || { echo 'FAIL: ghostty-web missing'; missing=\$((missing + 1)); }
+    test -x /skaha/startup.sh && echo 'PASS: skaha startup' || { echo 'FAIL: skaha startup missing'; missing=\$((missing + 1)); }
+"
+
+check_image improc-notebook "
+    jupyter kernelspec list 2>/dev/null | grep -q improc && echo 'PASS: improc jupyter kernel' || { echo 'FAIL: improc jupyter kernel not registered'; missing=\$((missing + 1)); }
+    test -x /skaha/startup.sh && echo 'PASS: skaha startup' || { echo 'FAIL: skaha startup missing'; missing=\$((missing + 1)); }
+"
+
+echo "improc family local smoke passed (improc, improc-studio, improc-terminal, improc-notebook)"

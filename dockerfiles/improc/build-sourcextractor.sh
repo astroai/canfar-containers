@@ -1,14 +1,23 @@
 #!/bin/bash
 # Build Elements 6.3.7, Alexandria 2.33.0, and SourceXtractor++ 1.1.0 against
-# the improc virtualenv (Python 3.13). InstallArea RPATHs are absolute, so the
-# tree stays at /opt/astroai/astrorama. Headers, static libs, and build trees
-# are removed before this script exits.
+# the improc virtualenv (same ASTROAI_PYTHON_VERSION as base/ray/specproc).
+# InstallArea RPATHs are absolute, so the tree stays at /opt/astroai/astrorama.
+# Headers, static libs, and build trees are removed before this script exits.
 set -euo pipefail
 
 PY=/opt/astroai/venv/improc/bin/python
 ROOT=/opt/astroai/astrorama
 export PATH="/opt/astroai/venv/improc/bin:${PATH}"
 export DEBIAN_FRONTEND=noninteractive
+
+# Derive ABI paths from the shared image Python (do not hard-code 3.13).
+assert-image-python "${PY}"
+PY_MM="$("${PY}" -c 'import sys; print("%d.%d" % sys.version_info[:2])')"
+PY_MM_NODOT="${PY_MM//./}"
+PY_INCLUDE="/usr/local/include/python${PY_MM}"
+PY_LIB="/usr/local/lib/libpython${PY_MM}.so"
+test -d "${PY_INCLUDE}"
+test -e "${PY_LIB}"
 
 # Template-heavy C++ exhausts a 16 GB builder above two compile jobs.
 JOBS="$(nproc)"
@@ -96,7 +105,7 @@ cd /tmp/boost_1_87_0
 cat > project-config.jam << EOF
 import option ;
 using gcc ;
-using python : 3.13 : ${PY} : /usr/local/include/python3.13 : /usr/local/lib ;
+using python : ${PY_MM} : ${PY} : ${PY_INCLUDE} : /usr/local/lib ;
 option.set prefix : /usr/local ;
 option.set exec-prefix : /usr/local ;
 option.set libdir : /usr/local/lib ;
@@ -116,8 +125,8 @@ rm -f /tmp/b2.log
 echo "Boost 1.87 shared libraries installed"
 cd /
 rm -rf /tmp/boost_1_87_0 /tmp/boost.tar.gz
-test -e /usr/local/lib/libboost_python313.so
-test -e /usr/local/lib/libboost_numpy313.so
+test -e "/usr/local/lib/libboost_python${PY_MM_NODOT}.so"
+test -e "/usr/local/lib/libboost_numpy${PY_MM_NODOT}.so"
 test -e /usr/local/lib/libboost_filesystem.so
 test -e /usr/local/lib/libboost_timer.so
 test -e /usr/local/lib/libboost_unit_test_framework.so
@@ -141,7 +150,7 @@ export CMAKE_PREFIX_PATH="${ROOT}/Elements/cmake:/usr/local"
 export BOOST_ROOT=/usr/local
 export ONNXRUNTIME_INSTALL_DIR=/usr/local/onnxruntime
 export LEVMAR_ROOT_DIR=/usr/local
-export CMAKEFLAGS="-DPYTHON_EXPLICIT_VERSION=3.13 -DUSE_SPHINX=OFF -DELEMENTS_BUILD_TESTS=OFF -DPYTHON_EXECUTABLE=${PY} -DPython_EXECUTABLE=${PY} -DPython3_EXECUTABLE=${PY} -DPYTHON_LIBRARY=/usr/local/lib/libpython3.13.so -DPYTHON_INCLUDE_DIR=/usr/local/include/python3.13 -DBOOST_ROOT=/usr/local -DONNXRUNTIME_INSTALL_DIR=/usr/local/onnxruntime -DLEVMAR_ROOT_DIR=/usr/local"
+export CMAKEFLAGS="-DPYTHON_EXPLICIT_VERSION=${PY_MM} -DUSE_SPHINX=OFF -DELEMENTS_BUILD_TESTS=OFF -DPYTHON_EXECUTABLE=${PY} -DPython_EXECUTABLE=${PY} -DPython3_EXECUTABLE=${PY} -DPYTHON_LIBRARY=${PY_LIB} -DPYTHON_INCLUDE_DIR=${PY_INCLUDE} -DBOOST_ROOT=/usr/local -DONNXRUNTIME_INSTALL_DIR=/usr/local/onnxruntime -DLEVMAR_ROOT_DIR=/usr/local"
 
 for proj in Elements Alexandria SourceXtractorPlusPlus; do
     echo "=== building ${proj} ==="

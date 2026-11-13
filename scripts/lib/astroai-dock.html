@@ -1,50 +1,56 @@
 <!-- AstroAI Desk dock — single source asset (canfar-lab src/canfar_lab/data/desk/dock.html).
      Vendored into canfar-containers via scripts/sync-desk-assets.sh; keep both proxies stdlib-only. -->
-<meta name="astroai-dock-revision" content="2">
+<meta name="astroai-dock-revision" content="6">
 <style>
-  #astroai-dock {
-    position: fixed; right: 14px; bottom: 14px; z-index: 2147483000;
-    width: 292px; border: 1px solid rgba(255,255,255,.14); border-radius: 10px;
-    background: rgba(18,20,26,.94); color: #e8e8ea; backdrop-filter: blur(6px);
-    font: 12px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    box-shadow: 0 8px 28px rgba(0,0,0,.45);
+  #astroai-dock.ad-bar {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 2147483000; height: 44px;
+    display: flex; align-items: center; gap: 8px; padding: 0 10px;
+    background: #0b1026; color: #dfe4ff; border-bottom: 1px solid rgba(129, 140, 248, 0.22);
+    font: 13px/1.3 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   }
-  #astroai-dock .ad-head { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid rgba(255,255,255,.08); cursor: default; }
-  #astroai-dock .ad-title { font-weight: 650; letter-spacing: .2px; }
-  #astroai-dock .ad-chips { margin-left: auto; display: flex; gap: 5px; }
-  #astroai-dock .ad-chip { padding: 1px 7px; border-radius: 999px; background: rgba(255,255,255,.08); color: #b9bcc6; white-space: nowrap; max-width: 110px; overflow: hidden; text-overflow: ellipsis; }
-  #astroai-dock .ad-chip.ok { background: rgba(63,185,80,.18); color: #7ee787; }
-  #astroai-dock .ad-chip.warn { background: rgba(210,153,34,.2); color: #e3b341; }
-  #astroai-dock .ad-chip.bad { background: rgba(248,81,73,.18); color: #ff7b72; }
-  #astroai-dock .ad-toggle { margin-left: 2px; background: none; border: 0; color: #b9bcc6; cursor: pointer; font-size: 13px; }
-  #astroai-dock .ad-body { padding: 9px 10px 10px; }
-  #astroai-dock.collapsed .ad-body { display: none; }
-  #astroai-dock .ad-buttons { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
-  #astroai-dock button.ad-act {
-    text-align: left; padding: 7px 9px; border-radius: 7px; cursor: pointer;
-    border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.06); color: #e8e8ea;
-    font: inherit;
+  #astroai-dock.ad-bar.ad-hidden { display: none; }
+  #astroai-dock.ad-bar .ad-title { font-weight: 700; font-size: 12px; margin-right: 4px; white-space: nowrap; }
+  #astroai-dock.ad-bar .ad-buttons { display: flex; align-items: center; gap: 2px; min-width: 0; }
+  #astroai-dock.ad-bar .ad-chips { margin-left: auto; display: flex; gap: 5px; }
+  #astroai-dock.ad-bar .ad-chip {
+    padding: 2px 8px; border-radius: 999px; background: rgba(255,255,255,.08); color: #a3acd6;
+    white-space: nowrap; max-width: 140px; overflow: hidden; text-overflow: ellipsis; font-size: 11px;
   }
-  #astroai-dock button.ad-act:hover { background: rgba(255,255,255,.12); }
-  #astroai-dock button.ad-act.primary { background: rgba(56,139,253,.2); border-color: rgba(56,139,253,.5); }
-  #astroai-dock button.ad-act:disabled { opacity: .5; cursor: progress; }
-  #astroai-dock .ad-drawer { margin-top: 8px; padding: 7px 9px; border-radius: 7px; background: rgba(255,255,255,.05); max-height: 190px; overflow: auto; }
-  #astroai-dock .ad-drawer.err { background: rgba(248,81,73,.12); color: #ffb3ad; }
-  #astroai-dock .ad-drawer a { color: #79c0ff; }
-  #astroai-dock .ad-foot { margin-top: 7px; color: #8b8f99; font-size: 11px; }
+  #astroai-dock.ad-bar .ad-chip.ok { background: rgba(63,185,80,.18); color: #7ee787; }
+  #astroai-dock.ad-bar .ad-chip.warn { background: rgba(210,153,34,.2); color: #e3b341; }
+  #astroai-dock.ad-bar button.ad-act, #astroai-dock.ad-bar .ad-toggle {
+    border: 1px solid transparent; background: none; color: #c8cff5; cursor: pointer;
+    border-radius: 999px; padding: 5px 9px; font: inherit; font-weight: 500; white-space: nowrap;
+  }
+  #astroai-dock.ad-bar button.ad-act:hover, #astroai-dock.ad-bar .ad-toggle:hover { background: rgba(255,255,255,.1); color: #fff; }
+  #astroai-dock.ad-bar button.ad-act.primary { background: rgba(99,102,241,.25); border-color: rgba(129,140,248,.5); }
+  #astroai-dock.ad-bar button.ad-act:disabled { opacity: .5; cursor: progress; }
+  #astroai-dock.ad-bar .ad-drawer {
+    position: absolute; top: 44px; right: 10px; width: min(420px, calc(100% - 20px));
+    padding: 8px 10px; border-radius: 8px; background: #10173a; color: #dfe4ff;
+    border: 1px solid rgba(129,140,248,.3);
+  }
+  #astroai-dock.ad-bar .ad-drawer.err { color: #ffb3ad; }
+  #astroai-dock.ad-bar .ad-drawer a { color: #79c0ff; }
+  #astroai-dock-handle {
+    position: fixed; top: 8px; right: 8px; z-index: 2147483000;
+    display: flex; align-items: center; padding: 4px 11px; font: 600 12px/1.3 system-ui, sans-serif;
+    color: #dfe4ff; background: rgba(11, 16, 38, 0.92);
+    border: 1px solid rgba(129, 140, 248, 0.35); border-radius: 999px; cursor: pointer;
+  }
+  #astroai-dock-handle[hidden] { display: none; }
+  @media (max-width: 860px) {
+    #astroai-dock.ad-bar .ad-chip { display: none; }
+  }
 </style>
-<div id="astroai-dock" hidden>
-  <div class="ad-head">
-    <span class="ad-title">AstroAI desk</span>
-    <span class="ad-chips" id="ad-chips"></span>
-    <button class="ad-toggle" id="ad-toggle" type="button" title="Collapse">&#9662;</button>
-  </div>
-  <div class="ad-body" id="ad-body">
-    <div class="ad-buttons" id="ad-buttons"></div>
-    <div class="ad-drawer" id="ad-drawer" hidden></div>
-    <div class="ad-foot" id="ad-foot"></div>
-  </div>
+<div id="astroai-dock" class="ad-bar">
+  <span class="ad-title">AstroAI Desk</span>
+  <div class="ad-buttons" id="ad-buttons"></div>
+  <span class="ad-chips" id="ad-chips"></span>
+  <button class="ad-toggle" id="ad-toggle" type="button" title="Hide the Desk bar">Hide</button>
+  <div class="ad-drawer" id="ad-drawer" hidden></div>
 </div>
+<button id="astroai-dock-handle" type="button" hidden title="Show Sync to CANFAR and Launch Studio">Desk</button>
 <script>
 (function () {
   if (window.__astroaiDockLoaded) { return; }
@@ -55,22 +61,45 @@
   try { cfg = JSON.parse(cfgEl.textContent || "{}"); } catch (err) { return; }
 
   var root = document.getElementById("astroai-dock");
+  var handle = document.getElementById("astroai-dock-handle");
   if (!root) { return; }
   root.hidden = false;
   var chipsEl = document.getElementById("ad-chips");
   var buttonsEl = document.getElementById("ad-buttons");
   var drawerEl = document.getElementById("ad-drawer");
-  var footEl = document.getElementById("ad-foot");
   var state = null;
+  var desk = (cfg.mode || "desk") !== "session";
 
-  var collapsed = false;
-  try { collapsed = localStorage.getItem("astroai-dock-collapsed") === "1"; } catch (err) { collapsed = false; }
-  if (collapsed) { root.classList.add("collapsed"); }
-  document.getElementById("ad-toggle").addEventListener("click", function () {
-    collapsed = !root.classList.contains("collapsed");
-    root.classList.toggle("collapsed", collapsed);
-    try { localStorage.setItem("astroai-dock-collapsed", collapsed ? "1" : "0"); } catch (err) {}
-  });
+  function pad(on) {
+    var style = document.getElementById("astroai-dock-pad");
+    if (!style) {
+      style = document.createElement("style");
+      style.id = "astroai-dock-pad";
+      document.head.appendChild(style);
+    }
+    style.textContent = on
+      ? "body{padding-top:44px!important}#root{height:calc(100vh - 44px)!important;height:calc(100dvh - 44px)!important}"
+      : "";
+  }
+
+  function applyHidden(hidden) {
+    root.classList.toggle("ad-hidden", hidden);
+    if (handle) { handle.hidden = !hidden; }
+    pad(desk && !hidden);
+    try { localStorage.setItem("astroai-dock-hidden", hidden ? "1" : "0"); } catch (err) {}
+  }
+
+  // Prefer the user's last Hide/Show. Otherwise start collapsed when the
+  // process launched with desk off (CANFAR_LAB_DESK unset) — the Desk
+  // handle turns the bar on without a restart.
+  var hidden = cfg.enabled === false;
+  try {
+    var stored = localStorage.getItem("astroai-dock-hidden");
+    if (stored === "1" || stored === "0") { hidden = stored === "1"; }
+  } catch (err) {}
+  applyHidden(hidden);
+  document.getElementById("ad-toggle").addEventListener("click", function () { applyHidden(true); });
+  if (handle) { handle.addEventListener("click", function () { applyHidden(false); }); }
 
   function header() { return { "X-Desk-Token": cfg.token, "Content-Type": "application/json" }; }
 
@@ -107,16 +136,6 @@
       chipsEl.appendChild(chip("session " + session.status, session.status === "Running" ? "ok" : "warn"));
     } else {
       chipsEl.appendChild(chip("no session", "warn"));
-    }
-    var dsh = state && state.dsh;
-    if (dsh && dsh.installed) {
-      var tone = "ok";
-      if (dsh.release && dsh.release.version && dsh.release.version !== dsh.installed) { tone = "warn"; }
-      chipsEl.appendChild(chip("dsh " + dsh.installed, tone));
-    }
-    var lab = state && state.lab;
-    if (lab && lab.version) {
-      chipsEl.appendChild(chip("lab " + lab.version, ""));
     }
     var last = state && state.mailbox && state.mailbox.last_exchange;
     if (last && last.absorbed_at) {
@@ -162,7 +181,7 @@
       });
     }
     if (result.url) { parts.push(result.url); }
-    if (result.opened) { parts.push("opened: " + result.opened); }
+    if (result.opened) { parts.push("opened"); }
     if (result.request) { parts.push("request " + result.request); }
     if (result.session_ready === false) { parts.push("session not ready"); }
     if (result.hint) { parts.push(result.hint); }
@@ -172,6 +191,10 @@
   function act(btn, node) {
     if (btn.action === "cluster" && (btn.payload || {}).mode === "start") {
       if (!window.confirm("Start the CANFAR Ray cluster (on CANFAR, not locally)?")) { return; }
+    }
+    if (btn.href) {
+      window.open(btn.href + "#" + encodeURIComponent(cfg.token), "_blank");
+      return;
     }
     node.disabled = true;
     api(cfg.action_url + "/" + btn.action, btn.payload || {}).then(function (result) {
@@ -187,7 +210,8 @@
       showDrawer(true, div);
     }).catch(function (err) {
       var div = document.createElement("div");
-      div.appendChild(textNode(btn.label + " failed: " + (err.message || String(err))));
+      var hint = err.data && err.data.hint ? " — " + err.data.hint : "";
+      div.appendChild(textNode(btn.label + " failed: " + (err.message || String(err)) + hint));
       showDrawer(false, div);
     }).finally(function () {
       node.disabled = false;
@@ -201,7 +225,6 @@
       state = data;
       renderChips();
       renderButtons();
-      footEl.textContent = state.root ? "root: " + state.root : "";
     }).catch(function () {});
   }
 

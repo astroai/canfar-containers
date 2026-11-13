@@ -103,7 +103,8 @@ COPY config/specproc-py.txt /opt/astroai/specproc-py.txt
 COPY scripts/specproc-patch-bindir.py /opt/astroai/specproc-patch-bindir.py
 
 # Wheels first. PyPI sedpy is an unrelated editor; the astronomy package is astro-sedpy.
-RUN uv venv /opt/astroai/venv/specproc \
+RUN uv venv --python python3 /opt/astroai/venv/specproc \
+    && assert-image-python /opt/astroai/venv/specproc/bin/python \
     && uv pip install --python /opt/astroai/venv/specproc -r /opt/astroai/specproc-py.txt \
     && bash /opt/astroai/specproc-link-data.sh
 
